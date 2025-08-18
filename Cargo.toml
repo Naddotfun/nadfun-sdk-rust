@@ -1,0 +1,77 @@
+[package]
+name = "nadfun_sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Rust SDK for Nad.fun"
+license = "MIT"
+repository = "https://github.com/Naddotfun/nadfun-sdk-rust"
+documentation = "https://github.com/Naddotfun/nadfun-sdk-rust"
+keywords = ["memecoin", "nadfun", "nadfun-sdk"]
+
+readme = "README.md"
+
+
+[lib]
+name = "nadfun_sdk"
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+alloy = { version = "1.0.24", features = ["full", "signer-keystore", "pubsub"] }
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"
+futures-util = "0.3"
+async-stream = "0.3"
+rayon = "1.8"
+chrono = "0.4"
+clap = { version = "4.5", features = ["derive", "env"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+# Examples
+
+# Trading Examples
+[[example]]
+name = "buy"
+path = "examples/trade/buy.rs"
+
+[[example]]
+name = "sell"
+path = "examples/trade/sell.rs"
+
+[[example]]
+name = "sell_permit"
+path = "examples/trade/sell_permit.rs"
+
+# Token Helper Examples
+[[example]]
+name = "basic_operations"
+path = "examples/token/basic_operations.rs"
+
+[[example]]
+name = "permit_signature"
+path = "examples/token/permit_signature.rs"
+
+
+# Stream Examples
+[[example]]
+name = "curve_indexer"
+path = "examples/stream/curve_indexer.rs"
+
+[[example]]
+name = "curve_stream"
+path = "examples/stream/curve_stream.rs"
+
+[[example]]
+name = "dex_indexer"
+path = "examples/stream/dex_indexer.rs"
+
+[[example]]
+name = "dex_stream"
+path = "examples/stream/dex_stream.rs"
+
+# Discovery Examples
+[[example]]
+name = "pool_discovery"
+path = "examples/stream/pool_discovery.rs"
