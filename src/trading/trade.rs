@@ -1,6 +1,6 @@
 use crate::{
     constants::*,
-    contracts::{BondingCurveRouter, DexRouter, WrapperContract},
+    contracts::{BondingCurveRouter, DexRouter, LensContract},
     types::*,
 };
 use alloy::{
@@ -15,7 +15,7 @@ use std::sync::Arc;
 pub struct Trade {
     bonding_curve_router: BondingCurveRouter<DynProvider>,
     dex_router: DexRouter<DynProvider>,
-    wrapper_contract: WrapperContract<DynProvider>,
+    lens: LensContract<DynProvider>,
     provider: Arc<DynProvider>,
     wallet_address: Address,
 }
@@ -44,12 +44,12 @@ impl Trade {
         );
 
         let dex_router = DexRouter::new(dex_router_address, dyn_provider.clone());
-        let wrapper_contract = WrapperContract::new(lens_address, dyn_provider.clone());
+        let lens = LensContract::new(lens_address, dyn_provider.clone());
 
         Ok(Trade {
             bonding_curve_router,
             dex_router,
-            wrapper_contract,
+            lens,
             provider: dyn_provider,
             wallet_address,
         })
@@ -57,17 +57,15 @@ impl Trade {
 }
 
 impl Trade {
-    // Auto-routing functions using wrapper contract
+    // Auto-routing functions using lens contract
     pub async fn get_amount_out(
         &self,
         token: Address,
         amount_in: U256,
         is_buy: bool,
     ) -> Result<(Router, U256)> {
-        let (router_address, amount_out) = self
-            .wrapper_contract
-            .get_amount_out(token, amount_in, is_buy)
-            .await?;
+        let (router_address, amount_out) =
+            self.lens.get_amount_out(token, amount_in, is_buy).await?;
 
         let router = if router_address == self.dex_router.address {
             Router::Dex(router_address)
@@ -89,10 +87,8 @@ impl Trade {
         amount_out: U256,
         is_buy: bool,
     ) -> Result<(Router, U256)> {
-        let (router_address, amount_in) = self
-            .wrapper_contract
-            .get_amount_in(token, amount_out, is_buy)
-            .await?;
+        let (router_address, amount_in) =
+            self.lens.get_amount_in(token, amount_out, is_buy).await?;
 
         let router = if router_address == self.dex_router.address {
             Router::Dex(router_address)
@@ -162,8 +158,8 @@ impl Trade {
         &self.dex_router
     }
 
-    pub fn wrapper_contract(&self) -> &WrapperContract<DynProvider> {
-        &self.wrapper_contract
+    pub fn lens(&self) -> &LensContract<DynProvider> {
+        &self.lens
     }
 
     pub fn provider(&self) -> &Arc<DynProvider> {
