@@ -1,7 +1,7 @@
 //! Token operation examples module
 //!
 //! This module contains comprehensive examples for ERC20 token operations
-//! using the NADS SDK TokenHelper.
+//! using the Nad.fun SDK TokenHelper.
 //!
 //! ## Examples
 //!

@@ -1,4 +1,4 @@
-//! All types for the NADS Pump SDK
+//! All types for the Nad.fun SDK
 
 pub mod bonding_curve;
 pub mod trade;

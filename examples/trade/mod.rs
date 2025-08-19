@@ -1,6 +1,6 @@
 //! Trading examples module
 //! 
-//! This module contains practical examples for trading tokens using the NADS SDK.
+//! This module contains practical examples for trading tokens using the Nad.fun SDK.
 //! All examples include proper slippage protection and real transaction execution.
 //!
 //! ## Examples

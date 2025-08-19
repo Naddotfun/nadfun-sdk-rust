@@ -1,6 +1,6 @@
-//! # NADS Pump SDK
+//! # Nad.fun SDK
 //!
-//! A simple and efficient Rust SDK for NADS Pump trading and event monitoring.
+//! A simple and efficient Rust SDK for Nad.fun trading and event monitoring.
 //!
 //! ## Core Features
 //!
@@ -29,7 +29,7 @@
 //! }
 //! ```
 
-/// Constants and contract addresses for the NADS ecosystem
+/// Constants and contract addresses for the Nad.fun ecosystem
 ///
 /// Contains all contract addresses, fee tiers, and other system constants.
 /// These are automatically used by the SDK but can be accessed directly if needed.

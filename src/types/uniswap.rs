@@ -37,7 +37,7 @@ sol! {
     }
 }
 
-/// Uniswap V3 Swap event with NADS-specific analysis methods
+/// Uniswap V3 Swap event with Nad.fun-specific analysis methods
 #[derive(Debug, Clone)]
 pub struct SwapEvent {
     pub sender: Address,

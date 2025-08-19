@@ -1,4 +1,4 @@
-//! Trading functionality for the NADS ecosystem
+//! Trading functionality for the Nad.fun ecosystem
 //!
 //! This module provides comprehensive trading capabilities including:
 //!

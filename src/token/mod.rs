@@ -1,7 +1,7 @@
 //! Token interaction utilities and ERC-20 operations
 //!
 //! This module provides comprehensive utilities for interacting with ERC-20 tokens
-//! in the NADS ecosystem, including metadata retrieval, balance checking, and
+//! in the Nad.fun ecosystem, including metadata retrieval, balance checking, and
 //! advanced approval mechanisms.
 //!
 //! ## Main Components

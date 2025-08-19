@@ -1,12 +1,12 @@
-//! NADS ecosystem constants and contract addresses
+//! Nad.fun ecosystem constants and contract addresses
 //!
 //! This module centralizes all contract addresses, fee tiers, and system constants
-//! used throughout the NADS ecosystem. These constants are automatically used by
+//! used throughout the Nad.fun ecosystem. These constants are automatically used by
 //! the SDK's internal operations but can be accessed directly when needed.
 //!
 //! ## Contract Architecture
 //!
-//! The NADS ecosystem consists of several key contracts:
+//! The Nad.fun ecosystem consists of several key contracts:
 //! - **Bonding Curve**: Where new tokens are initially created and traded
 //! - **DEX Integration**: Uniswap V3 pools for established tokens
 //! - **Routers**: Smart routing between bonding curves and DEX pools
@@ -24,7 +24,7 @@
 //! let fee = DEFAULT_FEE_TIER; // 1% = 10,000 basis points
 //! ```
 
-/// Core contract addresses in the NADS ecosystem
+/// Core contract addresses in the Nad.fun ecosystem
 ///
 /// These addresses are for the production deployment and are used automatically
 /// by all SDK operations. They represent the authoritative contract instances.
@@ -37,7 +37,7 @@ pub mod addresses {
 
     /// Wrapped MON (WMON) token - the base trading pair for all tokens
     ///
-    /// All tokens in the NADS ecosystem are paired with WMON for trading.
+    /// All tokens in the Nad.fun ecosystem are paired with WMON for trading.
     /// This is equivalent to WETH in Ethereum-based DEXes.
     pub const WMON: &str = "0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701";
 
@@ -67,9 +67,9 @@ pub mod addresses {
 
 /// Trading constants and fee configurations
 ///
-/// These values define the economic parameters of the NADS ecosystem.
+/// These values define the economic parameters of the Nad.fun ecosystem.
 pub mod fees {
-    /// Standard NADS fee tier for Uniswap V3 pools (1.00% = 10,000 basis points)
+    /// Standard Nad.fun fee tier for Uniswap V3 pools (1.00% = 10,000 basis points)
     ///
     /// This is the default fee tier used for all WMON pairs in the ecosystem.
     /// Higher than typical DEX fees to account for the experimental nature of

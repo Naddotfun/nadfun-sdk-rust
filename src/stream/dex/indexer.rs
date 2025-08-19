@@ -33,7 +33,7 @@ impl UniswapSwapIndexer {
     }
 
     /// Create indexer by discovering pools for token addresses
-    /// Uses NADS standard 10_000 fee tier (1%)
+    /// Uses Nad.fun standard 10_000 fee tier (1%)
     pub async fn discover_pools_for_tokens(
         rpc_url: String,
         token_addresses: Vec<Address>,
