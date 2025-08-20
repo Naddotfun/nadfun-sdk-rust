@@ -2,6 +2,7 @@ use crate::{
     constants::*,
     contracts::{BondingCurveRouter, DexRouter, LensContract},
     types::*,
+    trading::gas::{estimate_gas, GasEstimationParams},
 };
 use alloy::{
     network::EthereumWallet,
@@ -168,5 +169,33 @@ impl Trade {
 
     pub fn wallet_address(&self) -> Address {
         self.wallet_address
+    }
+
+    /// Estimate gas for trading operations using the unified gas estimation system
+    ///
+    /// This is a convenience method that wraps the standalone estimate_gas function
+    /// and automatically provides the provider and handles the common use case.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use nadfun_sdk::{Trade, GasEstimationParams};
+    ///
+    /// let params = GasEstimationParams::Buy {
+    ///     token,
+    ///     amount_in: mon_amount,
+    ///     amount_out_min: min_tokens,
+    ///     to: wallet,
+    ///     deadline,
+    /// };
+    ///
+    /// let estimated_gas = trade.estimate_gas(&router, params).await?;
+    /// let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
+    /// ```
+    pub async fn estimate_gas(
+        &self,
+        router: &Router,
+        params: GasEstimationParams,
+    ) -> Result<u64> {
+        estimate_gas(self.provider.clone(), router, params).await
     }
 }

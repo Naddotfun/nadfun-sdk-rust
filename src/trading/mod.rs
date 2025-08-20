@@ -75,4 +75,4 @@ pub mod gas;
 pub use trade::Trade;
 pub use crate::types::Router;
 pub use utils::SlippageUtils;
-pub use gas::{BondingCurveGas, DexRouterGas, Operation, get_default_gas_limit};
+pub use gas::{estimate_gas, estimate_buy_gas, estimate_sell_gas, estimate_sell_permit_gas, GasEstimationParams};

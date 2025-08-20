@@ -41,7 +41,26 @@ cargo run --example buy -- --private-key your_private_key_here --rpc-url https:/
   Gas used: 247891
 ```
 
-### 2. Sell Tokens (`trade/sell.rs`)
+### 2. Gas Estimation (`trade/gas_estimation.rs`)
+Comprehensive gas estimation example for all trading operations with automatic problem solving.
+
+```bash
+cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress
+```
+
+**Features:**
+- ⛽ **Unified Gas Estimation**: Uses `trade.estimate_gas()` for BUY, SELL, and SELL PERMIT operations
+- 🔧 **Automatic Problem Solving**: Handles token approval and EIP-2612 permit signatures automatically
+- 📊 **Buffer Strategies**: Demonstrates different buffer calculation methods (fixed +50k, percentage 20%-25%)
+- 💰 **Cost Analysis**: Shows estimated transaction costs at different gas prices
+- ⚠️ **Real Network Conditions**: Uses actual network estimation with proper error handling
+
+**Important Requirements:**
+- **Token Approval**: SELL operations require approval (automatically handled)
+- **Permit Signatures**: SELL PERMIT needs valid signatures (automatically generated)
+- **Network Connection**: Live RPC required for accurate estimation
+
+### 3. Sell Tokens (`trade/sell.rs`)
 Sell tokens for MON with automatic approval and intelligent gas optimization.
 
 ```bash
@@ -56,7 +75,7 @@ cargo run --example sell -- --private-key your_private_key_here --rpc-url https:
 - 🔄 **Two-step Process**: Approve → Sell workflow
 - 📊 **Gas Comparison**: Shows estimated vs default gas limits
 
-### 3. Gasless Sell (`trade/sell_permit.rs`)
+### 4. Gasless Sell (`trade/sell_permit.rs`)
 Advanced gasless selling using EIP-2612 permit signatures.
 
 ```bash
@@ -72,7 +91,7 @@ cargo run --example sell_permit -- --private-key your_private_key_here --rpc-url
 
 ## 🪙 Token Helper Examples
 
-### 4. Basic ERC20 Operations (`token/basic_operations.rs`)
+### 5. Basic ERC20 Operations (`token/basic_operations.rs`)
 Comprehensive ERC20 token interaction patterns.
 
 ```bash
@@ -86,7 +105,7 @@ cargo run --example basic_operations -- --private-key your_private_key_here --rp
 - 💸 **Token Transfers**: Safe token transfer operations
 - 🔄 **Complete Workflows**: End-to-end transaction examples
 
-### 5. EIP-2612 Permit Signatures (`token/permit_signature.rs`)
+### 6. EIP-2612 Permit Signatures (`token/permit_signature.rs`)
 Master gasless approvals with cryptographic permit signatures.
 
 ```bash
@@ -102,7 +121,7 @@ cargo run --example permit_signature -- --private-key your_private_key_here --rp
 
 ## 📡 Event Streaming Examples
 
-### 6. Bonding Curve Event Indexing (`stream/curve_indexer.rs`)
+### 7. Bonding Curve Event Indexing (`stream/curve_indexer.rs`)
 Historical bonding curve event analysis with batch processing.
 
 ```bash
@@ -120,7 +139,7 @@ cargo run --example curve_indexer -- --rpc-url https://your-rpc-endpoint --token
 - 📈 **Statistics**: Event counts and analysis
 - 🪙 **Token Filtering**: Focus on specific token addresses
 
-### 7. Real-time Bonding Curve Streaming (`stream/curve_stream.rs`)
+### 8. Real-time Bonding Curve Streaming (`stream/curve_stream.rs`)
 Live bonding curve event monitoring with WebSocket streaming.
 
 ```bash
@@ -144,7 +163,7 @@ EVENTS=Buy,Sell cargo run --example curve_stream -- --ws-url wss://your-ws-endpo
 - 📊 **Live Processing**: Immediate event handling and analysis
 - 🛡️ **Error Handling**: Robust connection management
 
-### 8. DEX Event Indexing (`stream/dex_indexer.rs`)
+### 9. DEX Event Indexing (`stream/dex_indexer.rs`)
 Historical Uniswap V3 swap event analysis with pool discovery.
 
 ```bash
@@ -162,7 +181,7 @@ cargo run --example dex_indexer -- --rpc-url https://your-rpc-endpoint --tokens 
 - 📈 **Historical Data**: Configurable block range processing
 - 🎯 **Token-specific**: Focus on specific token trading activity
 
-### 9. Real-time DEX Streaming (`stream/dex_stream.rs`)
+### 10. Real-time DEX Streaming (`stream/dex_stream.rs`)
 Live Uniswap V3 swap monitoring with pool auto-discovery.
 
 ```bash
@@ -183,7 +202,7 @@ cargo run --example dex_stream -- --ws-url wss://your-ws-endpoint --token 0xToke
 - 📊 **Swap Details**: amount0, amount1, sender, recipient, tick data
 - 🎯 **Flexible Targeting**: Pool addresses or token-based discovery
 
-### 10. Pool Discovery (`stream/pool_discovery.rs`)
+### 12. Pool Discovery (`stream/pool_discovery.rs`)
 Automated Uniswap V3 pool address discovery utility.
 
 ```bash
@@ -203,28 +222,39 @@ cargo run --example pool_discovery -- --rpc-url https://your-rpc-endpoint --toke
 
 ## ⛽ Gas Management Features
 
-All trading examples include intelligent gas management:
+All trading examples now use the new unified gas estimation system:
 
-### Default Gas Limits (Based on Contract Testing)
-- **Bonding Curve**: Buy: 320k, Sell: 170k, SellPermit: 210k
-- **DEX Router**: Buy: 350k, Sell: 200k, SellPermit: 250k
-- **Safety Buffer**: All limits include 20% buffer from forge test data
+### New Gas Estimation System
+- **Real-time Network Estimation**: Uses `trade.estimate_gas()` for live gas calculations
+- **Automatic Problem Solving**: Handles token approval and permit signatures automatically
+- **Network-based Calculation**: No more static fallback constants - all estimates from actual network conditions
+- **Smart Buffer Strategies**: Multiple buffer calculation methods (fixed amounts, percentages)
+
+### Gas Estimation Requirements
+⚠️ **Important**: For accurate gas estimation, certain conditions must be met:
+
+- **SELL Operations**: Require token approval for router (automatically handled in examples)
+- **SELL PERMIT Operations**: Need valid EIP-2612 permit signatures (automatically generated in examples)
+- **Token Balance**: Some token balance recommended for realistic estimation (examples use 1 token minimum)
+- **Network Connection**: Live RPC connection required for real-time estimation
 
 ### Dynamic Gas Features
-- **Real-time Estimation**: Actual contract call gas estimation
+- **Real-time Estimation**: Actual contract call gas estimation using network conditions
 - **Network Price Detection**: Current gas price with EIP-1559 optimization
-- **Comparison Output**: Shows estimated vs default gas limits
-- **Custom Strategies**: Users can choose estimation, defaults, or custom values
+- **Multiple Buffer Strategies**: Fixed amounts (+50k) and percentage-based (20%, 25%)
+- **Cost Analysis**: Transaction cost estimates at different gas prices
+- **Error Handling**: Graceful fallback when estimation fails
 
 **Example Usage:**
 ```rust
-use nadfun_sdk::{Operation, get_default_gas_limit, BondingCurveGas, DexRouterGas, Router};
+use nadfun_sdk::{GasEstimationParams, Trade};
 
-// Use safe defaults (recommended)
-gas_limit: Some(get_default_gas_limit(&router, Operation::Buy))
+// Unified gas estimation for any operation
+let gas_params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
+let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
 
-// Or access constants directly
-let gas_limit = BondingCurveGas::BUY; // 320,000
+// Apply buffer strategy
+let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
 ```
 
 ## 🚀 Configuration

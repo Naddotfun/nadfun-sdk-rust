@@ -1,105 +1,339 @@
 use crate::types::Router;
+use alloy::{
+    primitives::{Address, U256},
+    providers::Provider,
+    rpc::types::TransactionRequest,
+};
+use anyhow::Result;
+use std::sync::Arc;
 
-/// Trading operation types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Operation {
-    Buy,
-    Sell,
-    SellPermit,
+/// Parameters for gas estimation
+#[derive(Debug, Clone)]
+pub enum GasEstimationParams {
+    Buy {
+        token: Address,
+        amount_in: U256,
+        amount_out_min: U256,
+        to: Address,
+        deadline: U256,
+    },
+    Sell {
+        token: Address,
+        amount_in: U256,
+        amount_out_min: U256,
+        to: Address,
+        deadline: U256,
+    },
+    SellPermit {
+        token: Address,
+        amount_in: U256,
+        amount_out_min: U256,
+        to: Address,
+        deadline: U256,
+        v: u8,
+        r: [u8; 32],
+        s: [u8; 32],
+    },
 }
 
-/// Default gas limits for trading operations based on forge test gas reports
+/// Estimate gas for any trading operation
 ///
-/// These values are based on actual gas usage from contract tests and include
-/// a reasonable buffer for network variations. Users can override these values
-/// or add their own buffer as needed.
+/// This is the main entry point for gas estimation. It takes gas estimation parameters
+/// and the router information, then calls the appropriate specialized function.
+///
+/// # Example
+/// ```rust,ignore
+/// use nadfun_sdk::{estimate_gas, GasEstimationParams};
+///
+/// let params = GasEstimationParams::Sell {
+///     token,
+///     amount_in: token_amount,
+///     amount_out_min: U256::from(1),
+///     to: wallet,
+///     deadline: U256::from(9999999999999999u64),
+/// };
+///
+/// let estimated_gas = estimate_gas(provider, &router, params).await?;
+/// ```
+pub async fn estimate_gas<P: Provider>(
+    provider: Arc<P>,
+    router: &Router,
+    params: GasEstimationParams,
+) -> Result<u64> {
+    match params {
+        GasEstimationParams::Buy {
+            token,
+            amount_in,
+            amount_out_min,
+            to,
+            deadline,
+        } => {
+            estimate_buy_gas(
+                provider,
+                router,
+                token,
+                amount_in,
+                amount_out_min,
+                to,
+                deadline,
+            )
+            .await
+        }
 
-/// Bonding Curve Router gas limits
-pub struct BondingCurveGas;
+        GasEstimationParams::Sell {
+            token,
+            amount_in,
+            amount_out_min,
+            to,
+            deadline,
+        } => {
+            estimate_sell_gas(
+                provider,
+                router,
+                token,
+                amount_in,
+                amount_out_min,
+                to,
+                deadline,
+            )
+            .await
+        }
 
-impl BondingCurveGas {
-    /// Gas limit for buy operations
-    /// Based on forge test: mean 225,873, max 263,913
-    /// Using max + 20% buffer = ~316,000
-    pub const BUY: u64 = 320_000;
-
-    /// Gas limit for sell operations  
-    /// Based on forge test: mean 64,628, max 140,042
-    /// Using max + 20% buffer = ~168,000
-    pub const SELL: u64 = 170_000;
-
-    /// Gas limit for sell permit operations
-    /// Based on forge test: mean 116,058, max 174,789
-    /// Using max + 20% buffer = ~210,000
-    pub const SELL_PERMIT: u64 = 210_000;
-}
-
-/// DEX Router gas limits
-pub struct DexRouterGas;
-
-impl DexRouterGas {
-    /// Gas limit for buy operations
-    /// Estimated higher than bonding curve due to DEX complexity
-    pub const BUY: u64 = 350_000;
-
-    /// Gas limit for sell operations
-    /// Estimated higher than bonding curve due to DEX complexity  
-    pub const SELL: u64 = 200_000;
-
-    /// Gas limit for sell permit operations
-    /// Estimated higher than bonding curve due to DEX complexity
-    pub const SELL_PERMIT: u64 = 250_000;
-}
-
-/// Helper function to get default gas limit for a trading operation using enums
-pub fn get_default_gas_limit(router: &Router, operation: Operation) -> u64 {
-    match (router, operation) {
-        (Router::BondingCurve(_), Operation::Buy) => BondingCurveGas::BUY,
-        (Router::BondingCurve(_), Operation::Sell) => BondingCurveGas::SELL,
-        (Router::BondingCurve(_), Operation::SellPermit) => BondingCurveGas::SELL_PERMIT,
-        (Router::Dex(_), Operation::Buy) => DexRouterGas::BUY,
-        (Router::Dex(_), Operation::Sell) => DexRouterGas::SELL,
-        (Router::Dex(_), Operation::SellPermit) => DexRouterGas::SELL_PERMIT,
+        GasEstimationParams::SellPermit {
+            token,
+            amount_in,
+            amount_out_min,
+            to,
+            deadline,
+            v,
+            r,
+            s,
+        } => {
+            estimate_sell_permit_gas(
+                provider,
+                router,
+                token,
+                amount_in,
+                amount_out_min,
+                to,
+                deadline,
+                v,
+                r,
+                s,
+            )
+            .await
+        }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Estimate gas for buy operation
+pub async fn estimate_buy_gas<P: Provider>(
+    provider: Arc<P>,
+    router: &Router,
+    token: Address,
+    amount_in: U256,
+    amount_out_min: U256,
+    to: Address,
+    deadline: U256,
+) -> Result<u64> {
+    match router {
+        Router::BondingCurve(router_addr) => {
+            use crate::contracts::bonding_curve::IBondingCurveRouter;
 
-    #[test]
-    fn test_gas_limits() {
-        assert_eq!(BondingCurveGas::BUY, 320_000);
-        assert_eq!(BondingCurveGas::SELL, 170_000);
-        assert_eq!(BondingCurveGas::SELL_PERMIT, 210_000);
+            let contract_params = IBondingCurveRouter::BuyParams {
+                amountOutMin: amount_out_min,
+                token,
+                to,
+                deadline,
+            };
 
-        assert_eq!(DexRouterGas::BUY, 350_000);
-        assert_eq!(DexRouterGas::SELL, 200_000);
-        assert_eq!(DexRouterGas::SELL_PERMIT, 250_000);
-    }
+            let contract = IBondingCurveRouter::new(*router_addr, provider.as_ref());
+            let call_builder = contract.buy(contract_params);
+            let call_data = call_builder.calldata();
 
-    #[test]
-    fn test_get_default_gas_limit() {
-        use alloy::primitives::Address;
+            let gas = provider
+                .estimate_gas(
+                    TransactionRequest::default()
+                        .to(*router_addr)
+                        .from(to)
+                        .value(amount_in)
+                        .input(call_data.clone().into()),
+                )
+                .await?;
 
-        let bc_router = Router::BondingCurve(Address::ZERO);
-        let dex_router = Router::Dex(Address::ZERO);
+            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+        }
+        Router::Dex(router_addr) => {
+            use crate::contracts::dex::IDexRouter;
 
-        assert_eq!(get_default_gas_limit(&bc_router, Operation::Buy), 320_000);
-        assert_eq!(get_default_gas_limit(&dex_router, Operation::Sell), 200_000);
-        assert_eq!(
-            get_default_gas_limit(&bc_router, Operation::SellPermit),
-            210_000
-        );
-        assert_eq!(
-            get_default_gas_limit(&dex_router, Operation::SellPermit),
-            250_000
-        );
-    }
+            let contract_params = IDexRouter::BuyParams {
+                amountOutMin: amount_out_min,
+                token,
+                to,
+                deadline,
+            };
 
-    #[test]
-    fn test_operation_enum() {
-        assert_eq!(Operation::Buy, Operation::Buy);
-        assert_ne!(Operation::Buy, Operation::Sell);
+            let contract = IDexRouter::new(*router_addr, provider.as_ref());
+            let call_builder = contract.buy(contract_params);
+            let call_data = call_builder.calldata();
+
+            let gas = provider
+                .estimate_gas(
+                    TransactionRequest::default()
+                        .to(*router_addr)
+                        .from(to)
+                        .value(amount_in)
+                        .input(call_data.clone().into()),
+                )
+                .await?;
+
+            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+        }
     }
 }
+
+/// Estimate gas for sell operation
+pub async fn estimate_sell_gas<P: Provider>(
+    provider: Arc<P>,
+    router: &Router,
+    token: Address,
+    amount_in: U256,
+    amount_out_min: U256,
+    to: Address,
+    deadline: U256,
+) -> Result<u64> {
+    match router {
+        Router::BondingCurve(router_addr) => {
+            use crate::contracts::bonding_curve::IBondingCurveRouter;
+
+            let contract_params = IBondingCurveRouter::SellParams {
+                amountIn: amount_in,
+                amountOutMin: amount_out_min,
+                token,
+                to,
+                deadline,
+            };
+
+            let contract = IBondingCurveRouter::new(*router_addr, provider.as_ref());
+            let call_builder = contract.sell(contract_params);
+            let call_data = call_builder.calldata();
+
+            let gas = provider
+                .estimate_gas(
+                    TransactionRequest::default()
+                        .to(*router_addr)
+                        .from(to)
+                        .input(call_data.clone().into()),
+                )
+                .await?;
+
+            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+        }
+        Router::Dex(router_addr) => {
+            use crate::contracts::dex::IDexRouter;
+
+            let contract_params = IDexRouter::SellParams {
+                amountIn: amount_in,
+                amountOutMin: amount_out_min,
+                token,
+                to,
+                deadline,
+            };
+
+            let contract = IDexRouter::new(*router_addr, provider.as_ref());
+            let call_builder = contract.sell(contract_params);
+            let call_data = call_builder.calldata();
+
+            let gas = provider
+                .estimate_gas(
+                    TransactionRequest::default()
+                        .to(*router_addr)
+                        .from(to)
+                        .input(call_data.clone().into()),
+                )
+                .await?;
+
+            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+        }
+    }
+}
+
+/// Estimate gas for sell permit operation
+pub async fn estimate_sell_permit_gas<P: Provider>(
+    provider: Arc<P>,
+    router: &Router,
+    token: Address,
+    amount_in: U256,
+    amount_out_min: U256,
+    to: Address,
+    deadline: U256,
+    v: u8,
+    r: [u8; 32],
+    s: [u8; 32],
+) -> Result<u64> {
+    match router {
+        Router::BondingCurve(router_addr) => {
+            use crate::contracts::bonding_curve::IBondingCurveRouter;
+
+            let contract_params = IBondingCurveRouter::SellPermitParams {
+                amountIn: amount_in,
+                amountOutMin: amount_out_min,
+                amountAllowance: amount_in, // Same as amount_in
+                token,
+                to,
+                deadline,
+                v,
+                r: r.into(),
+                s: s.into(),
+            };
+
+            let contract = IBondingCurveRouter::new(*router_addr, provider.as_ref());
+            let call_builder = contract.sellPermit(contract_params);
+            let call_data = call_builder.calldata();
+
+            let gas = provider
+                .estimate_gas(
+                    TransactionRequest::default()
+                        .to(*router_addr)
+                        .from(to)
+                        .input(call_data.clone().into()),
+                )
+                .await?;
+
+            Ok(gas
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+        }
+        Router::Dex(router_addr) => {
+            use crate::contracts::dex::IDexRouter;
+
+            let contract_params = IDexRouter::SellPermitParams {
+                amountIn: amount_in,
+                amountOutMin: amount_out_min,
+                amountAllowance: amount_in, // Same as amount_in
+                token,
+                to,
+                deadline,
+                v,
+                r: r.into(),
+                s: s.into(),
+            };
+
+            let contract = IDexRouter::new(*router_addr, provider.as_ref());
+            let call_builder = contract.sellPermit(contract_params);
+            let call_data = call_builder.calldata();
+
+            let gas = provider
+                .estimate_gas(
+                    TransactionRequest::default()
+                        .to(*router_addr)
+                        .from(to)
+                        .input(call_data.clone().into()),
+                )
+                .await?;
+
+            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+        }
+    }
+}
+

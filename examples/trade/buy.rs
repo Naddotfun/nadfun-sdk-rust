@@ -23,11 +23,9 @@
 use alloy::eips::BlockId;
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
-use alloy::rpc::types::TransactionRequest;
 use anyhow::Result;
 use nadfun_sdk::types::BuyParams;
-use nadfun_sdk::{IBondingCurveRouter, IDexRouter};
-use nadfun_sdk::{SlippageUtils, Trade, Operation, get_default_gas_limit};
+use nadfun_sdk::{GasEstimationParams, SlippageUtils, Trade};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -111,78 +109,33 @@ async fn main() -> Result<()> {
         recommended_gas_price / U256::from(1_000_000_000)
     );
 
-    // Estimate gas for actual contract call (for comparison with defaults)
-    let estimated_gas = match &router {
-        nadfun_sdk::trading::Router::BondingCurve(_) => {
-            let contract_params = IBondingCurveRouter::BuyParams {
-                amountOutMin: amount_out,
-                token,
-                to: wallet,
-                deadline: U256::from(9999999999999999u64),
-            };
-            let contract = IBondingCurveRouter::new(router.address(), trade.provider().as_ref());
-            let call_builder = contract.buy(contract_params.clone());
-            let call_data = call_builder.calldata();
+    // === GAS ESTIMATION ===
 
-            match trade
-                .provider()
-                .estimate_gas(
-                    TransactionRequest::default()
-                        .to(router.address())
-                        .from(wallet)
-                        .value(mon_amount)
-                        .input(call_data.clone().into()),
-                )
-                .await
-            {
-                Ok(gas) => {
-                    println!("⛽ Estimated gas for buy contract call: {}", gas);
-                    gas
-                }
-                Err(e) => {
-                    println!("⚠️ Gas estimation failed: {}", e);
-                    println!("⛽ Using default gas limit for bonding curve buy: 300000");
-                    300000
-                }
-            }
+    // Use new unified gas estimation system
+    let deadline = U256::from(9999999999999999u64);
+    let gas_params = GasEstimationParams::Buy {
+        token,
+        amount_in: mon_amount,
+        amount_out_min,
+        to: wallet,
+        deadline,
+    };
+
+    let estimated_gas = match trade.estimate_gas(&router, gas_params).await {
+        Ok(gas) => {
+            println!("⛽ Estimated gas for buy: {}", gas);
+            gas
         }
-        nadfun_sdk::trading::Router::Dex(_) => {
-            let contract_params = IDexRouter::BuyParams {
-                amountOutMin: amount_out,
-                token,
-                to: wallet,
-                deadline: U256::from(9999999999999999u64),
-            };
-            let contract = IDexRouter::new(router.address(), trade.provider().as_ref());
-            let call_builder = contract.buy(contract_params.clone());
-            let call_data = call_builder.calldata();
-
-            match trade
-                .provider()
-                .estimate_gas(
-                    TransactionRequest::default()
-                        .to(router.address())
-                        .from(wallet)
-                        .value(mon_amount)
-                        .input(call_data.clone().into()),
-                )
-                .await
-            {
-                Ok(gas) => {
-                    println!("⛽ Estimated gas for buy contract call: {}", gas);
-                    gas
-                }
-                Err(e) => {
-                    println!("⚠️ Gas estimation failed: {}", e);
-                    println!("⛽ Using default gas limit for DEX buy: 350000");
-                    350000
-                }
-            }
+        Err(e) => {
+            println!("⚠️ Gas estimation failed: {}", e);
+            println!("⛽ Using fallback gas limit: 300000");
+            300000
         }
     };
 
-    println!("⛽ Estimated gas for buy contract call: {}", estimated_gas);
-    println!("⛽ Using default gas limit: {}", get_default_gas_limit(&router, Operation::Buy));
+    // Add 20% buffer to estimated gas
+    let gas_with_buffer = estimated_gas * 120 / 100;
+    println!("⛽ Gas with 20% buffer: {}", gas_with_buffer);
 
     // Apply 5% slippage protection
 
@@ -198,8 +151,8 @@ async fn main() -> Result<()> {
         amount_in: mon_amount,
         amount_out_min, // Use slippage-protected amount
         to: wallet,
-        deadline: U256::from(9999999999999999 as u64),
-        gas_limit: Some(get_default_gas_limit(&router, Operation::Buy)), // Use default gas limits with buffer included
+        deadline,
+        gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(recommended_gas_price.try_into().unwrap_or(50_000_000_000)), // Use higher gas price
         nonce: Some(current_nonce), // Use actual account nonce
     };

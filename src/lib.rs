@@ -79,7 +79,7 @@ pub use stream::{
     UniswapSwapIndexer, UniswapSwapStream,
 };
 pub use token::TokenHelper;
-pub use trading::{SlippageUtils, Trade, Router, Operation, get_default_gas_limit, BondingCurveGas, DexRouterGas};
+pub use trading::{SlippageUtils, Trade, Router, estimate_gas, GasEstimationParams};
 pub use types::*;
 
 /// Convenient prelude module for importing commonly used types and functions
@@ -96,7 +96,7 @@ pub use types::*;
 /// a standardized way to get started with the SDK quickly.
 pub mod prelude {
     // Trading functionality
-    pub use crate::trading::{SlippageUtils, Trade, Router, Operation, get_default_gas_limit, BondingCurveGas, DexRouterGas};
+    pub use crate::trading::{SlippageUtils, Trade, Router, estimate_gas, GasEstimationParams};
 
     // Token operations
     pub use crate::token::TokenHelper;

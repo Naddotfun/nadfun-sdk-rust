@@ -44,6 +44,10 @@ path = "examples/trade/sell.rs"
 name = "sell_permit"
 path = "examples/trade/sell_permit.rs"
 
+[[example]]
+name = "gas_estimation"
+path = "examples/trade/gas_estimation.rs"
+
 # Token Helper Examples
 [[example]]
 name = "basic_operations"

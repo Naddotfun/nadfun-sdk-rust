@@ -24,11 +24,9 @@
 use alloy::eips::BlockId;
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
-use alloy::rpc::types::TransactionRequest;
 use anyhow::Result;
 use nadfun_sdk::types::SellPermitParams;
-use nadfun_sdk::{get_default_gas_limit, Operation, TokenHelper, Trade};
-use nadfun_sdk::{IBondingCurveRouter, IDexRouter};
+use nadfun_sdk::{GasEstimationParams, TokenHelper, Trade};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -119,69 +117,33 @@ async fn main() -> Result<()> {
         .await?;
     println!("📊 Current account nonce: {}", current_nonce);
 
-    // Create actual contract call data for gas estimation
-    let estimated_gas = match &router {
-        nadfun_sdk::trading::Router::BondingCurve(_) => {
-            let contract_params = IBondingCurveRouter::SellPermitParams {
-                amountIn: token_amount,
-                amountOutMin: min_eth,
-                amountAllowance: token_amount,
-                token,
-                to: wallet,
-                deadline,
-                v,
-                r,
-                s,
-            };
-            let contract = IBondingCurveRouter::new(router.address(), trade.provider().as_ref());
-            let call_builder = contract.sellPermit(contract_params.clone());
-            let call_data = call_builder.calldata();
+    // Use new unified gas estimation system
+    let gas_params = GasEstimationParams::SellPermit {
+        token,
+        amount_in: token_amount,
+        amount_out_min: min_eth,
+        to: wallet,
+        deadline,
+        v,
+        r: r.into(),
+        s: s.into(),
+    };
 
-            trade
-                .provider()
-                .estimate_gas(
-                    TransactionRequest::default()
-                        .to(router.address())
-                        .from(wallet)
-                        .input(call_data.clone().into()),
-                )
-                .await?
+    let estimated_gas = match trade.estimate_gas(&router, gas_params).await {
+        Ok(gas) => {
+            println!("⛽ Estimated gas for sell permit: {}", gas);
+            gas
         }
-        nadfun_sdk::trading::Router::Dex(_) => {
-            let contract_params = IDexRouter::SellPermitParams {
-                amountIn: token_amount,
-                amountOutMin: min_eth,
-                amountAllowance: token_amount,
-                token,
-                to: wallet,
-                deadline,
-                v,
-                r,
-                s,
-            };
-            let contract = IDexRouter::new(router.address(), trade.provider().as_ref());
-            let call_builder = contract.sellPermit(contract_params.clone());
-            let call_data = call_builder.calldata();
-
-            trade
-                .provider()
-                .estimate_gas(
-                    TransactionRequest::default()
-                        .to(router.address())
-                        .from(wallet)
-                        .input(call_data.clone().into()),
-                )
-                .await?
+        Err(e) => {
+            println!("⚠️ Gas estimation failed: {}", e);
+            println!("⛽ Using fallback gas limit: 250000");
+            250000
         }
     };
-    println!(
-        "⛽ Estimated gas for sellPermit contract call: {}",
-        estimated_gas
-    );
-    println!(
-        "⛽ Using default gas limit: {}",
-        get_default_gas_limit(&router, Operation::SellPermit)
-    );
+
+    // Add 25% buffer to estimated gas (permit transactions can be more complex)
+    let gas_with_buffer = estimated_gas * 125 / 100;
+    println!("⛽ Gas with 25% buffer: {}", gas_with_buffer);
 
     // Prepare sell permit parameters
     let sell_permit_params = SellPermitParams {
@@ -194,7 +156,7 @@ async fn main() -> Result<()> {
         v,
         r,
         s,
-        gas_limit: Some(get_default_gas_limit(&router, Operation::SellPermit)), // Use default gas limits with buffer included
+        gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(50_000_000_000), // 50 gwei gas price (higher for complex tx)
         nonce: Some(current_nonce),      // Use actual account nonce
     };
