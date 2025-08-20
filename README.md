@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun-sdk = "0.1.0"
+nadfun_sdk = "0.2.0"
 ```
 
 ## Quick Start
@@ -22,10 +22,20 @@ async fn main() -> Result<()> {
     let rpc_url = "https://your-rpc-endpoint".to_string();
     let private_key = "your_private_key_here".to_string();
 
-    // Trading
+    // Trading with new gas estimation system
     let trade = Trade::new(rpc_url.clone(), private_key.clone()).await?;
     let token: Address = "0x...".parse()?;
     let (router, amount_out) = trade.get_amount_out(token, parse_ether("0.1")?, true).await?;
+    
+    // New unified gas estimation (v0.2.0)
+    let gas_params = GasEstimationParams::Buy {
+        token,
+        amount_in: parse_ether("0.1")?,
+        amount_out_min: amount_out,
+        to: trade.wallet_address(),
+        deadline: U256::from(9999999999999999u64),
+    };
+    let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
 
     // Token operations
     let token_helper = TokenHelper::new(rpc_url, private_key).await?;
@@ -42,11 +52,24 @@ async fn main() -> Result<()> {
 Execute buy/sell operations on bonding curves with slippage protection:
 
 ```rust
-use nadfun_sdk::{Trade, SlippageUtils, types::BuyParams};
+use nadfun_sdk::{Trade, SlippageUtils, GasEstimationParams, types::BuyParams};
 
 // Get quote and execute buy
 let (router, expected_tokens) = trade.get_amount_out(token, mon_amount, true).await?;
 let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
+
+// Use new unified gas estimation system
+let gas_params = GasEstimationParams::Buy {
+    token,
+    amount_in: mon_amount,
+    amount_out_min: min_tokens,
+    to: wallet_address,
+    deadline: U256::from(deadline),
+};
+
+// Get accurate gas estimation from network
+let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
 let buy_params = BuyParams {
     token,
@@ -54,7 +77,7 @@ let buy_params = BuyParams {
     amount_out_min: min_tokens,
     to: wallet_address,
     deadline: U256::from(deadline),
-    gas_limit: Some(get_default_gas_limit(&router, Operation::Buy)), // Use default gas limits
+    gas_limit: Some(gas_with_buffer), // Use network-based estimation
     gas_price: Some(50_000_000_000), // 50 gwei
     nonce: None, // Auto-detect
 };
@@ -64,102 +87,90 @@ let result = trade.buy(buy_params, router).await?;
 
 ### ⛽ Gas Management
 
-The SDK provides intelligent gas management with both real-time estimation and optimized defaults:
+**v0.2.0 introduces a unified gas estimation system** that replaces static constants with real-time network estimation:
 
-#### Default Gas Limits (Recommended)
-
-Based on comprehensive contract testing with 20% safety buffer:
+#### Unified Gas Estimation (New in v0.2.0)
 
 ```rust
-use nadfun_sdk::{Operation, get_default_gas_limit, BondingCurveGas, DexRouterGas, Router};
+use nadfun_sdk::{GasEstimationParams, Trade};
 
-// Simple usage with defaults (recommended)
-let buy_params = BuyParams {
+// Create gas estimation parameters for any operation
+let gas_params = GasEstimationParams::Buy {
     token,
     amount_in: mon_amount,
     amount_out_min: min_tokens,
     to: wallet_address,
     deadline: U256::from(deadline),
-    gas_limit: Some(get_default_gas_limit(&router, Operation::Buy)), // Safe default
-    gas_price: Some(50_000_000_000), // 50 gwei
-    nonce: None, // Auto-detect
+};
+
+// Get real-time gas estimation from network
+let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+
+// Apply buffer strategy
+let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
+```
+
+#### Gas Estimation Parameters
+
+```rust
+pub enum GasEstimationParams {
+    // For buying tokens
+    Buy { token, amount_in, amount_out_min, to, deadline },
+    
+    // For selling tokens (requires token approval)
+    Sell { token, amount_in, amount_out_min, to, deadline },
+    
+    // For gasless selling with permits
+    SellPermit { token, amount_in, amount_out_min, to, deadline, v, r, s },
+}
+```
+
+#### Automatic Problem Solving
+
+The new system automatically handles common issues:
+
+- **Token Approval**: SELL operations automatically check and approve tokens
+- **Permit Signatures**: SELL PERMIT operations generate real EIP-2612 signatures
+- **Network Conditions**: Uses actual network state instead of static estimates
+- **Error Recovery**: Graceful fallback when estimation fails
+
+#### Buffer Strategies
+
+```rust
+// Fixed buffer amounts
+let gas_fixed_buffer = estimated_gas + 50_000;  // +50k gas
+
+// Percentage-based buffers
+let gas_20_percent = estimated_gas * 120 / 100; // 20% buffer
+let gas_25_percent = estimated_gas * 125 / 100; // 25% buffer (for complex operations)
+
+// Choose based on operation complexity
+let final_gas = match operation_type {
+    "buy" => estimated_gas * 120 / 100,        // 20% buffer
+    "sell" => estimated_gas * 115 / 100,       // 15% buffer 
+    "sell_permit" => estimated_gas * 125 / 100, // 25% buffer
+    _ => estimated_gas + 50_000,               // Fixed buffer
 };
 ```
 
-#### Real-time Gas Estimation
-
-Examples demonstrate both estimation and defaults for comparison:
+#### Migration from v0.1.x
 
 ```rust
-// Get real-time gas estimation for specific transaction
-let estimated_gas = match &router {
-    Router::BondingCurve(_) => {
-        let contract_params = IBondingCurveRouter::BuyParams { /* ... */ };
-        let contract = IBondingCurveRouter::new(router.address(), provider);
-        let call_data = contract.buy(contract_params).calldata();
+// OLD (v0.1.x) - Static constants
+use nadfun_sdk::{BondingCurveGas, get_default_gas_limit, Operation};
+let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 
-        provider.estimate_gas(TransactionRequest::default()
-            .to(router.address())
-            .from(wallet)
-            .value(amount)
-            .input(call_data.into())
-        ).await?
-    }
-    Router::Dex(_) => { /* similar for DEX */ }
-};
-
-// Compare with defaults
-println!("⛽ Estimated gas: {}", estimated_gas);
-println!("⛽ Default gas limit: {}", get_default_gas_limit(&router, Operation::Buy));
+// NEW (v0.2.0) - Network-based estimation
+use nadfun_sdk::GasEstimationParams;
+let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
+let estimated_gas = trade.estimate_gas(&router, params).await?;
+let gas_limit = estimated_gas * 120 / 100; // Apply buffer
 ```
 
-#### Gas Constants
-
-Access gas limits directly if needed:
-
-```rust
-// Bonding Curve gas limits
-let bc_buy = BondingCurveGas::BUY;        // 320,000
-let bc_sell = BondingCurveGas::SELL;      // 170,000
-let bc_permit = BondingCurveGas::SELL_PERMIT; // 210,000
-
-// DEX Router gas limits (higher due to complexity)
-let dex_buy = DexRouterGas::BUY;          // 350,000
-let dex_sell = DexRouterGas::SELL;        // 200,000
-let dex_permit = DexRouterGas::SELL_PERMIT; // 250,000
-```
-
-#### Custom Gas Strategies
-
-```rust
-// Strategy 1: Use defaults (safest)
-gas_limit: Some(get_default_gas_limit(&router, Operation::Buy))
-
-// Strategy 2: Add custom buffer to estimation
-gas_limit: Some(estimated_gas + 50_000)
-
-// Strategy 3: Use estimation with fallback to default
-gas_limit: Some(estimated_gas.max(get_default_gas_limit(&router, Operation::Buy)))
-```
-
-#### Gas Price Optimization
-
-```rust
-// Get current network conditions
-let network_gas_price = provider.get_gas_price().await?;
-let recommended_gas_price = network_gas_price * 300 / 100; // 3x for EIP-1559
-
-let params = BuyParams {
-    // ... other fields
-    gas_price: Some(recommended_gas_price.try_into().unwrap_or(50_000_000_000)),
-};
-```
-
-**Gas Limits Summary:**
-
-- **Bonding Curve**: Buy: 320k, Sell: 170k, SellPermit: 210k
-- **DEX Router**: Buy: 350k, Sell: 200k, SellPermit: 250k
-- **All limits include 20% safety buffer based on forge test data**
+**⚠️ Important Notes:**
+- **SELL Operations**: Require token approval for router (automatically handled in examples)
+- **SELL PERMIT Operations**: Need valid EIP-2612 permit signatures (automatically generated)
+- **Network Connection**: Live RPC required for accurate estimation
 
 ### 📊 Token Operations
 
@@ -311,17 +322,34 @@ export RPC_URL="https://your-rpc-endpoint"
 export TOKEN="0xTokenAddress"
 export RECIPIENT="0xRecipientAddress"  # For token operations
 
-cargo run --example buy              # Buy tokens with gas comparison
-cargo run --example sell             # Sell tokens with gas optimization
-cargo run --example sell_permit      # Gasless sell with permit signature
+cargo run --example buy              # Buy tokens with network-based gas estimation
+cargo run --example sell             # Sell tokens with automatic approval handling
+cargo run --example sell_permit      # Gasless sell with real permit signatures
+cargo run --example gas_estimation   # Comprehensive gas estimation example (NEW)
 cargo run --example basic_operations # Token operations (requires recipient)
 
 # Using command line arguments
 cargo run --example buy -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress
 cargo run --example sell -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress
 cargo run --example sell_permit -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress
+cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress
 cargo run --example basic_operations -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress --recipient 0xRecipientAddress
 ```
+
+### Gas Estimation Example (New in v0.2.0)
+
+```bash
+# Comprehensive gas estimation with automatic problem solving
+cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-url https://your-rpc-endpoint --token 0xTokenAddress
+```
+
+**Features:**
+- **Unified Gas Estimation**: Demonstrates `trade.estimate_gas()` for all operation types  
+- **Automatic Approval**: Handles token approval for SELL operations automatically
+- **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
+- **Buffer Strategies**: Shows different buffer calculation methods (fixed +50k, percentage 20%-25%)
+- **Cost Analysis**: Real-time transaction cost estimates at different gas prices
+- **Error Handling**: Graceful fallback when estimation fails
 
 ### Token Examples
 
