@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.2.0"
+nadfun_sdk = "0.2.1"
 ```
 
 ## Quick Start
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let trade = Trade::new(rpc_url.clone(), private_key.clone()).await?;
     let token: Address = "0x...".parse()?;
     let (router, amount_out) = trade.get_amount_out(token, parse_ether("0.1")?, true).await?;
-    
+
     // New unified gas estimation (v0.2.0)
     let gas_params = GasEstimationParams::Buy {
         token,
@@ -116,10 +116,10 @@ let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
 pub enum GasEstimationParams {
     // For buying tokens
     Buy { token, amount_in, amount_out_min, to, deadline },
-    
+
     // For selling tokens (requires token approval)
     Sell { token, amount_in, amount_out_min, to, deadline },
-    
+
     // For gasless selling with permits
     SellPermit { token, amount_in, amount_out_min, to, deadline, v, r, s },
 }
@@ -147,7 +147,7 @@ let gas_25_percent = estimated_gas * 125 / 100; // 25% buffer (for complex opera
 // Choose based on operation complexity
 let final_gas = match operation_type {
     "buy" => estimated_gas * 120 / 100,        // 20% buffer
-    "sell" => estimated_gas * 115 / 100,       // 15% buffer 
+    "sell" => estimated_gas * 115 / 100,       // 15% buffer
     "sell_permit" => estimated_gas * 125 / 100, // 25% buffer
     _ => estimated_gas + 50_000,               // Fixed buffer
 };
@@ -168,6 +168,7 @@ let gas_limit = estimated_gas * 120 / 100; // Apply buffer
 ```
 
 **⚠️ Important Notes:**
+
 - **SELL Operations**: Require token approval for router (automatically handled in examples)
 - **SELL PERMIT Operations**: Need valid EIP-2612 permit signatures (automatically generated)
 - **Network Connection**: Live RPC required for accurate estimation
@@ -344,7 +345,8 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 ```
 
 **Features:**
-- **Unified Gas Estimation**: Demonstrates `trade.estimate_gas()` for all operation types  
+
+- **Unified Gas Estimation**: Demonstrates `trade.estimate_gas()` for all operation types
 - **Automatic Approval**: Handles token approval for SELL operations automatically
 - **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
 - **Buffer Strategies**: Shows different buffer calculation methods (fixed +50k, percentage 20%-25%)
