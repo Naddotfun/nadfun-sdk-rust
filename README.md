@@ -661,5 +661,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Support
 
 - 📖 [Examples](examples/) - Comprehensive usage examples
-- 🐛 [Issues](https://github.com/your-org/nadfun-sdk/issues) - Bug reports and feature requests
-- 💬 [Discussions](https://github.com/your-org/nadfun-sdk/discussions) - Community support
+- 🐛 [Issues](https://github.com/Naddotfun/nadfun-sdk-rust/issues) - Bug reports and feature requests
