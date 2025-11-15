@@ -27,7 +27,7 @@
 
 use alloy::primitives::utils::parse_ether;
 use anyhow::Result;
-use nadfun_sdk::{Core, CreateTokenParams};
+use nadfun_sdk::{ActionId, Core, CreateTokenParams};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -166,6 +166,7 @@ async fn main() -> Result<()> {
         creator_address,
         amount_out,             // Calculated from Lens
         value: initial_buy_mon, // 1.5 MON
+        action_id: ActionId::CapricornActor, // Use CapricornActor (1)
     };
 
     // Step 3: Execute complete token creation flow (all steps handled automatically)

@@ -278,18 +278,6 @@ impl Core {
         let deploy_fee = self.get_deploy_fee().await?;
         let total_value = params.value + deploy_fee;
 
-        println!("\n📤 Submitting token creation transaction...");
-        println!("  Name: {}", params.name);
-        println!("  Symbol: {}", params.symbol);
-        println!("  Metadata URI: {}", metadata_uri);
-        println!("  Amount Out: {}", params.amount_out);
-        println!("  Initial Buy (MON): {}", params.value);
-        println!("  Deploy Fee (MON): {}", deploy_fee);
-        println!("  Total Value (MON): {}", total_value);
-        println!("  Salt: 0x{}", hex::encode(salt));
-        println!("  Action ID: 1");
-        println!("  Creator: {}", params.creator_address);
-
         // Step 4: Execute create transaction on bonding curve
         let (token_address, tx_result) = self
             .bonding_curve_router
@@ -299,7 +287,7 @@ impl Core {
                 metadata_uri.clone(),
                 params.amount_out,
                 salt,
-                1, // action_id: 1 for create
+                params.action_id, // Actor type (CapricornActor or AmplifyActor)
                 total_value, // Initial buy amount + deploy fee
                 None, // gas_limit (auto-estimate)
                 None, // gas_price (use network default)

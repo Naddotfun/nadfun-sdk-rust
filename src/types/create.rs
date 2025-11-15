@@ -3,6 +3,19 @@
 use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 
+/// Action ID for token creation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionId {
+    CapricornActor = 1,
+    AmplifyActor = 2,
+}
+
+impl ActionId {
+    pub fn as_u8(&self) -> u8 {
+        *self as u8
+    }
+}
+
 /// Image upload response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UploadImageData {
@@ -72,6 +85,7 @@ pub struct CreateTokenParams {
     /// Use Core.get_initial_buy_amount_out(value) to calculate this value.
     pub amount_out: U256,
     pub value: U256, // MON amount to send (typically 1.5 MON)
+    pub action_id: ActionId, // Actor type for token creation
 }
 
 /// Result of the complete token creation flow
