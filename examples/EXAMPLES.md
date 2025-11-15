@@ -40,6 +40,7 @@ cargo run --example create_token -- \
 - 🎲 **Vanity Address**: Generates salt for custom token address
 - 💰 **Initial Buy**: Purchases tokens during creation
 - 🔐 **Deploy Fee**: Automatically calculated and included
+- 🎭 **Action ID**: Uses `CapricornActor` (value: 1) for token creation
 
 ---
 
