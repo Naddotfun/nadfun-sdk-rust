@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.2.1"
+nadfun_sdk = "0.3.0"
 ```
 
 ## Quick Start
@@ -22,32 +22,91 @@ async fn main() -> Result<()> {
     let rpc_url = "https://your-rpc-endpoint".to_string();
     let private_key = "your_private_key_here".to_string();
 
-    // Trading - set network once, it's used everywhere automatically
+    // Initialize Core - set network once, it's used everywhere automatically
     let core = Core::new(rpc_url.clone(), private_key.clone(), Network::Mainnet).await?;
-    // Now all get_* functions automatically use Mainnet addresses
 
+    // 1. Get quote for buying tokens
     let token: Address = "0x...".parse()?;
-    let (router, amount_out) = core.get_amount_out(token, parse_ether("0.1")?, true).await?;
+    let mon_amount = parse_ether("0.1")?; // Buy with 0.1 MON
+    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
 
-    // New unified gas estimation (v0.2.0)
+    // 2. Apply slippage protection (5%)
+    let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
+
+    // 3. Estimate gas
     let gas_params = GasEstimationParams::Buy {
         token,
-        amount_in: parse_ether("0.1")?,
-        amount_out_min: amount_out,
+        amount_in: mon_amount,
+        amount_out_min: min_tokens,
         to: core.wallet_address(),
         deadline: U256::from(9999999999999999u64),
     };
     let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+    let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
-    // Token operations
-    let token_helper = TokenHelper::new(rpc_url, private_key).await?;
-    let balance = token_helper.balance_of(token, "0x...".parse()?).await?;
+    // 4. Execute buy
+    let buy_params = BuyParams {
+        token,
+        amount_in: mon_amount,
+        amount_out_min: min_tokens,
+        to: core.wallet_address(),
+        deadline: U256::from(9999999999999999u64),
+        gas_limit: Some(gas_with_buffer),
+        gas_price: None, // Use network default
+        nonce: None,     // Auto-increment
+    };
+
+    let result = core.buy(buy_params, router).await?;
+    println!("Buy successful! Tx: {:?}", result.transaction_hash);
 
     Ok(())
 }
 ```
 
 ## Features
+
+### 🎨 Token Creation
+
+Create new tokens with automatic image upload, metadata storage, and initial buy:
+
+```rust
+use nadfun_sdk::{ActionId, Core, CreateTokenParams, Network};
+use alloy::primitives::utils::parse_ether;
+
+// Initialize Core
+let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+
+// Calculate initial buy amount
+let initial_buy_mon = parse_ether("1.5")?;
+let amount_out = core.get_initial_buy_amount_out(initial_buy_mon).await?;
+
+// Create token with all metadata
+let params = CreateTokenParams {
+    name: "My Token".to_string(),
+    symbol: "MTK".to_string(),
+    description: "My awesome token".to_string(),
+    image_uri: "https://i.imgur.com/yourimage.png".to_string(),
+    website: Some("https://mytoken.com".to_string()),
+    twitter: Some("https://x.com/mytoken".to_string()),
+    telegram: Some("https://t.me/mytoken".to_string()),
+    creator_address: core.wallet_address(),
+    amount_out,
+    value: initial_buy_mon,
+    action_id: ActionId::CapricornActor, // Choose CapricornActor (1) or AmplifyActor (2)
+};
+
+let result = core.create_token(params).await?;
+println!("Token created at: {}", result.token_address);
+```
+
+**Features:**
+- 🖼️ Automatic image upload to IPFS (JPEG, PNG, WEBP, SVG only)
+- 🤖 AI-powered NSFW detection and rejection
+- 📝 Metadata creation and storage
+- 🎲 Vanity address generation via salt mining
+- 💰 Initial buy transaction integration
+- 🔐 Automatic deploy fee calculation
+- 🎭 Type-safe actor selection via `ActionId` enum
 
 ### 🚀 Trading
 
@@ -316,6 +375,21 @@ for swap in swaps {
 
 The SDK includes comprehensive examples in the `examples/` directory:
 
+### Token Creation Examples
+
+```bash
+# Create a new token
+cargo run --example create_token -- \
+  --private-key your_private_key \
+  --rpc-url https://your-rpc-url \
+  --network mainnet \
+  --name "My Token" \
+  --symbol "MTK" \
+  --description "My awesome token" \
+  --image-uri "https://i.imgur.com/yourimage.png" \
+  --initial-buy "1.5"
+```
+
 ### Trading Examples
 
 ```bash
@@ -328,7 +402,7 @@ export RECIPIENT="0xRecipientAddress"  # For token operations
 cargo run --example buy              # Buy tokens with network-based gas estimation
 cargo run --example sell             # Sell tokens with automatic approval handling
 cargo run --example sell_permit      # Gasless sell with real permit signatures
-cargo run --example gas_estimation   # Comprehensive gas estimation example (NEW)
+cargo run --example gas_estimation   # Comprehensive gas estimation example
 cargo run --example basic_operations # Token operations (requires recipient)
 
 # Using command line arguments
