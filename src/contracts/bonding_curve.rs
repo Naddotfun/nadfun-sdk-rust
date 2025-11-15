@@ -54,7 +54,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         token_uri: String,
         amount_out: U256,
         salt: [u8; 32],
-        action_id: u8,
+        action_id: crate::types::ActionId,
         value: U256,
         gas_limit: Option<u64>,
         gas_price: Option<u128>,
@@ -68,7 +68,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tokenURI: token_uri,
             amountOut: amount_out,
             salt: salt.into(),
-            actionId: action_id,
+            actionId: action_id.as_u8(),
         };
 
         let mut tx_builder = contract.create(params).value(value);

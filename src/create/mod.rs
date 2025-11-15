@@ -36,8 +36,6 @@ impl TokenCreationClient {
 
     /// Download image from URI and upload to metadata server
     pub async fn upload_image_from_uri(&self, image_uri: &str) -> Result<UploadImageData> {
-        println!("📤 Downloading image from: {}", image_uri);
-
         // Download image
         let response = self.http_client.get(image_uri).send().await?;
 
@@ -49,7 +47,6 @@ impl TokenCreationClient {
             .map(|s| s.to_string());
 
         let image_bytes = response.bytes().await?;
-        println!("   Downloaded {} bytes", image_bytes.len());
 
         // Detect image type from magic bytes if header doesn't have it
         let content_type = if let Some(ct) = header_content_type {
@@ -63,23 +60,17 @@ impl TokenCreationClient {
                         ALLOWED_IMAGE_TYPES.join(", ")
                     );
                 }
-                println!("   Content-Type from header: {}", base_type);
                 base_type.to_string()
             } else {
                 // Detect from magic bytes
-                let detected = detect_image_type(&image_bytes)?;
-                println!("   Detected image type: {}", detected);
-                detected
+                detect_image_type(&image_bytes)?
             }
         } else {
-            let detected = detect_image_type(&image_bytes)?;
-            println!("   Detected image type: {}", detected);
-            detected
+            detect_image_type(&image_bytes)?
         };
 
         // Upload to metadata server
         let upload_url = format!("{}/metadata/image", self.api_url);
-        println!("📤 Uploading to: {}", upload_url);
 
         let response = self
             .http_client
@@ -89,11 +80,8 @@ impl TokenCreationClient {
             .send()
             .await?;
 
-        // Debug: print response status and body
         let status = response.status();
         let response_text = response.text().await?;
-        println!("   Response status: {}", status);
-        println!("   Response body: {}", response_text);
 
         // Check if response is an error
         if !status.is_success() {
@@ -108,10 +96,6 @@ impl TokenCreationClient {
         // Try to parse the success response
         let upload_data: UploadImageData = serde_json::from_str(&response_text)
             .map_err(|e| anyhow::anyhow!("Failed to parse upload response: {}. Body: {}", e, response_text))?;
-
-        println!("   ✅ Image uploaded successfully");
-        println!("   Image URI: {}", upload_data.image_uri);
-        println!("   Is NSFW: {}", upload_data.is_nsfw);
 
         Ok(upload_data)
     }
@@ -138,8 +122,6 @@ impl TokenCreationClient {
     /// Create metadata on server
     pub async fn post_metadata(&self, params: MetadataParams) -> Result<PostMetadataData> {
         let metadata_url = format!("{}/metadata/metadata", self.api_url);
-        println!("📤 Uploading metadata to: {}", metadata_url);
-        println!("   Metadata params: {:?}", params);
 
         let response = self
             .http_client
@@ -150,8 +132,6 @@ impl TokenCreationClient {
 
         let status = response.status();
         let response_text = response.text().await?;
-        println!("   Response status: {}", status);
-        println!("   Response body: {}", response_text);
 
         // Check if response is an error
         if !status.is_success() {
@@ -164,9 +144,6 @@ impl TokenCreationClient {
 
         let metadata_data: PostMetadataData = serde_json::from_str(&response_text)
             .map_err(|e| anyhow::anyhow!("Failed to parse metadata response: {}. Body: {}", e, response_text))?;
-
-        println!("   ✅ Metadata uploaded successfully");
-        println!("   Metadata URI: {}", metadata_data.metadata_uri);
 
         Ok(metadata_data)
     }
