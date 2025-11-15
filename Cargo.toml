@@ -1,6 +1,6 @@
 [package]
 name = "nadfun_sdk"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Rust SDK for Nad.fun"
 license = "MIT"
@@ -19,34 +19,37 @@ path = "src/lib.rs"
 tokio = { version = "1.0", features = ["full"] }
 alloy = { version = "1.0.24", features = ["full", "signer-keystore", "pubsub"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 anyhow = "1.0"
 futures-util = "0.3"
 async-stream = "0.3"
 rayon = "1.8"
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive", "env"] }
+reqwest = { version = "0.12", features = ["json"] }
+hex = "0.4"
 
 [dev-dependencies]
 tokio-test = "0.4"
 
 # Examples
 
-# Trading Examples
+# Core Trading Examples
 [[example]]
 name = "buy"
-path = "examples/trade/buy.rs"
+path = "examples/core/buy.rs"
 
 [[example]]
 name = "sell"
-path = "examples/trade/sell.rs"
+path = "examples/core/sell.rs"
 
 [[example]]
 name = "sell_permit"
-path = "examples/trade/sell_permit.rs"
+path = "examples/core/sell_permit.rs"
 
 [[example]]
 name = "gas_estimation"
-path = "examples/trade/gas_estimation.rs"
+path = "examples/core/gas_estimation.rs"
 
 # Token Helper Examples
 [[example]]
@@ -56,6 +59,10 @@ path = "examples/token/basic_operations.rs"
 [[example]]
 name = "permit_signature"
 path = "examples/token/permit_signature.rs"
+
+[[example]]
+name = "create_token"
+path = "examples/create/create_token.rs"
 
 
 # Stream Examples

@@ -25,7 +25,7 @@ use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
 use nadfun_sdk::types::BuyParams;
-use nadfun_sdk::{GasEstimationParams, SlippageUtils, Trade};
+use nadfun_sdk::{Core, GasEstimationParams, SlippageUtils};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -52,14 +52,14 @@ async fn main() -> Result<()> {
     // Amount of MON to spend (0.001 MON - even smaller amount to test)
     let mon_amount = parse_ether("1")?;
     println!("mon_amount: {}", mon_amount);
-    // Create Trade instance
-    let trade = Trade::new(config.rpc_url, private_key).await?;
+    // Create Core instance with network
+    let core = Core::new(config.rpc_url, private_key, config.network).await?;
 
-    // Get wallet address from trade instance
-    let wallet = trade.wallet_address();
+    // Get wallet address from core instance
+    let wallet = core.wallet_address();
 
     // Check MON balance
-    let mon_balance = trade
+    let mon_balance = core
         .provider()
         .get_balance(wallet)
         .block_id(BlockId::latest())
@@ -82,14 +82,47 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let (router, amount_out) = trade.get_amount_out(token, mon_amount, true).await?;
-    println!("router: {:?}", router);
-    println!("amount_out: {}", amount_out);
+    // Check token status before buying
+    println!("🔍 Checking token status...");
+    let is_locked = core.is_locked(token).await?;
+    let is_graduated = core.is_graduated(token).await?;
+    println!("  Is locked: {}", is_locked);
+    println!("  Is graduated: {}", is_graduated);
+
+    if is_locked {
+        println!("⚠️  Warning: Token is locked!");
+    }
+
+    let (router, amount_out) = core.get_amount_out(token, mon_amount, true).await?;
+    println!("📊 Quote:");
+    println!("  Router: {:?}", router);
+    println!("  Router address: {}", router.address());
+    println!("  MON amount in: {}", mon_amount);
+    println!("  Expected tokens out: {}", amount_out);
+
+    // Check if amount_out is valid (not zero)
+    if amount_out == U256::ZERO {
+        println!("❌ Invalid quote: amount_out is zero!");
+        println!("   This token might not be tradeable or the pool doesn't exist.");
+        anyhow::bail!("Cannot buy: invalid quote received");
+    }
+
     let slippage_percent = 5.0;
     let amount_out_min = SlippageUtils::calculate_amount_out_min(amount_out, slippage_percent);
 
+    println!("🛡️ Slippage protection:");
+    println!("  Expected tokens: {}", amount_out);
+    println!("  Minimum tokens ({}% slippage): {}", slippage_percent, amount_out_min);
+
+    // Verify amount_out_min is reasonable
+    if amount_out_min == U256::ZERO {
+        println!("❌ amount_out_min calculated as zero!");
+        println!("   Expected amount_out: {}", amount_out);
+        anyhow::bail!("Invalid slippage calculation");
+    }
+
     // Get current account nonce
-    let current_nonce = trade
+    let current_nonce = core
         .provider()
         .get_transaction_count(wallet)
         .block_id(BlockId::latest())
@@ -97,7 +130,7 @@ async fn main() -> Result<()> {
     println!("📊 Current account nonce: {}", current_nonce);
 
     // Get current network gas price
-    let network_gas_price_raw = trade.provider().get_gas_price().await?;
+    let network_gas_price_raw = core.provider().get_gas_price().await?;
     let network_gas_price = U256::from(network_gas_price_raw);
     let recommended_gas_price = network_gas_price * U256::from(300) / U256::from(100); // 200% higher than network for EIP-1559
     println!(
@@ -121,7 +154,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let estimated_gas = match trade.estimate_gas(&router, gas_params).await {
+    let estimated_gas = match core.estimate_gas(&router, gas_params).await {
         Ok(gas) => {
             println!("⛽ Estimated gas for buy: {}", gas);
             gas
@@ -137,15 +170,6 @@ async fn main() -> Result<()> {
     let gas_with_buffer = estimated_gas * 120 / 100;
     println!("⛽ Gas with 20% buffer: {}", gas_with_buffer);
 
-    // Apply 5% slippage protection
-
-    println!("🛡️ Slippage protection:");
-    println!("  Expected tokens: {}", amount_out);
-    println!(
-        "  Minimum tokens ({}% slippage): {}",
-        slippage_percent, amount_out_min
-    );
-
     let buy_params = BuyParams {
         token,
         amount_in: mon_amount,
@@ -160,7 +184,7 @@ async fn main() -> Result<()> {
     println!(" Executing buy transaction...");
 
     // Execute buy transaction
-    let result = trade.buy(buy_params, router).await?;
+    let result = core.buy(buy_params, router).await?;
 
     if result.status {
         println!("✅ Buy successful!");

@@ -55,6 +55,48 @@ pub struct SellPermitParams {
     pub nonce: Option<u64>,
 }
 
+// ExactOut variants - specify exact output amount, get variable input
+
+#[derive(Debug, Clone)]
+pub struct ExactOutBuyParams {
+    pub amount_in_max: U256,    // Maximum amount of MON to spend
+    pub amount_out: U256,       // Exact amount of tokens to receive
+    pub token: Address,         // Address of the token to buy
+    pub to: Address,            // Address to receive the tokens
+    pub deadline: U256,         // Timestamp after which the transaction will revert
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<u128>,
+    pub nonce: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExactOutSellParams {
+    pub amount_in_max: U256,    // Maximum amount of tokens to spend
+    pub amount_out: U256,       // Exact amount of MON to receive
+    pub token: Address,         // Address of the token to sell
+    pub to: Address,            // Address to receive the MON
+    pub deadline: U256,         // Timestamp after which the transaction will revert
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<u128>,
+    pub nonce: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExactOutSellPermitParams {
+    pub amount_in_max: U256,    // Maximum amount of tokens to spend
+    pub amount_out: U256,       // Exact amount of MON to receive
+    pub amount_allowance: U256, // amount for the permit
+    pub token: Address,         // Address of the token to sell
+    pub to: Address,            // Address to receive the MON
+    pub deadline: U256,         // Timestamp after which the transaction will revert
+    pub v: u8,                  // v part of the signature
+    pub r: B256,                // r part of the signature
+    pub s: B256,                // s part of the signature
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<u128>,
+    pub nonce: Option<u64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct CurveState {
     pub real_mon_reserve: U256,

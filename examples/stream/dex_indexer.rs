@@ -3,7 +3,7 @@
 //! Shows how to:
 //! 1. Discover pools for tokens automatically
 //! 2. Fetch historical DEX swap events from specific pools
-//! 3. Use UniswapSwapIndexer for batch processing
+//! 3. Use DexIndexer for batch processing
 //!
 //! ## Usage
 //!
@@ -19,7 +19,7 @@
 
 use alloy::providers::{Provider, ProviderBuilder};
 use anyhow::Result;
-use nadfun_sdk::stream::UniswapSwapIndexer;
+use nadfun_sdk::stream::DexIndexer;
 use std::sync::Arc;
 
 #[path = "../common/mod.rs"]
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
 
     // Discover pools for the specified tokens
     let indexer =
-        UniswapSwapIndexer::discover_pools_for_tokens(config.rpc_url.clone(), tokens.clone())
+        DexIndexer::discover_pools_for_tokens(config.rpc_url.clone(), tokens.clone())
             .await?;
 
     println!("Pool addresses discovered and monitored:");

@@ -1,6 +1,6 @@
-//! Uniswap V3 related types
+//! DEX pool related types
 //!
-//! Contains all Uniswap V3 event types and pool metadata helpers.
+//! Contains all DEX (Capricorn CL) event types and pool metadata helpers.
 
 use alloy::{
     primitives::{Address, B256, I256, U256},
@@ -12,32 +12,14 @@ use alloy::{
 use anyhow::Result;
 use std::collections::HashMap;
 
-// Uniswap V3 Pool contract definition
+// Capricorn CL Pool contract definition
 sol! {
     #[sol(rpc)]
-    contract UniswapV3Pool {
-        /// @notice Emitted by the pool for any swaps between token0 and token1
-        event Swap(
-            address indexed sender,
-            address indexed recipient,
-            int256 amount0,
-            int256 amount1,
-            uint160 sqrtPriceX96,
-            uint128 liquidity,
-            int24 tick
-        );
-
-        /// @notice The first of the two tokens of the pool, sorted by address
-        /// @return The token contract address
-        function token0() external view returns (address);
-
-        /// @notice The second of the two tokens of the pool, sorted by address
-        /// @return The token contract address
-        function token1() external view returns (address);
-    }
+    ICapricornCLPool,
+    "abi/ICapricornCLPool.json"
 }
 
-/// Uniswap V3 Swap event with Nad.fun-specific analysis methods
+/// DEX Swap event with Nad.fun-specific analysis methods
 #[derive(Debug, Clone)]
 pub struct SwapEvent {
     pub sender: Address,
@@ -138,7 +120,7 @@ impl PoolMetadata {
         }
 
         // Query the pool contract
-        let pool = UniswapV3Pool::new(pool_address, provider);
+        let pool = ICapricornCLPool::new(pool_address, provider);
         let token0 = pool.token0().call().await?;
         let wmon_address: Address = crate::constants::WMON.parse()?;
 
@@ -157,7 +139,7 @@ impl PoolMetadata {
         provider: &P,
         pool_address: Address,
     ) -> Result<(Address, Address)> {
-        let pool = UniswapV3Pool::new(pool_address, provider);
+        let pool = ICapricornCLPool::new(pool_address, provider);
         let token0 = pool.token0().call().await?;
         let token1 = pool.token1().call().await?;
         Ok((token0, token1))
@@ -174,11 +156,11 @@ pub fn decode_swap_event(log: Log) -> Result<SwapEvent> {
         .first()
         .ok_or_else(|| anyhow::anyhow!("No topic0 found"))?;
 
-    if *topic0 != UniswapV3Pool::Swap::SIGNATURE_HASH {
+    if *topic0 != ICapricornCLPool::Swap::SIGNATURE_HASH {
         return Err(anyhow::anyhow!("Not a Swap event"));
     }
 
-    let UniswapV3Pool::Swap {
+    let ICapricornCLPool::Swap {
         sender,
         recipient,
         amount0,
@@ -205,4 +187,4 @@ pub fn decode_swap_event(log: Log) -> Result<SwapEvent> {
 }
 
 // Export swap event signature for convenience
-pub const SWAP_SIGNATURE: B256 = UniswapV3Pool::Swap::SIGNATURE_HASH;
+pub const SWAP_SIGNATURE: B256 = ICapricornCLPool::Swap::SIGNATURE_HASH;

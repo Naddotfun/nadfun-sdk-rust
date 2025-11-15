@@ -1,7 +1,7 @@
 //! Pool discovery example
 //!
 //! Shows how to:
-//! 1. Find Uniswap V3 pool addresses for tokens using UniswapSwapIndexer
+//! 1. Find DEX pool addresses for tokens using DexIndexer
 //! 2. Auto-discover pools paired with WMON
 //!
 //! ## Usage
@@ -20,7 +20,7 @@
 
 use alloy::primitives::Address;
 use anyhow::Result;
-use nadfun_sdk::stream::UniswapSwapIndexer;
+use nadfun_sdk::stream::DexIndexer;
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -62,9 +62,9 @@ async fn main() -> Result<()> {
 async fn discover_all_pools(rpc_url: &str, tokens: &[Address]) -> Result<()> {
     println!("\n📦 Auto Pool Discovery");
 
-    // UniswapSwapIndexer automatically finds pools for tokens
+    // DexIndexer automatically finds pools for tokens
     let indexer =
-        UniswapSwapIndexer::discover_pools_for_tokens(rpc_url.to_string(), tokens.to_vec()).await?;
+        DexIndexer::discover_pools_for_tokens(rpc_url.to_string(), tokens.to_vec()).await?;
 
     println!("Found pools:");
     for (i, pool) in indexer.pool_addresses().iter().enumerate() {
@@ -79,7 +79,7 @@ async fn discover_individual_pools(rpc_url: &str, tokens: &[Address]) -> Result<
 
     // Create indexer for each token individually
     for (i, &token) in tokens.iter().enumerate() {
-        match UniswapSwapIndexer::discover_pool_for_token(rpc_url.to_string(), token).await {
+        match DexIndexer::discover_pool_for_token(rpc_url.to_string(), token).await {
             Ok(indexer) => {
                 let pools = indexer.pool_addresses();
                 if pools.is_empty() {

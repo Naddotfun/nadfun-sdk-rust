@@ -20,7 +20,7 @@
 
 use anyhow::Result;
 use futures_util::{pin_mut, StreamExt};
-use nadfun_sdk::stream::UniswapSwapStream;
+use nadfun_sdk::stream::DexStream;
 use nadfun_sdk::types::SwapEvent;
 
 #[path = "../common/mod.rs"]
@@ -86,13 +86,13 @@ async fn main() -> Result<()> {
 
 /// Scenario 1: Monitor specific pool addresses directly
 async fn run_specific_pools_scenario(ws_url: &str, pool_addresses: Vec<alloy::primitives::Address>) -> Result<()> {
-    println!("📡 Creating UniswapSwapStream for specific pools...");
-    
+    println!("📡 Creating DexStream for specific pools...");
+
     for (i, pool) in pool_addresses.iter().enumerate() {
         println!("   {}. Pool: {}", i + 1, pool);
     }
-    
-    let swap_stream = UniswapSwapStream::new(ws_url.to_string(), pool_addresses).await?;
+
+    let swap_stream = DexStream::new(ws_url.to_string(), pool_addresses).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -119,8 +119,8 @@ async fn run_token_discovery_scenario(ws_url: &str, token_addresses: Vec<alloy::
     for (i, token) in token_addresses.iter().enumerate() {
         println!("   {}. Token: {}", i + 1, token);
     }
-    
-    let swap_stream = UniswapSwapStream::discover_pools_for_tokens(ws_url.to_string(), token_addresses).await?;
+
+    let swap_stream = DexStream::discover_pools_for_tokens(ws_url.to_string(), token_addresses).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -144,8 +144,8 @@ async fn run_token_discovery_scenario(ws_url: &str, token_addresses: Vec<alloy::
 async fn run_single_token_scenario(ws_url: &str, token_address: alloy::primitives::Address) -> Result<()> {
     println!("📡 Discovering pool for single token...");
     println!("   Token: {}", token_address);
-    
-    let swap_stream = UniswapSwapStream::discover_pool_for_token(ws_url.to_string(), token_address).await?;
+
+    let swap_stream = DexStream::discover_pool_for_token(ws_url.to_string(), token_address).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 

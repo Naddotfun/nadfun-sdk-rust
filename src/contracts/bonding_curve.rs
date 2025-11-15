@@ -3,110 +3,23 @@ use alloy::{
     primitives::{Address, U256},
     providers::Provider,
     sol,
+    sol_types::SolEvent,
 };
 use anyhow::Result;
 use std::sync::Arc;
 
-sol! {
+// Load ABIs from JSON files
+sol!(
     #[sol(rpc)]
-    interface IBondingCurveRouter {
-        struct BuyParams {
-            uint256 amountOutMin;
-            address token;
-            address to;
-            uint256 deadline;
-        }
+    IBondingCurveRouter,
+    "abi/IBondingCurveRouter.json"
+);
 
-        struct SellParams {
-            uint256 amountIn;
-            uint256 amountOutMin;
-            address token;
-            address to;
-            uint256 deadline;
-        }
-
-        struct SellPermitParams {
-            uint256 amountIn;
-            uint256 amountOutMin;
-            uint256 amountAllowance;
-            address token;
-            address to;
-            uint256 deadline;
-            uint8 v;
-            bytes32 r;
-            bytes32 s;
-        }
-
-        function buy(BuyParams memory params) external payable returns (uint256);
-        function sell(SellParams memory params) external returns (uint256);
-        function sellPermit(SellPermitParams memory params) external returns (uint256);
-        function getAmountOut(address token, uint256 amountIn, bool isBuy) external view returns (uint256);
-        function getAmountIn(address token, uint256 amountOut, bool isBuy) external view returns (uint256);
-        function availableBuyTokens(address token) external view returns (uint256 availableBuyToken, uint256 requiredMonAmount);
-    }
-}
-
-sol! {
+sol!(
     #[sol(rpc)]
-    interface IBondingCurve {
-        function isListed(address token) external view returns (bool);
-        function isLocked(address token) external view returns (bool);
-        function curves(address token) external view returns (
-            uint256 realMonReserve,
-            uint256 realTokenReserve,
-            uint256 virtualMonReserve,
-            uint256 virtualTokenReserve,
-            uint256 k,
-            uint256 targetTokenAmount,
-            uint256 initVirtualMonReserve,
-            uint256 initVirtualTokenReserve
-        );
-
-        // Events
-        event CurveCreate(
-            address indexed creator,
-            address indexed token,
-            address indexed pool,
-            string name,
-            string symbol,
-            string tokenURI,
-            uint256 virtualMon,
-            uint256 virtualToken,
-            uint256 targetTokenAmount
-        );
-
-        event CurveBuy(
-            address indexed sender,
-            address indexed token,
-            uint256 amountIn,
-            uint256 amountOut
-        );
-
-        event CurveSell(
-            address indexed sender,
-            address indexed token,
-            uint256 amountIn,
-            uint256 amountOut
-        );
-
-        event CurveSync(
-            address indexed token,
-            uint256 realMonReserve,
-            uint256 realTokenReserve,
-            uint256 virtualMonReserve,
-            uint256 virtualTokenReserve
-        );
-
-        event CurveTokenLocked(
-            address indexed token
-        );
-
-        event CurveTokenListed(
-            address indexed token,
-            address indexed pool
-        );
-    }
-}
+    IBondingCurve,
+    "abi/IBondingCurve.json"
+);
 
 pub struct BondingCurveRouter<P> {
     pub address: Address,
@@ -123,44 +36,82 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
     }
 
-    pub async fn is_listed(&self, token: Address) -> Result<bool> {
+    // Note: is_locked, is_graduated, get_amount_out, get_amount_in, and available_buy_tokens
+    // are now handled by LensContract for better gas efficiency and unified interface
+
+    /// Get deploy fee amount from bonding curve contract
+    pub async fn get_deploy_fee(&self) -> Result<U256> {
         let contract = IBondingCurve::new(self.bonding_curve_address, self.provider.as_ref());
-        let result = contract.isListed(token).call().await?;
-        Ok(result)
+        let fee_config = contract.feeConfig().call().await?;
+        Ok(fee_config.deployFeeAmount)
     }
 
-    pub async fn is_locked(&self, token: Address) -> Result<bool> {
-        let contract = IBondingCurve::new(self.bonding_curve_address, self.provider.as_ref());
-        let result = contract.isLocked(token).call().await?;
-        Ok(result)
-    }
-
-    pub async fn get_amount_out(
+    /// Create a new token
+    pub async fn create(
         &self,
-        token: Address,
-        amount_in: U256,
-        is_buy: bool,
-    ) -> Result<U256> {
-        let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
-        let result = contract
-            .getAmountOut(token, amount_in, is_buy)
-            .call()
-            .await?;
-        Ok(result)
-    }
-
-    pub async fn get_amount_in(
-        &self,
-        token: Address,
+        name: String,
+        symbol: String,
+        token_uri: String,
         amount_out: U256,
-        is_buy: bool,
-    ) -> Result<U256> {
+        salt: [u8; 32],
+        action_id: u8,
+        value: U256,
+        gas_limit: Option<u64>,
+        gas_price: Option<u128>,
+        nonce: Option<u64>,
+    ) -> Result<(Address, TransactionResult)> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
-        let result = contract
-            .getAmountIn(token, amount_out, is_buy)
-            .call()
-            .await?;
-        Ok(result)
+
+        let params = IBondingCurveRouter::TokenCreationParams {
+            name,
+            symbol,
+            tokenURI: token_uri,
+            amountOut: amount_out,
+            salt: salt.into(),
+            actionId: action_id,
+        };
+
+        let mut tx_builder = contract.create(params).value(value);
+
+        if let Some(gas_limit) = gas_limit {
+            tx_builder = tx_builder.gas(gas_limit.into());
+        }
+
+        if let Some(gas_price) = gas_price {
+            tx_builder = tx_builder.gas_price(gas_price.into());
+        }
+
+        if let Some(nonce) = nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        let receipt = tx.get_receipt().await?;
+
+        // Parse the CurveCreate event to get the token address
+        let mut token_address = Address::ZERO;
+        for log in receipt.inner.logs() {
+            // Convert RPC log to primitives log
+            let primitive_log = alloy::primitives::Log {
+                address: log.address(),
+                data: log.data().clone(),
+            };
+            if let Ok(decoded) = IBondingCurve::CurveCreate::decode_log(&primitive_log) {
+                token_address = decoded.data.token;
+                break;
+            }
+        }
+
+        Ok((
+            token_address,
+            TransactionResult {
+                transaction_hash: receipt.transaction_hash,
+                block_number: receipt.block_number,
+                gas_used: Some(U256::from(receipt.gas_used)),
+                status: receipt.status(),
+                logs: receipt.logs().to_vec(),
+            },
+        ))
     }
 
     pub async fn buy(&self, params: BuyParams) -> Result<TransactionResult> {
@@ -280,25 +231,128 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         })
     }
 
-    pub async fn available_buy_tokens(&self, token: Address) -> Result<(U256, U256)> {
+    pub async fn exact_out_buy(
+        &self,
+        params: crate::types::ExactOutBuyParams,
+    ) -> Result<TransactionResult> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
-        let result = contract.availableBuyTokens(token).call().await?;
-        Ok((result.availableBuyToken, result.requiredMonAmount))
-    }
 
-    pub async fn get_curve_state(&self, token: Address) -> Result<CurveState> {
-        let contract = IBondingCurve::new(self.bonding_curve_address, self.provider.as_ref());
-        let result = contract.curves(token).call().await?;
+        let router_params = IBondingCurveRouter::ExactOutBuyParams {
+            amountInMax: params.amount_in_max,
+            amountOut: params.amount_out,
+            token: params.token,
+            to: params.to,
+            deadline: params.deadline,
+        };
 
-        Ok(CurveState {
-            real_mon_reserve: result.realMonReserve,
-            real_token_reserve: result.realTokenReserve,
-            virtual_mon_reserve: result.virtualMonReserve,
-            virtual_token_reserve: result.virtualTokenReserve,
-            k: result.k,
-            target_token_amount: result.targetTokenAmount,
-            init_virtual_mon_reserve: result.initVirtualMonReserve,
-            init_virtual_token_reserve: result.initVirtualTokenReserve,
+        let mut tx_builder = contract.exactOutBuy(router_params).value(params.amount_in_max);
+
+        if let Some(gas_limit) = params.gas_limit {
+            tx_builder = tx_builder.gas(gas_limit.into());
+        }
+
+        if let Some(gas_price) = params.gas_price {
+            tx_builder = tx_builder.gas_price(gas_price.into());
+        }
+
+        if let Some(nonce) = params.nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        let receipt = tx.get_receipt().await?;
+
+        Ok(TransactionResult {
+            transaction_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: Some(U256::from(receipt.gas_used)),
+            status: receipt.status(),
+            logs: receipt.logs().to_vec(),
         })
     }
+
+    pub async fn exact_out_sell(
+        &self,
+        params: crate::types::ExactOutSellParams,
+    ) -> Result<TransactionResult> {
+        let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
+
+        let router_params = IBondingCurveRouter::ExactOutSellParams {
+            amountInMax: params.amount_in_max,
+            amountOut: params.amount_out,
+            token: params.token,
+            to: params.to,
+            deadline: params.deadline,
+        };
+
+        let mut tx_builder = contract.exactOutSell(router_params);
+
+        if let Some(gas_limit) = params.gas_limit {
+            tx_builder = tx_builder.gas(gas_limit);
+        }
+
+        if let Some(gas_price) = params.gas_price {
+            tx_builder = tx_builder.gas_price(gas_price);
+        }
+
+        if let Some(nonce) = params.nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        let receipt = tx.get_receipt().await?;
+
+        Ok(TransactionResult {
+            transaction_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: Some(U256::from(receipt.gas_used)),
+            status: receipt.status(),
+            logs: receipt.logs().to_vec(),
+        })
+    }
+
+    pub async fn exact_out_sell_permit(
+        &self,
+        params: crate::types::ExactOutSellPermitParams,
+    ) -> Result<TransactionResult> {
+        let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
+
+        let router_params = IBondingCurveRouter::ExactOutSellPermitParams {
+            amountInMax: params.amount_in_max,
+            amountOut: params.amount_out,
+            amountAllowance: params.amount_allowance,
+            token: params.token,
+            to: params.to,
+            deadline: params.deadline,
+            v: params.v,
+            r: params.r,
+            s: params.s,
+        };
+
+        let mut tx_builder = contract.exactOutSellPermit(router_params);
+
+        if let Some(gas_limit) = params.gas_limit {
+            tx_builder = tx_builder.gas(gas_limit);
+        }
+
+        if let Some(gas_price) = params.gas_price {
+            tx_builder = tx_builder.gas_price(gas_price);
+        }
+
+        if let Some(nonce) = params.nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        let receipt = tx.get_receipt().await?;
+
+        Ok(TransactionResult {
+            transaction_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: Some(U256::from(receipt.gas_used)),
+            status: receipt.status(),
+            logs: receipt.logs().to_vec(),
+        })
+    }
+
 }

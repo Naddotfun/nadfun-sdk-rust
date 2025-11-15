@@ -1,7 +1,7 @@
-//! Uniswap V3 Swap event streaming support
+//! DEX Swap event streaming support
 //!
-//! This module provides real-time streaming for Uniswap V3 Swap events.
-//! All types are defined in the types::uniswap module.
+//! This module provides real-time streaming for DEX (Capricorn CL) Swap events.
+//! All types are defined in the types::dex module.
 
 use crate::types::SwapEvent;
 use alloy::{
@@ -13,23 +13,23 @@ use anyhow::Result;
 use futures_util::Stream;
 use std::{pin::Pin, sync::Arc};
 
-/// Specialized stream for Uniswap V3 Swap events across multiple pools
+/// Specialized stream for DEX Swap events across multiple pools
 /// Provides raw swap data - users handle their own filtering logic
-pub struct UniswapSwapStream {
+pub struct DexStream {
     #[allow(dead_code)] // Will be used when real streaming is implemented
     provider: Arc<DynProvider>,
     #[allow(dead_code)] // Will be used when real streaming is implemented
     pool_addresses: Vec<Address>,
 }
 
-impl UniswapSwapStream {
-    /// Create a WebSocket-based Uniswap swap stream with pool addresses
-    pub async fn new(rpc_url: String, pool_addresses: Vec<Address>) -> Result<UniswapSwapStream> {
+impl DexStream {
+    /// Create a WebSocket-based DEX swap stream with pool addresses
+    pub async fn new(rpc_url: String, pool_addresses: Vec<Address>) -> Result<DexStream> {
         let ws = WsConnect::new(rpc_url);
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
         let dyn_provider = Arc::new(DynProvider::new(provider));
 
-        Ok(UniswapSwapStream {
+        Ok(DexStream {
             provider: dyn_provider,
             pool_addresses,
         })
@@ -47,17 +47,10 @@ impl UniswapSwapStream {
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
         let dyn_provider = Arc::new(DynProvider::new(provider));
 
-        let token_count = token_addresses.len();
         let pool_addresses =
             get_pool_addresses_for_tokens(dyn_provider.clone(), token_addresses).await?;
 
-        println!(
-            "🔍 Discovered {} pools for {} tokens",
-            pool_addresses.len(),
-            token_count
-        );
-
-        Ok(UniswapSwapStream {
+        Ok(DexStream {
             provider: dyn_provider,
             pool_addresses,
         })
@@ -70,11 +63,11 @@ impl UniswapSwapStream {
 
     /// Subscribe to swap events - provides raw swap events
     pub async fn subscribe(&self) -> Result<Pin<Box<dyn Stream<Item = Result<SwapEvent>> + Send>>> {
-        use crate::types::{UniswapV3Pool, decode_swap_event};
+        use crate::types::{ICapricornCLPool, decode_swap_event};
         use alloy::rpc::types::Filter;
         use futures_util::StreamExt;
 
-        let swap_signature = UniswapV3Pool::Swap::SIGNATURE_HASH;
+        let swap_signature = ICapricornCLPool::Swap::SIGNATURE_HASH;
 
         // Create filter for all monitored pools
         let filter = Filter::new()
@@ -89,10 +82,7 @@ impl UniswapSwapStream {
             .filter_map(|result| async move {
                 match result {
                     Ok(event) => Some(Ok(event)),
-                    Err(e) => {
-                        eprintln!("Error decoding swap event: {}", e);
-                        None
-                    }
+                    Err(_) => None, // Silently skip invalid events
                 }
             });
 

@@ -2,24 +2,18 @@ use alloy::{primitives::Address, providers::Provider, sol};
 use anyhow::Result;
 use std::sync::Arc;
 
-// Uniswap V3 Factory interface
+// Capricorn CL Factory interface
 sol! {
     #[sol(rpc)]
-    contract UniswapV3Factory {
-        /// @notice Returns the pool address for a given pair of tokens and a fee, or address 0 if it does not exist
-        /// @dev tokenA and tokenB may be passed in either token0/token1 or token1/token0 order
-        /// @param tokenA The contract address of either token0 or token1
-        /// @param tokenB The contract address of the other token
-        /// @param fee The fee collected upon every swap in the pool, denominated in hundredths of a bip
-        /// @return pool The pool address
-        function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
-    }
+    ICapricornCLFactory,
+    "abi/ICapricornCLFactory.json"
 }
 
 // Re-export constants from the central constants module
-pub use crate::constants::{DEFAULT_FEE_TIER, UNISWAP_V3_FACTORY, WMON};
+pub use crate::constants::{DEFAULT_FEE_TIER, WMON};
+use crate::constants::get_dex_factory;
 
-/// Pool discovery helper for finding Uniswap V3 pools
+/// Pool discovery helper for finding DEX pools
 pub struct PoolDiscovery<P> {
     provider: Arc<P>,
     factory_address: Address,
@@ -28,7 +22,7 @@ pub struct PoolDiscovery<P> {
 impl<P: Provider + Clone> PoolDiscovery<P> {
     /// Create a new pool discovery instance
     pub fn new(provider: Arc<P>) -> Result<Self> {
-        let factory_address = UNISWAP_V3_FACTORY.parse()?;
+        let factory_address = get_dex_factory().parse()?;
         Ok(Self {
             provider,
             factory_address,
@@ -49,12 +43,14 @@ impl<P: Provider + Clone> PoolDiscovery<P> {
         fee: u32,
     ) -> Result<Option<Address>> {
         use alloy::primitives::Uint;
-        let factory = UniswapV3Factory::new(self.factory_address, &self.provider);
+        let factory = ICapricornCLFactory::new(self.factory_address, &self.provider);
 
-        let pool_address = factory
+        let result = factory
             .getPool(token_a, token_b, Uint::from(fee))
             .call()
             .await?;
+
+        let pool_address = Address::from(result.0);
 
         // Address::ZERO means pool doesn't exist
         if pool_address == Address::ZERO {
