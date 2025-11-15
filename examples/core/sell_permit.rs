@@ -26,7 +26,7 @@ use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
 use nadfun_sdk::types::SellPermitParams;
-use nadfun_sdk::{GasEstimationParams, TokenHelper, Trade};
+use nadfun_sdk::{Core, GasEstimationParams, SlippageUtils, TokenHelper};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -56,12 +56,12 @@ async fn main() -> Result<()> {
     // Slippage protection (5%)
     let slippage_percent = 5.0;
 
-    // Create Trade and TokenHelper instances
-    let trade = Trade::new(config.rpc_url.clone(), private_key.clone()).await?;
+    // Create Core and TokenHelper instances with network
+    let core = Core::new(config.rpc_url.clone(), private_key.clone(), config.network).await?;
     let token_helper = TokenHelper::new(config.rpc_url, private_key).await?;
 
-    // Get wallet address from trade instance
-    let wallet = trade.wallet_address();
+    // Get wallet address from core instance
+    let wallet = core.wallet_address();
 
     // Check token balance
     let balance = token_helper.balance_of(token, wallet).await?;
@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
     }
 
     // Get quote: how much ETH we'll receive
-    let (router, expected_eth) = trade.get_amount_out(token, token_amount, false).await?;
+    let (router, expected_eth) = core.get_amount_out(token, token_amount, false).await?;
 
     println!("📊 Quote:");
     println!("  Tokens to sell: {}", token_amount);
@@ -110,7 +110,7 @@ async fn main() -> Result<()> {
     println!("  💡 Using custom gas settings for permit transaction");
 
     // Get current account nonce
-    let current_nonce = trade
+    let current_nonce = core
         .provider()
         .get_transaction_count(wallet)
         .block_id(BlockId::latest())
@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
         s: s.into(),
     };
 
-    let estimated_gas = match trade.estimate_gas(&router, gas_params).await {
+    let estimated_gas = match core.estimate_gas(&router, gas_params).await {
         Ok(gas) => {
             println!("⛽ Estimated gas for sell permit: {}", gas);
             gas
@@ -145,6 +145,19 @@ async fn main() -> Result<()> {
     let gas_with_buffer = estimated_gas * 125 / 100;
     println!("⛽ Gas with 25% buffer: {}", gas_with_buffer);
 
+    // Get current network gas price
+    let network_gas_price_raw = core.provider().get_gas_price().await?;
+    let network_gas_price = U256::from(network_gas_price_raw);
+    let recommended_gas_price = network_gas_price * U256::from(300) / U256::from(100); // 3x network gas price
+    println!(
+        "⛽ Network gas price: {} gwei",
+        network_gas_price / U256::from(1_000_000_000)
+    );
+    println!(
+        "⛽ Recommended gas price (3x): {} gwei",
+        recommended_gas_price / U256::from(1_000_000_000)
+    );
+
     // Prepare sell permit parameters
     let sell_permit_params = SellPermitParams {
         amount_in: token_amount,
@@ -157,15 +170,15 @@ async fn main() -> Result<()> {
         r,
         s,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
-        gas_price: Some(50_000_000_000), // 50 gwei gas price (higher for complex tx)
-        nonce: Some(current_nonce),      // Use actual account nonce
+        gas_price: Some(recommended_gas_price.try_into().unwrap_or(100_000_000_000)), // 3x network or 100 gwei fallback
+        nonce: Some(current_nonce),       // Use actual account nonce
     };
 
     println!("🚀 Executing gasless sell transaction...");
     println!("  This combines approval + sell in one transaction!");
 
     // Execute sell permit transaction (gasless)
-    let result = trade.sell_permit(sell_permit_params, router).await?;
+    let result = core.sell_permit(sell_permit_params, router).await?;
 
     if result.status {
         println!("✅ Gasless sell successful!");

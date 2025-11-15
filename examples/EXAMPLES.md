@@ -1,10 +1,51 @@
 # Nad.fun SDK Examples
 
-This directory contains comprehensive examples demonstrating how to use the Nad.fun SDK for trading, token operations, and real-time event streaming.
+This directory contains comprehensive examples demonstrating how to use the Nad.fun SDK for token creation, trading, and real-time event streaming.
+
+## 🎨 Token Creation Examples
+
+### Token Creation (`create/create_token.rs`)
+Create a new token with automatic image upload, metadata storage, and initial buy.
+
+```bash
+cargo run --example create_token -- \
+  --private-key your_private_key_here \
+  --rpc-url https://your-rpc-url \
+  --network mainnet \
+  --name "My Token" \
+  --symbol "MTK" \
+  --description "My awesome token" \
+  --image-uri "https://i.imgur.com/yourimage.png" \
+  --initial-buy "1.5"
+```
+
+**Image Requirements:**
+- ✅ **Allowed formats**: JPEG, PNG, WEBP, SVG only
+- ❌ **Not supported**: GIF, BMP, TIFF, and other formats
+- 📏 **Max size**: 5MB
+- 🖼️ **Recommended size**: 512x512 or 1024x1024 pixels
+- 🔞 **NSFW**: Automatically detected and rejected
+
+**Optional Parameters:**
+```bash
+--website "https://mytoken.com"
+--twitter "https://x.com/mytoken"
+--telegram "https://t.me/mytoken"
+```
+
+**Features:**
+- 🖼️ **Automatic Image Upload**: Downloads from URL and uploads to IPFS
+- 🤖 **NSFW Detection**: AI-powered content moderation
+- 📝 **Metadata Storage**: Creates and stores token metadata
+- 🎲 **Vanity Address**: Generates salt for custom token address
+- 💰 **Initial Buy**: Purchases tokens during creation
+- 🔐 **Deploy Fee**: Automatically calculated and included
+
+---
 
 ## 💰 Trading Examples
 
-### 1. Buy Tokens (`trade/buy.rs`)
+### 1. Buy Tokens (`core/buy.rs`)
 Buy tokens with MON including advanced gas management and slippage protection.
 
 ```bash
@@ -41,7 +82,7 @@ cargo run --example buy -- --private-key your_private_key_here --rpc-url https:/
   Gas used: 247891
 ```
 
-### 2. Gas Estimation (`trade/gas_estimation.rs`)
+### 2. Gas Estimation (`core/gas_estimation.rs`)
 Comprehensive gas estimation example for all trading operations with automatic problem solving.
 
 ```bash
@@ -49,7 +90,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 ```
 
 **Features:**
-- ⛽ **Unified Gas Estimation**: Uses `trade.estimate_gas()` for BUY, SELL, and SELL PERMIT operations
+- ⛽ **Unified Gas Estimation**: Uses `core.estimate_gas()` for BUY, SELL, and SELL PERMIT operations
 - 🔧 **Automatic Problem Solving**: Handles token approval and EIP-2612 permit signatures automatically
 - 📊 **Buffer Strategies**: Demonstrates different buffer calculation methods (fixed +50k, percentage 20%-25%)
 - 💰 **Cost Analysis**: Shows estimated transaction costs at different gas prices
@@ -60,7 +101,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 - **Permit Signatures**: SELL PERMIT needs valid signatures (automatically generated)
 - **Network Connection**: Live RPC required for accurate estimation
 
-### 3. Sell Tokens (`trade/sell.rs`)
+### 3. Sell Tokens (`core/sell.rs`)
 Sell tokens for MON with automatic approval and intelligent gas optimization.
 
 ```bash
@@ -75,7 +116,7 @@ cargo run --example sell -- --private-key your_private_key_here --rpc-url https:
 - 🔄 **Two-step Process**: Approve → Sell workflow
 - 📊 **Gas Comparison**: Shows estimated vs default gas limits
 
-### 4. Gasless Sell (`trade/sell_permit.rs`)
+### 4. Gasless Sell (`core/sell_permit.rs`)
 Advanced gasless selling using EIP-2612 permit signatures.
 
 ```bash
@@ -164,7 +205,7 @@ EVENTS=Buy,Sell cargo run --example curve_stream -- --ws-url wss://your-ws-endpo
 - 🛡️ **Error Handling**: Robust connection management
 
 ### 9. DEX Event Indexing (`stream/dex_indexer.rs`)
-Historical Uniswap V3 swap event analysis with pool discovery.
+Historical Capricorn CL swap event analysis with pool discovery.
 
 ```bash
 # Auto-discover pools and fetch swap events
@@ -175,14 +216,14 @@ cargo run --example dex_indexer -- --rpc-url https://your-rpc-endpoint --tokens 
 ```
 
 **Features:**
-- 🔍 **Automatic Pool Discovery**: Find Uniswap V3 pools for tokens
+- 🔍 **Automatic Pool Discovery**: Find Capricorn CL pools for tokens
 - 📊 **Swap Event Analysis**: Complete swap transaction details
 - 🏊 **Pool Metadata**: Pool addresses, fee tiers, token pairs
 - 📈 **Historical Data**: Configurable block range processing
 - 🎯 **Token-specific**: Focus on specific token trading activity
 
 ### 10. Real-time DEX Streaming (`stream/dex_stream.rs`)
-Live Uniswap V3 swap monitoring with pool auto-discovery.
+Live Capricorn CL swap monitoring with pool auto-discovery.
 
 ```bash
 # Monitor specific pools directly
@@ -196,14 +237,14 @@ cargo run --example dex_stream -- --ws-url wss://your-ws-endpoint --token 0xToke
 ```
 
 **Features:**
-- 🔍 **Pool Auto-discovery**: Automatic Uniswap V3 pool detection
+- 🔍 **Pool Auto-discovery**: Automatic Capricorn CL pool detection
 - ⚡ **Real-time Swaps**: Live swap event monitoring
 - 🏊 **Pool Metadata**: Complete pool information included
 - 📊 **Swap Details**: amount0, amount1, sender, recipient, tick data
 - 🎯 **Flexible Targeting**: Pool addresses or token-based discovery
 
 ### 12. Pool Discovery (`stream/pool_discovery.rs`)
-Automated Uniswap V3 pool address discovery utility.
+Automated Capricorn CL pool address discovery utility.
 
 ```bash
 # Discover pools for multiple tokens
@@ -214,7 +255,7 @@ cargo run --example pool_discovery -- --rpc-url https://your-rpc-endpoint --toke
 ```
 
 **Features:**
-- 🔍 **Comprehensive Discovery**: Find all Uniswap V3 pools for tokens
+- 🔍 **Comprehensive Discovery**: Find all Capricorn CL pools for tokens
 - 🏊 **Pool Information**: Addresses, fee tiers, token pairs
 - 📊 **Multiple Tokens**: Batch discovery for token lists
 - 🎯 **Targeted Search**: Single token or multi-token discovery
@@ -225,7 +266,7 @@ cargo run --example pool_discovery -- --rpc-url https://your-rpc-endpoint --toke
 All trading examples now use the new unified gas estimation system:
 
 ### New Gas Estimation System
-- **Real-time Network Estimation**: Uses `trade.estimate_gas()` for live gas calculations
+- **Real-time Network Estimation**: Uses `core.estimate_gas()` for live gas calculations
 - **Automatic Problem Solving**: Handles token approval and permit signatures automatically
 - **Network-based Calculation**: No more static fallback constants - all estimates from actual network conditions
 - **Smart Buffer Strategies**: Multiple buffer calculation methods (fixed amounts, percentages)
@@ -251,7 +292,7 @@ use nadfun_sdk::{GasEstimationParams, Trade};
 
 // Unified gas estimation for any operation
 let gas_params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
-let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
 let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
@@ -292,7 +333,7 @@ All examples support command line arguments:
 - **Real-time Streaming**: WebSocket-based low-latency delivery
 - **Historical Indexing**: Batch processing for analysis
 - **Flexible Filtering**: Event types and token address filtering
-- **Pool Discovery**: Automatic Uniswap V3 pool detection
+- **Pool Discovery**: Automatic Capricorn CL pool detection
 
 ### Transaction Management
 - **Slippage Protection**: Configurable tolerance levels

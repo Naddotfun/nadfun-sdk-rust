@@ -22,20 +22,22 @@ async fn main() -> Result<()> {
     let rpc_url = "https://your-rpc-endpoint".to_string();
     let private_key = "your_private_key_here".to_string();
 
-    // Trading with new gas estimation system
-    let trade = Trade::new(rpc_url.clone(), private_key.clone()).await?;
+    // Trading - set network once, it's used everywhere automatically
+    let core = Core::new(rpc_url.clone(), private_key.clone(), Network::Mainnet).await?;
+    // Now all get_* functions automatically use Mainnet addresses
+
     let token: Address = "0x...".parse()?;
-    let (router, amount_out) = trade.get_amount_out(token, parse_ether("0.1")?, true).await?;
+    let (router, amount_out) = core.get_amount_out(token, parse_ether("0.1")?, true).await?;
 
     // New unified gas estimation (v0.2.0)
     let gas_params = GasEstimationParams::Buy {
         token,
         amount_in: parse_ether("0.1")?,
         amount_out_min: amount_out,
-        to: trade.wallet_address(),
+        to: core.wallet_address(),
         deadline: U256::from(9999999999999999u64),
     };
-    let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+    let estimated_gas = core.estimate_gas(&router, gas_params).await?;
 
     // Token operations
     let token_helper = TokenHelper::new(rpc_url, private_key).await?;
@@ -55,7 +57,7 @@ Execute buy/sell operations on bonding curves with slippage protection:
 use nadfun_sdk::{Trade, SlippageUtils, GasEstimationParams, types::BuyParams};
 
 // Get quote and execute buy
-let (router, expected_tokens) = trade.get_amount_out(token, mon_amount, true).await?;
+let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
 let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
 // Use new unified gas estimation system
@@ -68,7 +70,7 @@ let gas_params = GasEstimationParams::Buy {
 };
 
 // Get accurate gas estimation from network
-let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.estimate_gas(&router, gas_params).await?;
 let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
 let buy_params = BuyParams {
@@ -82,7 +84,7 @@ let buy_params = BuyParams {
     nonce: None, // Auto-detect
 };
 
-let result = trade.buy(buy_params, router).await?;
+let result = core.buy(buy_params, router).await?;
 ```
 
 ### ⛽ Gas Management
@@ -104,7 +106,7 @@ let gas_params = GasEstimationParams::Buy {
 };
 
 // Get real-time gas estimation from network
-let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
 let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
@@ -163,7 +165,7 @@ let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 // NEW (v0.2.0) - Network-based estimation
 use nadfun_sdk::GasEstimationParams;
 let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
-let estimated_gas = trade.estimate_gas(&router, params).await?;
+let estimated_gas = core.estimate_gas(&router, params).await?;
 let gas_limit = estimated_gas * 120 / 100; // Apply buffer
 ```
 
@@ -277,7 +279,7 @@ println!("Found {} events", events.len());
 
 ### 🔍 Pool Discovery
 
-Find Uniswap V3 pool addresses for tokens:
+Find Capricorn CL pool addresses for tokens:
 
 ```rust
 use nadfun_sdk::stream::UniswapSwapIndexer;
@@ -292,7 +294,7 @@ let indexer = UniswapSwapIndexer::discover_pool_for_token(provider, token).await
 
 ### 💱 DEX Monitoring
 
-Monitor Uniswap V3 swap events:
+Monitor Capricorn CL swap events:
 
 ```rust
 use nadfun_sdk::stream::UniswapSwapIndexer;
@@ -346,7 +348,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 
 **Features:**
 
-- **Unified Gas Estimation**: Demonstrates `trade.estimate_gas()` for all operation types
+- **Unified Gas Estimation**: Demonstrates `core.estimate_gas()` for all operation types
 - **Automatic Approval**: Handles token approval for SELL operations automatically
 - **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
 - **Buffer Strategies**: Shows different buffer calculation methods (fixed +50k, percentage 20%-25%)
@@ -445,7 +447,7 @@ cargo run --example dex_stream -- \
 - ✅ Automatic pool discovery for tokens
 - ✅ Direct pool address monitoring
 - ✅ Single token pool discovery
-- ✅ Real-time Uniswap V3 swap events
+- ✅ Real-time Capricorn CL swap events
 - ✅ Pool metadata included
 - ✅ WebSocket streaming
 
@@ -454,7 +456,7 @@ cargo run --example dex_stream -- \
 **5. pool_discovery** - Automated pool address discovery
 
 ```bash
-# Find Uniswap V3 pools for multiple tokens
+# Find Capricorn CL pools for multiple tokens
 cargo run --example pool_discovery -- \
   --rpc-url https://your-rpc-endpoint \
   --tokens 0xToken1,0xToken2
@@ -524,7 +526,7 @@ cargo run --example dex_stream -- --token 0xTokenAddress --ws-url wss://your-ws-
 - `BondingCurveEvent`: Unified enum for all bonding curve events
   - `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Listed` variants
   - Methods: `.token()`, `.event_type()`, `.block_number()`, `.transaction_index()`
-- `SwapEvent`: Uniswap V3 swap events with complete metadata
+- `SwapEvent`: Capricorn CL swap events with complete metadata
   - Fields: `pool_address`, `amount0`, `amount1`, `sender`, `recipient`, `liquidity`, `tick`, `sqrt_price_x96`
 - `EventType`: Enum for filtering bonding curve events
   - Variants: `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Listed`
@@ -617,8 +619,8 @@ The SDK uses `anyhow::Result` for error handling:
 use anyhow::Result;
 
 async fn example() -> Result<()> {
-    let trade = Trade::new(rpc_url, private_key).await?;
-    let result = trade.get_amount_out(token, amount, true).await?;
+    let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+    let result = core.get_amount_out(token, amount, true).await?;
     Ok(())
 }
 ```
@@ -638,7 +640,7 @@ async fn example() -> Result<()> {
 - **Bonding Curve**: 4 scenarios (all events, filtered events, filtered tokens, combined)
 - **DEX Streaming**: 3 scenarios (specific pools, token discovery, single token)
 - **Historical Data**: Block range processing with automatic batching
-- **Pool Discovery**: Automatic Uniswap V3 pool detection for tokens
+- **Pool Discovery**: Automatic Capricorn CL pool detection for tokens
 
 ### ⚡ Performance Features
 

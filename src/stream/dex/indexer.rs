@@ -1,9 +1,9 @@
-//! Uniswap V3 Swap event indexing support
+//! DEX Swap event indexing support
 //!
-//! This module provides historical indexing for Uniswap V3 Swap events.
+//! This module provides historical indexing for DEX (Capricorn CL) Swap events.
 //! All types are defined in the types::uniswap module.
 
-use crate::types::{SwapEvent, UniswapV3Pool, decode_swap_event};
+use crate::types::{SwapEvent, ICapricornCLPool, decode_swap_event};
 use alloy::{
     primitives::Address,
     providers::{DynProvider, Provider, ProviderBuilder},
@@ -13,15 +13,15 @@ use alloy::{
 use anyhow::Result;
 use std::sync::Arc;
 
-/// Historical indexer for Uniswap V3 Swap events
+/// Historical indexer for DEX Swap events
 /// Efficiently processes past swap events for analysis
-pub struct UniswapSwapIndexer {
+pub struct DexIndexer {
     provider: Arc<DynProvider>,
     pool_addresses: Vec<Address>,
 }
 
-impl UniswapSwapIndexer {
-    /// Create a new Uniswap swap indexer for specific pool addresses using HTTP provider
+impl DexIndexer {
+    /// Create a new DEX swap indexer for specific pool addresses using HTTP provider
     pub fn new(rpc_url: String, pool_addresses: Vec<Address>) -> Result<Self> {
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
         let dyn_provider = Arc::new(DynProvider::new(provider));
@@ -43,15 +43,8 @@ impl UniswapSwapIndexer {
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
         let dyn_provider = Arc::new(DynProvider::new(provider));
 
-        let token_count = token_addresses.len();
         let pool_addresses =
             get_pool_addresses_for_tokens(dyn_provider.clone(), token_addresses).await?;
-
-        println!(
-            "🔍 Discovered {} pools for {} tokens",
-            pool_addresses.len(),
-            token_count
-        );
 
         Ok(Self {
             provider: dyn_provider,
@@ -67,7 +60,7 @@ impl UniswapSwapIndexer {
     /// Fetch swap events for a specific block range
     /// Returns events sorted chronologically
     pub async fn fetch_events(&self, from_block: u64, to_block: u64) -> Result<Vec<SwapEvent>> {
-        let swap_signature = UniswapV3Pool::Swap::SIGNATURE_HASH;
+        let swap_signature = ICapricornCLPool::Swap::SIGNATURE_HASH;
 
         let filter = Filter::new()
             .from_block(BlockNumberOrTag::Number(from_block))

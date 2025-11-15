@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
         .fetch_events(
             current_block - 100, // from_block (wider range)
             current_block,       // to_block
-            vec![EventType::Create, EventType::Buy, EventType::Sell], // event types
+            vec![EventType::Create, EventType::Buy, EventType::Sell, EventType::Graduate, EventType::Lock], // event types
             None,                // token_filter (None = all tokens)
         )
         .await?;
@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
             .fetch_events(
                 current_block - 100, // Wider range for filtering too
                 current_block,
-                vec![EventType::Buy, EventType::Sell],
+                vec![EventType::Buy, EventType::Sell, EventType::Graduate],
                 Some(specific_tokens.clone()), // Only these tokens
             )
             .await?;
@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
         .fetch_all_events(
             start_block,
             batch_size,
-            vec![EventType::Create, EventType::Buy, EventType::Sell],
+            vec![EventType::Create, EventType::Buy, EventType::Sell, EventType::Graduate, EventType::Lock],
             None, // No token filter for this test
         )
         .await?;
@@ -131,15 +131,18 @@ async fn main() -> Result<()> {
         let mut create_count = 0;
         let mut buy_count = 0;
         let mut sell_count = 0;
+        let mut graduate_count = 0;
+        let mut lock_count = 0;
+        let mut sync_count = 0;
 
         for event in all_events.iter() {
             match event.event_type() {
                 EventType::Create => create_count += 1,
                 EventType::Buy => buy_count += 1,
                 EventType::Sell => sell_count += 1,
-                EventType::Sync | EventType::Lock | EventType::Listed => {
-                    // Other event types - not counted in main breakdown
-                }
+                EventType::Graduate => graduate_count += 1,
+                EventType::Lock => lock_count += 1,
+                EventType::Sync => sync_count += 1,
             }
         }
 
@@ -147,6 +150,9 @@ async fn main() -> Result<()> {
         println!("  Create: {} events", create_count);
         println!("  Buy: {} events", buy_count);
         println!("  Sell: {} events", sell_count);
+        println!("  Graduate: {} events", graduate_count);
+        println!("  Lock: {} events", lock_count);
+        println!("  Sync: {} events", sync_count);
     }
 
     println!("\n📦 Historical data example completed successfully!");

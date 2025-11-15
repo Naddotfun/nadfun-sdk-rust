@@ -85,16 +85,23 @@ async fn main() -> Result<()> {
 /// Scenario 1: All bonding curve events
 async fn run_all_events_scenario(ws_url: &str) -> Result<()> {
     println!("📡 Creating CurveStream for all events...");
-    
+    println!("   WebSocket URL: {}", ws_url);
+
     let curve_stream = CurveStream::new(ws_url.to_string()).await?;
+    println!("✅ WebSocket connected successfully");
+
     let stream = curve_stream.subscribe().await?;
     pin_mut!(stream);
 
     println!("🔴 Listening for ALL bonding curve events...");
+    println!("   Waiting for events... (Press Ctrl+C to stop)");
 
+    let mut event_count = 0;
     while let Some(event_result) = stream.next().await {
         match event_result {
             Ok(event) => {
+                event_count += 1;
+                println!("\n📦 Event #{}", event_count);
                 handle_event(&event, "ALL");
             }
             Err(e) => {
@@ -139,11 +146,13 @@ async fn run_specific_tokens_scenario(
     monitored_tokens: Vec<alloy::primitives::Address>,
 ) -> Result<()> {
     println!("📡 Creating CurveStream for specific tokens...");
-    
+    println!("   WebSocket URL: {}", ws_url);
+
     let curve_stream = CurveStream::new(ws_url.to_string())
         .await?
         .filter_tokens(monitored_tokens.clone());
-    
+
+    println!("✅ WebSocket connected successfully");
     let stream = curve_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -151,10 +160,20 @@ async fn run_specific_tokens_scenario(
     for (i, token) in monitored_tokens.iter().enumerate() {
         println!("   {}. {}", i + 1, token);
     }
+    println!("   Waiting for events... (Press Ctrl+C to stop)");
+
+    let mut event_count = 0;
+    let mut last_block = 0u64;
 
     while let Some(event_result) = stream.next().await {
         match event_result {
             Ok(event) => {
+                event_count += 1;
+                let block = event.block_number();
+                if block != last_block {
+                    println!("\n📦 New block: {} (Total events: {})", block, event_count);
+                    last_block = block;
+                }
                 handle_event(&event, "FILTERED_TOKENS");
             }
             Err(e) => {
@@ -224,8 +243,8 @@ fn handle_event(event: &BondingCurveEvent, scenario: &str) {
         EventType::Lock => {
             println!("   🔒 Lock event");
         }
-        EventType::Listed => {
-            println!("   🚀 Token listed on DEX!");
+        EventType::Graduate => {
+            println!("   🎓 Token graduated to DEX!");
         }
     }
 }
@@ -239,7 +258,7 @@ fn parse_event_types(events_str: &str) -> Result<Vec<EventType>> {
             "Sell" => Ok(EventType::Sell),
             "Sync" => Ok(EventType::Sync),
             "Lock" => Ok(EventType::Lock),
-            "Listed" => Ok(EventType::Listed),
+            "Graduate" => Ok(EventType::Graduate),
             _ => Err(anyhow::anyhow!("Unknown event type: {}", s)),
         })
         .collect()

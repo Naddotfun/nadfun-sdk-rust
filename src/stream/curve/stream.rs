@@ -1,5 +1,5 @@
 use crate::constants::BONDING_CURVE;
-use crate::types::{BondingCurveEvent, EventType, decode_bonding_curve_event};
+use crate::types::{decode_bonding_curve_event, BondingCurveEvent, EventType};
 
 use alloy::{
     primitives::{Address, B256},
@@ -61,18 +61,35 @@ impl CurveStream {
                     EventType::Sell,
                     EventType::Sync,
                     EventType::Lock,
-                    EventType::Listed,
+                    EventType::Graduate,
                 ]
             });
 
         let signatures: Vec<B256> = event_types.iter().map(|et| et.signature()).collect();
+
+        println!("🎯 Setting up log filter:");
+        println!("   Bonding Curve: {}", bonding_curve_address);
+        println!("   Event types: {:?}", event_types);
+        println!("   Signatures: {} events", signatures.len());
+
+        if let Some(ref tokens) = self.token_filter {
+            println!("   Token filter: {} tokens", tokens.len());
+            for token in tokens.iter() {
+                println!("      - {}", token);
+            }
+        } else {
+            println!("   Token filter: None (all tokens)");
+        }
 
         // Filter for bonding curve address only
         let filter = Filter::new()
             .address(bonding_curve_address)
             .event_signature(signatures);
 
+        println!("📡 Subscribing to logs...");
         let sub = self.provider.subscribe_logs(&filter).await?;
+        println!("✅ Log subscription active");
+
         let token_filter = self.token_filter.clone();
 
         let stream = sub
