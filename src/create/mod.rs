@@ -7,17 +7,17 @@
 //! 4. Execute create transaction on bonding curve
 
 use crate::types::{
-    CreateTokenParams, MetadataParams, PostMetadataData, PostSaltData, SaltParams,
-    UploadImageData,
+    CreateTokenParams, MetadataParams, PostMetadataData, PostSaltData, SaltParams, UploadImageData,
 };
 use anyhow::Result;
 use reqwest;
 
 /// Base API server URL
-pub const API_SERVER_URL: &str = "https://dev-api-server.nad.fun";
+pub const API_SERVER_URL: &str = "https://api-test.nad.fun";
 
 /// Allowed image types for token creation
-pub const ALLOWED_IMAGE_TYPES: [&str; 4] = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
+pub const ALLOWED_IMAGE_TYPES: [&str; 4] =
+    ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
 
 /// Token creation client
 pub struct TokenCreationClient {
@@ -86,16 +86,27 @@ impl TokenCreationClient {
         // Check if response is an error
         if !status.is_success() {
             // Try to parse as error response
-            if let Ok(error_response) = serde_json::from_str::<crate::types::ApiErrorResponse>(&response_text) {
+            if let Ok(error_response) =
+                serde_json::from_str::<crate::types::ApiErrorResponse>(&response_text)
+            {
                 anyhow::bail!("Image upload failed: {}", error_response.error);
             } else {
-                anyhow::bail!("Image upload failed with status {}: {}", status, response_text);
+                anyhow::bail!(
+                    "Image upload failed with status {}: {}",
+                    status,
+                    response_text
+                );
             }
         }
 
         // Try to parse the success response
-        let upload_data: UploadImageData = serde_json::from_str(&response_text)
-            .map_err(|e| anyhow::anyhow!("Failed to parse upload response: {}. Body: {}", e, response_text))?;
+        let upload_data: UploadImageData = serde_json::from_str(&response_text).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse upload response: {}. Body: {}",
+                e,
+                response_text
+            )
+        })?;
 
         Ok(upload_data)
     }
@@ -135,15 +146,27 @@ impl TokenCreationClient {
 
         // Check if response is an error
         if !status.is_success() {
-            if let Ok(error_response) = serde_json::from_str::<crate::types::ApiErrorResponse>(&response_text) {
+            if let Ok(error_response) =
+                serde_json::from_str::<crate::types::ApiErrorResponse>(&response_text)
+            {
                 anyhow::bail!("Metadata upload failed: {}", error_response.error);
             } else {
-                anyhow::bail!("Metadata upload failed with status {}: {}", status, response_text);
+                anyhow::bail!(
+                    "Metadata upload failed with status {}: {}",
+                    status,
+                    response_text
+                );
             }
         }
 
-        let metadata_data: PostMetadataData = serde_json::from_str(&response_text)
-            .map_err(|e| anyhow::anyhow!("Failed to parse metadata response: {}. Body: {}", e, response_text))?;
+        let metadata_data: PostMetadataData =
+            serde_json::from_str(&response_text).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to parse metadata response: {}. Body: {}",
+                    e,
+                    response_text
+                )
+            })?;
 
         Ok(metadata_data)
     }
@@ -168,8 +191,6 @@ impl Default for TokenCreationClient {
         Self::new()
     }
 }
-
-
 
 impl TokenCreationClient {
     /// Execute complete token creation flow
@@ -202,9 +223,24 @@ impl TokenCreationClient {
             symbol: params.symbol.clone(),
             image_uri: upload_result.image_uri.clone(),
             description: params.description.clone(),
-            website: params.website.as_ref().filter(|s| !s.is_empty()).cloned().unwrap_or_default(),
-            twitter: params.twitter.as_ref().filter(|s| !s.is_empty()).cloned().unwrap_or_default(),
-            telegram: params.telegram.as_ref().filter(|s| !s.is_empty()).cloned().unwrap_or_default(),
+            website: params
+                .website
+                .as_ref()
+                .filter(|s| !s.is_empty())
+                .cloned()
+                .unwrap_or_default(),
+            twitter: params
+                .twitter
+                .as_ref()
+                .filter(|s| !s.is_empty())
+                .cloned()
+                .unwrap_or_default(),
+            telegram: params
+                .telegram
+                .as_ref()
+                .filter(|s| !s.is_empty())
+                .cloned()
+                .unwrap_or_default(),
             is_nsfw: upload_result.is_nsfw,
         };
         let metadata_result = self.post_metadata(metadata_params).await?;
@@ -246,9 +282,7 @@ fn detect_image_type(bytes: &[u8]) -> Result<String> {
     } else if bytes.starts_with(b"<svg") || bytes.starts_with(b"<?xml") {
         "image/svg+xml"
     } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        anyhow::bail!(
-            "GIF format is not supported. Allowed formats: JPEG, PNG, WEBP, SVG"
-        )
+        anyhow::bail!("GIF format is not supported. Allowed formats: JPEG, PNG, WEBP, SVG")
     } else {
         anyhow::bail!(
             "Unsupported image format. Allowed formats: JPEG, PNG, WEBP, SVG. First bytes: {:?}",
