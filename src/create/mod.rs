@@ -13,7 +13,7 @@ use anyhow::Result;
 use reqwest;
 
 /// Base API server URL
-pub const API_SERVER_URL: &str = "https://api-test.nad.fun";
+pub const API_SERVER_URL: &str = "https://dev-api.nad.fun";
 
 /// Allowed image types for token creation
 pub const ALLOWED_IMAGE_TYPES: [&str; 4] =
@@ -212,10 +212,10 @@ impl TokenCreationClient {
         // Step 1: Download and upload image
         let upload_result = self.upload_image_from_uri(&params.image_uri).await?;
 
-        // Reject NSFW content immediately
-        if upload_result.is_nsfw {
-            anyhow::bail!("NSFW content detected. Token creation rejected.");
-        }
+        // // Reject NSFW content immediately
+        // if upload_result.is_nsfw {
+        //     anyhow::bail!("NSFW content detected. Token creation rejected.");
+        // }
 
         // Step 2: Create metadata
         let metadata_params = MetadataParams {
