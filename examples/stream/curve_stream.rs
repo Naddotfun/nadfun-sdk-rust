@@ -35,6 +35,9 @@ async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
 
+    // Set network before creating stream
+    nadfun_sdk::constants::set_network(config.network);
+
     // Parse command line arguments for filtering
     let mut event_filter: Option<Vec<EventType>> = None;
     let mut token_filter: Option<Vec<alloy::primitives::Address>> = None;

@@ -1,4 +1,4 @@
-use crate::constants::BONDING_CURVE;
+use crate::constants::get_bonding_curve;
 use crate::types::{decode_bonding_curve_event, BondingCurveEvent, EventType};
 
 use alloy::{
@@ -47,7 +47,7 @@ impl CurveStream {
     pub async fn subscribe(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<BondingCurveEvent>> + Send>>> {
-        let bonding_curve_address: Address = BONDING_CURVE
+        let bonding_curve_address: Address = get_bonding_curve()
             .parse()
             .expect("Invalid bonding curve address");
         let event_types = self
