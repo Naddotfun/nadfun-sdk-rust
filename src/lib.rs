@@ -11,25 +11,28 @@
 //! ## Quick Start
 //!
 //! ```rust,ignore
-//! use nadfun_sdk::{Core, Router, Operation, get_default_gas_limit};
+//! use nadfun_sdk::{Core, Network};
 //! use alloy::primitives::{Address, U256};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     // Trading - set network once and it's used everywhere
+//!     // Initialize Core - set network once, used everywhere
 //!     let core = Core::new(
 //!         "https://your-rpc-url".to_string(),
 //!         "your-private-key".to_string(),
-//!         Network::Mainnet  // This sets the network globally
+//!         Network::Mainnet
 //!     ).await?;
 //!
-//!     // Now all constants use Mainnet addresses automatically
+//!     // Get quote and execute trade
 //!     let (router, amount_out) = core.get_amount_out(token, mon_amount, true).await?;
-//!     let result = core.buy(buy_params, router).await?;
 //!
-//!     // Event Streaming
-//!     let stream = EventStream::new("wss://your-ws-url".to_string()).await?;
-//!     // Real-time event subscription available
+//!     // Execute buy - returns tx_hash immediately (fast!)
+//!     let tx_hash = core.buy(buy_params, router).await?;
+//!     println!("Transaction submitted: {}", tx_hash);
+//!
+//!     // Optionally check receipt later
+//!     let receipt = core.get_receipt(tx_hash).await?;
+//!     println!("Confirmed: {}", receipt.status);
 //!
 //!     Ok(())
 //! }

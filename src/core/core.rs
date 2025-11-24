@@ -7,8 +7,8 @@ use crate::{
 };
 use alloy::{
     network::EthereumWallet,
-    primitives::{Address, U256},
-    providers::{DynProvider, ProviderBuilder},
+    primitives::{Address, B256, U256},
+    providers::{DynProvider, ProviderBuilder, Provider},
     signers::local::PrivateKeySigner,
 };
 use anyhow::Result;
@@ -116,14 +116,14 @@ impl Core {
         Ok((router, amount_in))
     }
 
-    pub async fn buy(&self, params: BuyParams, router: Router) -> Result<TransactionResult> {
+    pub async fn buy(&self, params: BuyParams, router: Router) -> Result<B256> {
         match router {
             Router::Dex(_) => self.dex_router.buy(params).await,
             Router::BondingCurve(_) => self.bonding_curve_router.buy(params).await,
         }
     }
 
-    pub async fn sell(&self, params: SellParams, router: Router) -> Result<TransactionResult> {
+    pub async fn sell(&self, params: SellParams, router: Router) -> Result<B256> {
         match router {
             Router::Dex(_) => self.dex_router.sell(params).await,
             Router::BondingCurve(_) => self.bonding_curve_router.sell(params).await,
@@ -136,11 +136,42 @@ impl Core {
         &self,
         params: SellPermitParams,
         router: Router,
-    ) -> Result<TransactionResult> {
+    ) -> Result<B256> {
         match router {
             Router::Dex(_) => self.dex_router.sell_permit(params).await,
             Router::BondingCurve(_) => self.bonding_curve_router.sell_permit(params).await,
         }
+    }
+
+    /// Get transaction receipt for a given transaction hash
+    ///
+    /// This allows you to check the status and details of a transaction
+    /// after it has been submitted.
+    ///
+    /// # Arguments
+    /// * `tx_hash` - Transaction hash returned from buy/sell operations
+    ///
+    /// # Returns
+    /// * `TransactionResult` - Complete transaction details including status, gas used, and logs
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let tx_hash = core.buy(buy_params, router).await?;
+    /// let receipt = core.get_receipt(tx_hash).await?;
+    /// println!("Transaction status: {}", receipt.status);
+    /// println!("Gas used: {:?}", receipt.gas_used);
+    /// ```
+    pub async fn get_receipt(&self, tx_hash: B256) -> Result<TransactionResult> {
+        let receipt = self.provider.get_transaction_receipt(tx_hash).await?
+            .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found"))?;
+
+        Ok(TransactionResult {
+            transaction_hash: receipt.transaction_hash,
+            block_number: receipt.block_number,
+            gas_used: Some(U256::from(receipt.gas_used)),
+            status: receipt.status(),
+            logs: receipt.logs().to_vec(),
+        })
     }
 
     // Lens utility functions (wrapped for convenience)

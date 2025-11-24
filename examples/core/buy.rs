@@ -181,19 +181,23 @@ async fn main() -> Result<()> {
         nonce: Some(current_nonce), // Use actual account nonce
     };
 
-    println!(" Executing buy transaction...");
+    println!("🚀 Executing buy transaction...");
 
-    // Execute buy transaction
-    let result = core.buy(buy_params, router).await?;
+    // Execute buy transaction - returns tx_hash immediately
+    let tx_hash = core.buy(buy_params, router).await?;
+    println!("✅ Transaction submitted!");
+    println!("  Transaction hash: {}", tx_hash);
 
-    if result.status {
+    // Wait for transaction receipt
+    println!("⏳ Waiting for confirmation...");
+    let receipt = core.get_receipt(tx_hash).await?;
+
+    if receipt.status {
         println!("✅ Buy successful!");
-        println!("  Transaction hash: {}", result.transaction_hash);
-        println!("  Block number: {:?}", result.block_number);
-        println!("  Gas used: {:?}", result.gas_used);
+        println!("  Block number: {:?}", receipt.block_number);
+        println!("  Gas used: {:?}", receipt.gas_used);
     } else {
         println!("❌ Buy failed!");
-        println!("  Transaction hash: {}", result.transaction_hash);
     }
 
     Ok(())

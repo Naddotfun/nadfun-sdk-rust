@@ -1,6 +1,6 @@
 use crate::types::*;
 use alloy::{
-    primitives::{Address, U256},
+    primitives::{Address, B256, U256},
     providers::Provider,
     sol,
     sol_types::SolEvent,
@@ -114,7 +114,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         ))
     }
 
-    pub async fn buy(&self, params: BuyParams) -> Result<TransactionResult> {
+    pub async fn buy(&self, params: BuyParams) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::BuyParams {
@@ -139,19 +139,10 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
-    pub async fn sell(&self, params: crate::types::SellParams) -> Result<TransactionResult> {
+    pub async fn sell(&self, params: crate::types::SellParams) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
         let router_params = IBondingCurveRouter::SellParams {
             amountIn: params.amount_in,
@@ -176,21 +167,13 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
     pub async fn sell_permit(
         &self,
         params: crate::types::SellPermitParams,
-    ) -> Result<TransactionResult> {
+    ) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::SellPermitParams {
@@ -220,21 +203,13 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
     pub async fn exact_out_buy(
         &self,
         params: crate::types::ExactOutBuyParams,
-    ) -> Result<TransactionResult> {
+    ) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::ExactOutBuyParams {
@@ -260,21 +235,13 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
     pub async fn exact_out_sell(
         &self,
         params: crate::types::ExactOutSellParams,
-    ) -> Result<TransactionResult> {
+    ) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::ExactOutSellParams {
@@ -300,21 +267,13 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
     pub async fn exact_out_sell_permit(
         &self,
         params: crate::types::ExactOutSellPermitParams,
-    ) -> Result<TransactionResult> {
+    ) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::ExactOutSellPermitParams {
@@ -344,15 +303,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
 }
