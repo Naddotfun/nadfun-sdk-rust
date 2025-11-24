@@ -82,10 +82,10 @@ pub mod addresses {
         pub const WMON: &str = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 
         /// Main bonding curve contract where new tokens are created and initially traded
-        pub const BONDING_CURVE: &str = "0x6F6B8F1a20703309951a5127c45B49b1CD981A22";
+        pub const BONDING_CURVE: &str = "0xA7283d07812a02AFB7C09B60f8896bCEA3F90aCE";
 
         /// Bonding curve router for optimized trading operations
-        pub const BONDING_CURVE_ROUTER: &str = "0x6B5F564339DbAD6b780249827f2198a841FEB7F3";
+        pub const BONDING_CURVE_ROUTER: &str = "0x6F6B8F1a20703309951a5127c45B49b1CD981A22";
 
         /// DEX router for Capricorn CL operations
         pub const DEX_ROUTER: &str = "0x0B79d71AE99528D1dB24A4148b5f4F865cc2b137";
