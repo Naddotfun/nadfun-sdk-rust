@@ -26,7 +26,7 @@ use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
 use nadfun_sdk::types::SellPermitParams;
-use nadfun_sdk::{Core, GasEstimationParams, SlippageUtils, TokenHelper};
+use nadfun_sdk::{Core, GasEstimationParams, TokenHelper};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -177,18 +177,22 @@ async fn main() -> Result<()> {
     println!("🚀 Executing gasless sell transaction...");
     println!("  This combines approval + sell in one transaction!");
 
-    // Execute sell permit transaction (gasless)
-    let result = core.sell_permit(sell_permit_params, router).await?;
+    // Execute sell permit transaction (gasless) - returns tx_hash immediately
+    let tx_hash = core.sell_permit(sell_permit_params, router).await?;
+    println!("✅ Transaction submitted!");
+    println!("  Transaction hash: {}", tx_hash);
 
-    if result.status {
+    // Wait for transaction receipt
+    println!("⏳ Waiting for confirmation...");
+    let receipt = core.get_receipt(tx_hash).await?;
+
+    if receipt.status {
         println!("✅ Gasless sell successful!");
-        println!("  Transaction hash: {}", result.transaction_hash);
-        println!("  Block number: {:?}", result.block_number);
-        println!("  Gas used: {:?}", result.gas_used);
+        println!("  Block number: {:?}", receipt.block_number);
+        println!("  Gas used: {:?}", receipt.gas_used);
         println!("  💡 Saved gas by combining approval + sell in one tx!");
     } else {
         println!("❌ Gasless sell failed!");
-        println!("  Transaction hash: {}", result.transaction_hash);
     }
 
     Ok(())

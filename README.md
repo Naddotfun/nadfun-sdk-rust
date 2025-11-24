@@ -56,8 +56,15 @@ async fn main() -> Result<()> {
         nonce: None,     // Auto-increment
     };
 
-    let result = core.buy(buy_params, router).await?;
-    println!("Buy successful! Tx: {:?}", result.transaction_hash);
+    // Execute buy - returns tx_hash immediately
+    let tx_hash = core.buy(buy_params, router).await?;
+    println!("Transaction submitted: {}", tx_hash);
+
+    // Optionally wait for receipt to check status
+    let receipt = core.get_receipt(tx_hash).await?;
+    println!("Transaction confirmed in block: {:?}", receipt.block_number);
+    println!("Gas used: {:?}", receipt.gas_used);
+    println!("Status: {}", if receipt.status { "Success" } else { "Failed" });
 
     Ok(())
 }
@@ -143,7 +150,32 @@ let buy_params = BuyParams {
     nonce: None, // Auto-detect
 };
 
-let result = core.buy(buy_params, router).await?;
+// Execute buy - returns tx_hash immediately (fast!)
+let tx_hash = core.buy(buy_params, router).await?;
+println!("Transaction submitted: {}", tx_hash);
+
+// Later, check the transaction status if needed
+let receipt = core.get_receipt(tx_hash).await?;
+if receipt.status {
+    println!("Trade successful! Gas used: {:?}", receipt.gas_used);
+}
+```
+
+#### Fast Transaction Submission
+
+**New in v0.3.0**: All trading functions now return transaction hash immediately without waiting for confirmation. This makes your trading bot much faster!
+
+```rust
+// OLD - Waits for confirmation (slow)
+let result = core.buy(params, router).await?;  // Waits ~2-15 seconds
+
+// NEW - Returns immediately (fast!)
+let tx_hash = core.buy(params, router).await?;  // Returns in milliseconds
+println!("Submitted: {}", tx_hash);
+
+// Check status later when you need it
+let receipt = core.get_receipt(tx_hash).await?;
+println!("Confirmed: {}", receipt.status);
 ```
 
 ### ⛽ Gas Management

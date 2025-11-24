@@ -178,17 +178,21 @@ async fn main() -> Result<()> {
 
     println!("🚀 Executing sell transaction...");
 
-    // Execute sell transaction
-    let result = core.sell(sell_params, router).await?;
+    // Execute sell transaction - returns tx_hash immediately
+    let tx_hash = core.sell(sell_params, router).await?;
+    println!("✅ Transaction submitted!");
+    println!("  Transaction hash: {}", tx_hash);
 
-    if result.status {
+    // Wait for transaction receipt
+    println!("⏳ Waiting for confirmation...");
+    let receipt = core.get_receipt(tx_hash).await?;
+
+    if receipt.status {
         println!("✅ Sell successful!");
-        println!("  Transaction hash: {}", result.transaction_hash);
-        println!("  Block number: {:?}", result.block_number);
-        println!("  Gas used: {:?}", result.gas_used);
+        println!("  Block number: {:?}", receipt.block_number);
+        println!("  Gas used: {:?}", receipt.gas_used);
     } else {
         println!("❌ Sell failed!");
-        println!("  Transaction hash: {}", result.transaction_hash);
     }
 
     Ok(())

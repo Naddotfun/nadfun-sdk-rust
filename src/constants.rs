@@ -76,22 +76,22 @@ pub mod addresses {
     /// Mainnet contract addresses
     pub mod mainnet {
         /// DEX Factory contract for pool creation and discovery
-        pub const DEX_FACTORY: &str = "0x99f4Aa293dcEfFA11aB0c03C359db45d05c7C863";
+        pub const DEX_FACTORY: &str = "0x6B5F564339DbAD6b780249827f2198a841FEB7F3";
 
         /// Wrapped MON (WMON) token - the base trading pair for all tokens
-        pub const WMON: &str = "0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701";
+        pub const WMON: &str = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 
         /// Main bonding curve contract where new tokens are created and initially traded
-        pub const BONDING_CURVE: &str = "0x175ed6583EdA113Bd0C0Bb7B473f760006651a99";
+        pub const BONDING_CURVE: &str = "0x6F6B8F1a20703309951a5127c45B49b1CD981A22";
 
         /// Bonding curve router for optimized trading operations
-        pub const BONDING_CURVE_ROUTER: &str = "0x92f96f59137f41ECF8cD9a3C7E70E9e7db9deadE";
+        pub const BONDING_CURVE_ROUTER: &str = "0x6B5F564339DbAD6b780249827f2198a841FEB7F3";
 
         /// DEX router for Capricorn CL operations
-        pub const DEX_ROUTER: &str = "0x006d317A4176b356aF3764db4d811bc953E33be9";
+        pub const DEX_ROUTER: &str = "0x0B79d71AE99528D1dB24A4148b5f4F865cc2b137";
 
         /// Utility LENS contract for batched operations
-        pub const LENS_ADDRESS: &str = "0xD1cd9821dA319ec214375f6cd155A940e28e758d";
+        pub const LENS_ADDRESS: &str = "0x7e78A8DE94f21804F7a17F4E8BF9EC2c872187ea";
     }
 
     /// Testnet contract addresses
