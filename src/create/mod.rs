@@ -13,7 +13,7 @@ use anyhow::Result;
 use reqwest;
 
 /// Base API server URL
-pub const API_SERVER_URL: &str = "https://dev-api.nad.fun";
+pub const API_SERVER_URL: &str = "https://api.nad.fun";
 
 /// Allowed image types for token creation
 pub const ALLOWED_IMAGE_TYPES: [&str; 4] =
