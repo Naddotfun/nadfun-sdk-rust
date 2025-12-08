@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.0"
+nadfun_sdk = "0.3.1"
 ```
 
 ## Quick Start
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
         to: core.wallet_address(),
         deadline: U256::from(9999999999999999u64),
         gas_limit: Some(gas_with_buffer),
-        gas_price: None, // Use network default
+        gas_price: None, // Or use Some(GasPricing::Eip1559 { ... })
         nonce: None,     // Auto-increment
     };
 
@@ -146,8 +146,8 @@ let buy_params = BuyParams {
     to: wallet_address,
     deadline: U256::from(deadline),
     gas_limit: Some(gas_with_buffer), // Use network-based estimation
-    gas_price: Some(50_000_000_000), // 50 gwei
-    nonce: None, // Auto-detect
+    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 50_000_000_000 }), // 50 gwei
+    nonce: None,                       // Auto-detect
 };
 
 // Execute buy - returns tx_hash immediately (fast!)
@@ -180,7 +180,36 @@ println!("Confirmed: {}", receipt.status);
 
 ### ⛽ Gas Management
 
-**v0.2.0 introduces a unified gas estimation system** that replaces static constants with real-time network estimation:
+**v0.2.0 introduces a unified gas estimation system** that replaces static constants with real-time network estimation.
+
+**v0.3.0 adds EIP-1559 gas pricing support** for better transaction fee control:
+
+#### Gas Pricing Options (New in v0.3.1)
+
+```rust
+use nadfun_sdk::types::GasPricing;
+
+// Option 1: Legacy (default) - uses network gas price
+let gas_price = Some(GasPricing::Legacy);
+
+// Option 2: Legacy with explicit gas price
+let gas_price = Some(GasPricing::LegacyWithPrice {
+    gas_price: 50_000_000_000, // 50 gwei
+});
+
+// Option 3: EIP-1559 (recommended for Monad)
+let gas_price = Some(GasPricing::Eip1559 {
+    max_fee_per_gas: 100_000_000_000,        // 100 gwei max
+    max_priority_fee_per_gas: 2_000_000_000, // 2 gwei tip
+});
+
+// Use in BuyParams/SellParams
+let buy_params = BuyParams {
+    // ... other fields
+    gas_price,  // Unified gas pricing field
+    nonce: None,
+};
+```
 
 #### Unified Gas Estimation (New in v0.2.0)
 

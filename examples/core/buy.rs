@@ -24,7 +24,7 @@ use alloy::eips::BlockId;
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
-use nadfun_sdk::types::BuyParams;
+use nadfun_sdk::types::{BuyParams, GasPricing};
 use nadfun_sdk::{Core, GasEstimationParams, SlippageUtils};
 
 #[path = "../common/mod.rs"]
@@ -180,9 +180,10 @@ async fn main() -> Result<()> {
         to: wallet,
         deadline,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
-        gas_price: Some(recommended_gas_price.try_into().unwrap_or(50_000_000_000)), // Use higher gas price
+        gas_price: Some(GasPricing::LegacyWithPrice {
+            gas_price: recommended_gas_price.try_into().unwrap_or(50_000_000_000)
+        }),
         nonce: Some(current_nonce), // Use actual account nonce
-        gas_pricing: None,
     };
 
     println!("🚀 Executing buy transaction...");

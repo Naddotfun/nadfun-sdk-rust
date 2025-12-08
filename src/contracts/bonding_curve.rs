@@ -130,12 +130,9 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit.into());
         }
 
-        // EIP-1559 gas pricing takes priority over legacy gas_price
-        if let Some(gas_pricing) = &params.gas_pricing {
-            match gas_pricing {
-                GasPricing::Legacy => {
-                    // Use network default
-                }
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
                     tx_builder = tx_builder.gas_price((*gas_price).into());
                 }
@@ -148,9 +145,6 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
                         .max_priority_fee_per_gas(*max_priority_fee_per_gas);
                 }
             }
-        } else if let Some(gas_price) = params.gas_price {
-            // Fallback to legacy gas_price if gas_pricing not set
-            tx_builder = tx_builder.gas_price(gas_price.into());
         }
 
         if let Some(nonce) = params.nonce {
@@ -177,12 +171,9 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        // EIP-1559 gas pricing takes priority over legacy gas_price
-        if let Some(gas_pricing) = &params.gas_pricing {
-            match gas_pricing {
-                GasPricing::Legacy => {
-                    // Use network default
-                }
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
                     tx_builder = tx_builder.gas_price(*gas_price);
                 }
@@ -195,8 +186,6 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
                         .max_priority_fee_per_gas(*max_priority_fee_per_gas);
                 }
             }
-        } else if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
         }
 
         if let Some(nonce) = params.nonce {
@@ -231,9 +220,8 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        // EIP-1559 gas pricing takes priority over legacy gas_price
-        if let Some(gas_pricing) = &params.gas_pricing {
-            match gas_pricing {
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
                     tx_builder = tx_builder.gas_price(*gas_price);
@@ -247,8 +235,6 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
                         .max_priority_fee_per_gas(*max_priority_fee_per_gas);
                 }
             }
-        } else if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
         }
 
         if let Some(nonce) = params.nonce {
@@ -279,9 +265,8 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit.into());
         }
 
-        // EIP-1559 gas pricing takes priority over legacy gas_price
-        if let Some(gas_pricing) = &params.gas_pricing {
-            match gas_pricing {
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
                     tx_builder = tx_builder.gas_price((*gas_price).into());
@@ -295,8 +280,6 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
                         .max_priority_fee_per_gas(*max_priority_fee_per_gas);
                 }
             }
-        } else if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price.into());
         }
 
         if let Some(nonce) = params.nonce {
@@ -327,9 +310,8 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        // EIP-1559 gas pricing takes priority over legacy gas_price
-        if let Some(gas_pricing) = &params.gas_pricing {
-            match gas_pricing {
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
                     tx_builder = tx_builder.gas_price(*gas_price);
@@ -343,8 +325,6 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
                         .max_priority_fee_per_gas(*max_priority_fee_per_gas);
                 }
             }
-        } else if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
         }
 
         if let Some(nonce) = params.nonce {
@@ -379,9 +359,8 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        // EIP-1559 gas pricing takes priority over legacy gas_price
-        if let Some(gas_pricing) = &params.gas_pricing {
-            match gas_pricing {
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
                     tx_builder = tx_builder.gas_price(*gas_price);
@@ -395,8 +374,6 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
                         .max_priority_fee_per_gas(*max_priority_fee_per_gas);
                 }
             }
-        } else if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
         }
 
         if let Some(nonce) = params.nonce {
