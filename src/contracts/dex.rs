@@ -43,7 +43,23 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
+        // EIP-1559 gas pricing takes priority over legacy gas_price
+        if let Some(gas_pricing) = &params.gas_pricing {
+            match gas_pricing {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        } else if let Some(gas_price) = params.gas_price {
             tx_builder = tx_builder.gas_price(gas_price);
         }
 
@@ -72,7 +88,23 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
+        // EIP-1559 gas pricing takes priority over legacy gas_price
+        if let Some(gas_pricing) = &params.gas_pricing {
+            match gas_pricing {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        } else if let Some(gas_price) = params.gas_price {
             tx_builder = tx_builder.gas_price(gas_price);
         }
 
@@ -108,7 +140,23 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
+        // EIP-1559 gas pricing takes priority over legacy gas_price
+        if let Some(gas_pricing) = &params.gas_pricing {
+            match gas_pricing {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        } else if let Some(gas_price) = params.gas_price {
             tx_builder = tx_builder.gas_price(gas_price);
         }
 
@@ -140,7 +188,23 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit.into());
         }
 
-        if let Some(gas_price) = params.gas_price {
+        // EIP-1559 gas pricing takes priority over legacy gas_price
+        if let Some(gas_pricing) = &params.gas_pricing {
+            match gas_pricing {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price((*gas_price).into());
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        } else if let Some(gas_price) = params.gas_price {
             tx_builder = tx_builder.gas_price(gas_price.into());
         }
 
@@ -172,7 +236,23 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
+        // EIP-1559 gas pricing takes priority over legacy gas_price
+        if let Some(gas_pricing) = &params.gas_pricing {
+            match gas_pricing {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        } else if let Some(gas_price) = params.gas_price {
             tx_builder = tx_builder.gas_price(gas_price);
         }
 
@@ -208,7 +288,23 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
+        // EIP-1559 gas pricing takes priority over legacy gas_price
+        if let Some(gas_pricing) = &params.gas_pricing {
+            match gas_pricing {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        } else if let Some(gas_price) = params.gas_price {
             tx_builder = tx_builder.gas_price(gas_price);
         }
 

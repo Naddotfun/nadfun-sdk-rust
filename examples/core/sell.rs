@@ -167,6 +167,7 @@ async fn main() -> Result<()> {
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(recommended_gas_price.try_into().unwrap_or(50_000_000_000)), // Use higher gas price
         nonce: Some(current_nonce), // Use actual account nonce
+        gas_pricing: None,
     };
 
     println!("📝 Sell params:");
