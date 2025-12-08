@@ -171,7 +171,8 @@ async fn main() -> Result<()> {
         s,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(recommended_gas_price.try_into().unwrap_or(100_000_000_000)), // 3x network or 100 gwei fallback
-        nonce: Some(current_nonce),       // Use actual account nonce
+        nonce: Some(current_nonce), // Use actual account nonce
+        gas_pricing: None,
     };
 
     println!("🚀 Executing gasless sell transaction...");

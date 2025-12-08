@@ -15,6 +15,27 @@ impl Router {
     }
 }
 
+/// Gas pricing strategy for transactions
+#[derive(Debug, Clone, Default)]
+pub enum GasPricing {
+    /// Legacy gas pricing (Type 0 transaction)
+    /// Use this for compatibility with older systems
+    #[default]
+    Legacy,
+    /// Legacy with explicit gas price
+    LegacyWithPrice {
+        gas_price: u128,
+    },
+    /// EIP-1559 gas pricing (Type 2 transaction) - Recommended for Monad
+    /// Allows separate control of max fee and priority fee
+    Eip1559 {
+        /// Maximum total fee per gas (base_fee + priority_fee)
+        max_fee_per_gas: u128,
+        /// Tip to validators for transaction priority
+        max_priority_fee_per_gas: u128,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub struct BuyParams {
     pub token: Address,
@@ -23,8 +44,12 @@ pub struct BuyParams {
     pub to: Address,
     pub deadline: U256,
     pub gas_limit: Option<u64>,
+    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
     pub gas_price: Option<u128>,
     pub nonce: Option<u64>,
+    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
+    /// If set, gas_price is ignored
+    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,8 +60,12 @@ pub struct SellParams {
     pub to: Address,
     pub deadline: U256,
     pub gas_limit: Option<u64>,
+    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
     pub gas_price: Option<u128>,
     pub nonce: Option<u64>,
+    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
+    /// If set, gas_price is ignored
+    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,8 +80,11 @@ pub struct SellPermitParams {
     pub r: B256,                // r part of the signature
     pub s: B256,                // s part of the signature
     pub gas_limit: Option<u64>,
+    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
     pub gas_price: Option<u128>,
     pub nonce: Option<u64>,
+    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
+    pub gas_pricing: Option<GasPricing>,
 }
 
 // ExactOut variants - specify exact output amount, get variable input
@@ -65,8 +97,11 @@ pub struct ExactOutBuyParams {
     pub to: Address,            // Address to receive the tokens
     pub deadline: U256,         // Timestamp after which the transaction will revert
     pub gas_limit: Option<u64>,
+    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
     pub gas_price: Option<u128>,
     pub nonce: Option<u64>,
+    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
+    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -77,8 +112,11 @@ pub struct ExactOutSellParams {
     pub to: Address,            // Address to receive the MON
     pub deadline: U256,         // Timestamp after which the transaction will revert
     pub gas_limit: Option<u64>,
+    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
     pub gas_price: Option<u128>,
     pub nonce: Option<u64>,
+    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
+    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,8 +131,11 @@ pub struct ExactOutSellPermitParams {
     pub r: B256,                // r part of the signature
     pub s: B256,                // s part of the signature
     pub gas_limit: Option<u64>,
+    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
     pub gas_price: Option<u128>,
     pub nonce: Option<u64>,
+    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
+    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -165,6 +206,7 @@ mod tests {
             gas_limit: Some(21000), // Standard gas for transfer
             gas_price: Some(20000000000), // 20 gwei
             nonce: Some(42),
+            gas_pricing: None,
         };
 
         assert_eq!(params.token, token);
@@ -193,6 +235,7 @@ mod tests {
             gas_limit: Some(25000), // Slightly higher gas for sell
             gas_price: Some(15000000000), // 15 gwei
             nonce: None,
+            gas_pricing: None,
         };
 
         assert_eq!(params.token, token);
@@ -225,6 +268,7 @@ mod tests {
             gas_limit: Some(30000), // Test gas amount
             gas_price: Some(25000000000), // 25 gwei
             nonce: Some(100),
+            gas_pricing: None,
         };
 
         assert_eq!(params.token, token);

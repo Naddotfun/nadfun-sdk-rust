@@ -112,7 +112,10 @@ async fn main() -> Result<()> {
 
     println!("🛡️ Slippage protection:");
     println!("  Expected tokens: {}", amount_out);
-    println!("  Minimum tokens ({}% slippage): {}", slippage_percent, amount_out_min);
+    println!(
+        "  Minimum tokens ({}% slippage): {}",
+        slippage_percent, amount_out_min
+    );
 
     // Verify amount_out_min is reasonable
     if amount_out_min == U256::ZERO {
@@ -179,6 +182,7 @@ async fn main() -> Result<()> {
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(recommended_gas_price.try_into().unwrap_or(50_000_000_000)), // Use higher gas price
         nonce: Some(current_nonce), // Use actual account nonce
+        gas_pricing: None,
     };
 
     println!("🚀 Executing buy transaction...");
