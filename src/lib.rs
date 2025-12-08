@@ -6,25 +6,34 @@
 //!
 //! - **Trading**: Buy/sell tokens with automatic routing (bonding curve ↔ DEX)
 //! - **Event Streaming**: Real-time streaming and historical indexing
-//! - **Simple API**: Two main modules - `Trade` for trading, `stream` for events
+//! - **Simple API**: Two main modules - `Core` for trading, `stream` for events
 //!
 //! ## Quick Start
 //!
 //! ```rust,ignore
-//! use nadfun_sdk::{Trade, Router, Operation, get_default_gas_limit};
+//! use nadfun_sdk::{Core, Network};
 //! use alloy::primitives::{Address, U256};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     // Trading
-//!     let trade = Trade::new("https://your-rpc-url".to_string(), "your-private-key".to_string()).await?;
-//!     let (router, amount_out) = trade.get_amount_out(token, mon_amount, true).await?;
-//!     let result = trade.buy(buy_params, router).await?;
-//!     
-//!     // Event Streaming
-//!     let stream = EventStream::new("wss://your-ws-url".to_string()).await?;
-//!     // Real-time event subscription available
-//!     
+//!     // Initialize Core - set network once, used everywhere
+//!     let core = Core::new(
+//!         "https://your-rpc-url".to_string(),
+//!         "your-private-key".to_string(),
+//!         Network::Mainnet
+//!     ).await?;
+//!
+//!     // Get quote and execute trade
+//!     let (router, amount_out) = core.get_amount_out(token, mon_amount, true).await?;
+//!
+//!     // Execute buy - returns tx_hash immediately (fast!)
+//!     let tx_hash = core.buy(buy_params, router).await?;
+//!     println!("Transaction submitted: {}", tx_hash);
+//!
+//!     // Optionally check receipt later
+//!     let receipt = core.get_receipt(tx_hash).await?;
+//!     println!("Confirmed: {}", receipt.status);
+//!
 //!     Ok(())
 //! }
 //! ```
@@ -35,12 +44,18 @@
 /// These are automatically used by the SDK but can be accessed directly if needed.
 pub mod constants;
 
-/// Trading functionality including buy/sell operations and slippage calculations
+/// Core trading functionality including buy/sell operations and slippage calculations
 ///
-/// Provides the main trading interface (`Trade`) for buying/selling tokens with
+/// Provides the main trading interface (`Core`) for buying/selling tokens with
 /// automatic routing between bonding curves and DEX pools. Also includes slippage
 /// calculation utilities (`SlippageUtils`) for precise trade protection.
-pub mod trading;
+pub mod core;
+
+/// Token creation functionality
+///
+/// Provides complete token creation flow including image upload, metadata creation,
+/// salt generation, and on-chain token deployment.
+pub mod create;
 
 /// Token interaction utilities for ERC-20 operations
 ///
@@ -69,17 +84,16 @@ pub mod types;
 /// internally by the public API but hidden from end users for simplicity.
 pub(crate) mod contracts;
 
-// Core API exports - only what users need
+// Pool discovery is still useful for advanced users
 pub use contracts::{PoolDiscovery, get_pool_addresses_for_tokens};
-// Export contract interfaces for gas estimation in examples
-pub use contracts::bonding_curve::{IBondingCurveRouter};
-pub use contracts::dex::{IDexRouter};
 pub use stream::{
-    BondingCurveEvent, CurveIndexer, CurveStream, EventType, PoolMetadata, SwapEvent,
-    UniswapSwapIndexer, UniswapSwapStream,
+    BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
+    SwapEvent,
 };
+pub use create::TokenCreationClient;
 pub use token::TokenHelper;
-pub use trading::{SlippageUtils, Trade, Router, estimate_gas, GasEstimationParams};
+pub use constants::{Network, set_network, get_current_network};
+pub use core::{SlippageUtils, Core, Router, estimate_gas, GasEstimationParams};
 pub use types::*;
 
 /// Convenient prelude module for importing commonly used types and functions
@@ -89,27 +103,30 @@ pub use types::*;
 /// ```rust
 /// use nadfun_sdk::prelude::*;
 ///
-/// // Now you have access to Trade, CurveStream, EventType, Address, U256, etc.
+/// // Now you have access to Core, CurveStream, EventType, Address, U256, etc.
 /// ```
 ///
 /// This saves you from having to import each type individually and provides
 /// a standardized way to get started with the SDK quickly.
 pub mod prelude {
-    // Trading functionality
-    pub use crate::trading::{SlippageUtils, Trade, Router, estimate_gas, GasEstimationParams};
+    // Core trading functionality
+    pub use crate::core::{SlippageUtils, Core, Router, estimate_gas, GasEstimationParams};
+
+    // Token creation
+    pub use crate::create::TokenCreationClient;
 
     // Token operations
     pub use crate::token::TokenHelper;
 
     // Event streaming and indexing
     pub use crate::stream::{BondingCurveEvent, CurveIndexer, CurveStream, EventType};
-    pub use crate::stream::{PoolMetadata, SwapEvent, UniswapSwapIndexer, UniswapSwapStream};
+    pub use crate::stream::{DexIndexer, DexStream, PoolMetadata, SwapEvent};
 
     // Pool discovery utilities
     pub use crate::contracts::{PoolDiscovery, get_pool_addresses_for_tokens};
 
     // Constants and types
-    pub use crate::constants::*;
+    pub use crate::constants::{Network, set_network, get_current_network};
     pub use crate::types::*;
 
     // Common Alloy primitives

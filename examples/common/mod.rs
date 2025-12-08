@@ -1,6 +1,7 @@
 //! Common utilities for examples
 
 use anyhow::Result;
+use nadfun_sdk::Network;
 use std::env;
 
 /// Get configuration from environment variables or defaults
@@ -11,6 +12,16 @@ pub struct Config {
     pub token: Option<String>,
     pub recipient: Option<String>,
     pub tokens: Vec<String>,
+    pub network: Network,
+    // Token creation fields
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub description: Option<String>,
+    pub image_uri: Option<String>,
+    pub website: Option<String>,
+    pub twitter: Option<String>,
+    pub telegram: Option<String>,
+    pub initial_buy: Option<String>, // Amount of MON for initial buy (e.g., "1.5")
 }
 
 impl Config {
@@ -20,6 +31,10 @@ impl Config {
             .map(|s| parse_tokens_argument(&s).unwrap_or_default())
             .unwrap_or_default();
 
+        let network = env::var("NETWORK")
+            .map(|s| parse_network(&s).unwrap_or_default())
+            .unwrap_or_default();
+
         Self {
             rpc_url: env::var("RPC_URL").unwrap_or_else(|_| "https://eth.merkle.io".to_string()),
             ws_url: env::var("WS_URL").unwrap_or_else(|_| "wss://eth.merkle.io".to_string()),
@@ -27,6 +42,16 @@ impl Config {
             token: env::var("TOKEN").ok(),
             recipient: env::var("RECIPIENT").ok(),
             tokens,
+            network,
+            // Token creation fields from env
+            name: env::var("NAME").ok(),
+            symbol: env::var("SYMBOL").ok(),
+            description: env::var("DESCRIPTION").ok(),
+            image_uri: env::var("IMAGE_URI").ok(),
+            website: env::var("WEBSITE").ok(),
+            twitter: env::var("TWITTER").ok(),
+            telegram: env::var("TELEGRAM").ok(),
+            initial_buy: env::var("INITIAL_BUY").ok(),
         }
     }
 
@@ -87,6 +112,78 @@ impl Config {
                         anyhow::bail!("--tokens requires a value");
                     }
                 }
+                "--network" => {
+                    if i + 1 < args.len() {
+                        config.network = parse_network(&args[i + 1])?;
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--network requires a value");
+                    }
+                }
+                "--name" => {
+                    if i + 1 < args.len() {
+                        config.name = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--name requires a value");
+                    }
+                }
+                "--symbol" => {
+                    if i + 1 < args.len() {
+                        config.symbol = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--symbol requires a value");
+                    }
+                }
+                "--description" => {
+                    if i + 1 < args.len() {
+                        config.description = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--description requires a value");
+                    }
+                }
+                "--image-uri" => {
+                    if i + 1 < args.len() {
+                        config.image_uri = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--image-uri requires a value");
+                    }
+                }
+                "--website" => {
+                    if i + 1 < args.len() {
+                        config.website = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--website requires a value");
+                    }
+                }
+                "--twitter" => {
+                    if i + 1 < args.len() {
+                        config.twitter = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--twitter requires a value");
+                    }
+                }
+                "--telegram" => {
+                    if i + 1 < args.len() {
+                        config.telegram = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--telegram requires a value");
+                    }
+                }
+                "--initial-buy" => {
+                    if i + 1 < args.len() {
+                        config.initial_buy = Some(args[i + 1].clone());
+                        i += 2;
+                    } else {
+                        anyhow::bail!("--initial-buy requires a value");
+                    }
+                }
                 "--help" | "-h" => {
                     println!("Usage: cargo run --example <example> [OPTIONS]");
                     println!();
@@ -97,6 +194,18 @@ impl Config {
                     println!("  --token <ADDRESS>    Token address for operations");
                     println!("  --tokens <ADDRS>     Token addresses: 'addr1,addr2' or '[\"addr1\",\"addr2\"]'");
                     println!("  --recipient <ADDR>   Recipient address for transfers/allowances");
+                    println!("  --network <NET>      Network: mainnet or testnet (default: mainnet)");
+                    println!();
+                    println!("Token creation options:");
+                    println!("  --name <NAME>        Token name");
+                    println!("  --symbol <SYMBOL>    Token symbol");
+                    println!("  --description <DESC> Token description");
+                    println!("  --image-uri <URL>    Image URL (required for token creation)");
+                    println!("  --initial-buy <MON>  MON amount for initial buy (default: 1.5)");
+                    println!("  --website <URL>      Website URL (must use https://)");
+                    println!("  --twitter <URL>      Twitter/X URL (must use https://x.com)");
+                    println!("  --telegram <URL>     Telegram URL (must use https://t.me)");
+                    println!();
                     println!("  --help, -h           Show this help");
                     println!();
                     println!("Environment variables:");
@@ -106,6 +215,17 @@ impl Config {
                     println!("  TOKEN         Set token address");
                     println!("  TOKENS        Set token addresses (comma-separated or JSON array)");
                     println!("  RECIPIENT     Set recipient address");
+                    println!("  NETWORK       Set network (mainnet or testnet)");
+                    println!();
+                    println!("Token creation environment variables:");
+                    println!("  NAME          Token name");
+                    println!("  SYMBOL        Token symbol");
+                    println!("  DESCRIPTION   Token description");
+                    println!("  IMAGE_URI     Image URL");
+                    println!("  INITIAL_BUY   MON amount for initial buy");
+                    println!("  WEBSITE       Website URL");
+                    println!("  TWITTER       Twitter URL");
+                    println!("  TELEGRAM      Telegram URL");
                     std::process::exit(0);
                 }
                 _ => i += 1,
@@ -133,6 +253,7 @@ impl Config {
         println!("📋 Configuration:");
         println!("  RPC URL: {}", self.rpc_url);
         println!("  WS URL: {}", self.ws_url);
+        println!("  Network: {:?}", self.network);
         println!(
             "  Private Key: {}",
             if self.private_key.is_some() {
@@ -166,6 +287,15 @@ impl Config {
             }
         );
         println!();
+    }
+}
+
+/// Parse network argument
+fn parse_network(input: &str) -> Result<Network> {
+    match input.trim().to_lowercase().as_str() {
+        "mainnet" => Ok(Network::Mainnet),
+        "testnet" => Ok(Network::Testnet),
+        _ => anyhow::bail!("Invalid network: {}. Use 'mainnet' or 'testnet'", input),
     }
 }
 

@@ -15,6 +15,27 @@ impl Router {
     }
 }
 
+/// Gas pricing strategy for transactions
+#[derive(Debug, Clone, Default)]
+pub enum GasPricing {
+    /// Legacy gas pricing (Type 0 transaction)
+    /// Use this for compatibility with older systems
+    #[default]
+    Legacy,
+    /// Legacy with explicit gas price
+    LegacyWithPrice {
+        gas_price: u128,
+    },
+    /// EIP-1559 gas pricing (Type 2 transaction) - Recommended for Monad
+    /// Allows separate control of max fee and priority fee
+    Eip1559 {
+        /// Maximum total fee per gas (base_fee + priority_fee)
+        max_fee_per_gas: u128,
+        /// Tip to validators for transaction priority
+        max_priority_fee_per_gas: u128,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub struct BuyParams {
     pub token: Address,
@@ -23,7 +44,8 @@ pub struct BuyParams {
     pub to: Address,
     pub deadline: U256,
     pub gas_limit: Option<u64>,
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
 }
 
@@ -35,7 +57,8 @@ pub struct SellParams {
     pub to: Address,
     pub deadline: U256,
     pub gas_limit: Option<u64>,
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
 }
 
@@ -51,7 +74,53 @@ pub struct SellPermitParams {
     pub r: B256,                // r part of the signature
     pub s: B256,                // s part of the signature
     pub gas_limit: Option<u64>,
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
+    pub nonce: Option<u64>,
+}
+
+// ExactOut variants - specify exact output amount, get variable input
+
+#[derive(Debug, Clone)]
+pub struct ExactOutBuyParams {
+    pub amount_in_max: U256,    // Maximum amount of MON to spend
+    pub amount_out: U256,       // Exact amount of tokens to receive
+    pub token: Address,         // Address of the token to buy
+    pub to: Address,            // Address to receive the tokens
+    pub deadline: U256,         // Timestamp after which the transaction will revert
+    pub gas_limit: Option<u64>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
+    pub nonce: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExactOutSellParams {
+    pub amount_in_max: U256,    // Maximum amount of tokens to spend
+    pub amount_out: U256,       // Exact amount of MON to receive
+    pub token: Address,         // Address of the token to sell
+    pub to: Address,            // Address to receive the MON
+    pub deadline: U256,         // Timestamp after which the transaction will revert
+    pub gas_limit: Option<u64>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
+    pub nonce: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExactOutSellPermitParams {
+    pub amount_in_max: U256,    // Maximum amount of tokens to spend
+    pub amount_out: U256,       // Exact amount of MON to receive
+    pub amount_allowance: U256, // amount for the permit
+    pub token: Address,         // Address of the token to sell
+    pub to: Address,            // Address to receive the MON
+    pub deadline: U256,         // Timestamp after which the transaction will revert
+    pub v: u8,                  // v part of the signature
+    pub r: B256,                // r part of the signature
+    pub s: B256,                // s part of the signature
+    pub gas_limit: Option<u64>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
 }
 
@@ -121,7 +190,7 @@ mod tests {
             to,
             deadline: U256::from(1000000000u64),
             gas_limit: Some(21000), // Standard gas for transfer
-            gas_price: Some(20000000000), // 20 gwei
+            gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 20000000000 }), // 20 gwei
             nonce: Some(42),
         };
 
@@ -129,7 +198,7 @@ mod tests {
         assert_eq!(params.amount_in, U256::from(1000000000000000000u64));
         assert_eq!(params.to, to);
         assert_eq!(params.gas_limit, Some(21000));
-        assert_eq!(params.gas_price, Some(20000000000));
+        assert!(matches!(params.gas_price, Some(GasPricing::LegacyWithPrice { gas_price: 20000000000 })));
         assert_eq!(params.nonce, Some(42));
     }
 
@@ -149,7 +218,7 @@ mod tests {
             to,
             deadline: U256::from(1000000000u64),
             gas_limit: Some(25000), // Slightly higher gas for sell
-            gas_price: Some(15000000000), // 15 gwei
+            gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 15000000000 }), // 15 gwei
             nonce: None,
         };
 
@@ -157,7 +226,7 @@ mod tests {
         assert_eq!(params.amount_in, U256::from(1000000000000000000u64));
         assert_eq!(params.amount_out_min, U256::from(0));
         assert_eq!(params.gas_limit, Some(25000));
-        assert_eq!(params.gas_price, Some(15000000000));
+        assert!(matches!(params.gas_price, Some(GasPricing::LegacyWithPrice { gas_price: 15000000000 })));
         assert_eq!(params.nonce, None);
     }
 
@@ -181,7 +250,7 @@ mod tests {
             r: B256::ZERO,
             s: B256::ZERO,
             gas_limit: Some(30000), // Test gas amount
-            gas_price: Some(25000000000), // 25 gwei
+            gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 25000000000 }), // 25 gwei
             nonce: Some(100),
         };
 
@@ -189,7 +258,7 @@ mod tests {
         assert_eq!(params.v, 27);
         assert_eq!(params.r, B256::ZERO);
         assert_eq!(params.gas_limit, Some(30000));
-        assert_eq!(params.gas_price, Some(25000000000));
+        assert!(matches!(params.gas_price, Some(GasPricing::LegacyWithPrice { gas_price: 25000000000 })));
         assert_eq!(params.nonce, Some(100));
     }
 

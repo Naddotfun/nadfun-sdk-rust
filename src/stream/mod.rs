@@ -2,7 +2,7 @@
 //!
 //! This module is organized by functionality:
 //! - `curve`: Bonding curve event streaming and indexing
-//! - `dex`: DEX (Uniswap V3) event streaming and indexing
+//! - `dex`: DEX (Capricorn CL) event streaming and indexing
 //!
 //! Both support real-time streaming and historical indexing with
 //! 2-stage filtering capabilities.
@@ -12,7 +12,7 @@ pub mod dex;
 
 // Re-export main functionality
 pub use curve::{CurveIndexer, CurveStream};
-pub use dex::{UniswapSwapIndexer, UniswapSwapStream};
+pub use dex::{DexIndexer, DexStream};
 
 // Re-export types from the types module
 pub use crate::types::{
@@ -21,8 +21,7 @@ pub use crate::types::{
     CreateEvent,
     // Bonding curve types
     EventType,
-    ListedEvent,
-
+    GraduateEvent,
     LockEvent,
     PoolMetadata,
     SellEvent,
@@ -36,7 +35,7 @@ pub use crate::types::{
 /// Usage Examples:
 ///
 /// ```rust
-/// use nadfun_sdk::stream::{CurveStream, CurveIndexer, UniswapSwapIndexer, EventType};
+/// use nadfun_sdk::stream::{CurveStream, CurveIndexer, DexIndexer, EventType};
 /// use alloy::primitives::Address;
 /// use alloy::providers::ProviderBuilder;
 /// use std::sync::Arc;
@@ -47,18 +46,18 @@ pub use crate::types::{
 ///     let http_url = "https://eth.merkle.io".to_string();
 ///     let bonding_curve_address: Address = "0x...".parse()?;
 ///     let my_tokens = vec!["0x...".parse()?];
-///     
+///
 ///     // Bonding curve streaming
 ///     let curve_stream = CurveStream::new(ws_url).await?;
-///     
+///
 ///     // Bonding curve indexing
 ///     let provider = Arc::new(ProviderBuilder::new().connect_http(http_url.parse()?));
 ///     let curve_indexer = CurveIndexer::new(provider.clone(), bonding_curve_address);
-///     
-///     // DEX (Uniswap) indexing  
-///     let dex_indexer = UniswapSwapIndexer::from_tokens(provider, my_tokens).await?;
+///
+///     // DEX indexing
+///     let dex_indexer = DexIndexer::from_tokens(provider, my_tokens).await?;
 ///     let swap_events = dex_indexer.fetch_events(18_000_000, 18_010_000).await?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```

@@ -1,10 +1,10 @@
-//! Trading functionality for the Nad.fun ecosystem
+//! Core trading functionality for the Nad.fun ecosystem
 //!
 //! This module provides comprehensive trading capabilities including:
 //!
 //! ## Main Components
 //!
-//! - **[`Trade`]**: High-level trading interface for buying and selling tokens
+//! - **[`Core`]**: High-level trading interface for buying and selling tokens
 //!   - Automatic routing between bonding curves and DEX pools
 //!   - Built-in slippage protection and deadline management
 //!   - Support for both market and limit-style operations
@@ -26,16 +26,17 @@
 //! ## Usage Example
 //!
 //! ```rust,ignore
-//! use nadfun_sdk::{Trade, SlippageUtils, Router, Operation, get_default_gas_limit};
+//! use nadfun_sdk::{Core, SlippageUtils, Router, Operation, get_default_gas_limit, Network};
 //! use alloy::primitives::{Address, utils::parse_ether};
 //!
-//! // Initialize trading interface
-//! let trade = Trade::new(rpc_url, private_key).await?;
+//! // Initialize trading interface - this sets the network globally
+//! let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+//! // Now all SDK functions use Mainnet addresses automatically
 //!
 //! // Get quote for buying tokens
 //! let token: Address = "0x...".parse()?;
 //! let mon_amount = parse_ether("0.1")?; // 0.1 MON
-//! let (router, expected_tokens) = trade.get_amount_out(token, mon_amount, true).await?;
+//! let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
 //!
 //! // Apply slippage protection (5%)
 //! let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
@@ -52,7 +53,7 @@
 //!     nonce: None,
 //! };
 //!
-//! let result = trade.buy(buy_params, router).await?;
+//! let result = core.buy(buy_params, router).await?;
 //! ```
 //!
 //! ## Advanced Features
@@ -63,7 +64,7 @@
 //! - **Error Handling**: Comprehensive error types for different failure scenarios
 
 /// Core trading interface and execution logic
-pub mod trade;
+pub mod core;
 
 /// Mathematical utilities for slippage calculations and amount conversions
 pub mod utils;
@@ -72,7 +73,7 @@ pub mod utils;
 pub mod gas;
 
 // Re-export main types for convenience
-pub use trade::Trade;
+pub use core::Core;
 pub use crate::types::Router;
 pub use utils::SlippageUtils;
 pub use gas::{estimate_gas, estimate_buy_gas, estimate_sell_gas, estimate_sell_permit_gas, GasEstimationParams};

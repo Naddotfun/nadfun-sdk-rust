@@ -17,7 +17,7 @@
 
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
-use nadfun_sdk::{GasEstimationParams, SlippageUtils, TokenHelper, Trade};
+use nadfun_sdk::{GasEstimationParams, SlippageUtils, TokenHelper, Core};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -56,15 +56,15 @@ async fn main() -> Result<()> {
     );
     println!();
 
-    // Initialize trading interface
+    // Initialize trading interface with network
     let private_key = config.require_private_key()?;
-    let trade = Trade::new(config.rpc_url.clone(), private_key.clone()).await?;
+    let core = Core::new(config.rpc_url.clone(), private_key.clone(), config.network).await?;
     let token_helper = TokenHelper::new(config.rpc_url, private_key).await?;
     let token: Address = config
         .token
         .unwrap_or_else(|| "0x1234567890123456789012345678901234567890".to_string())
         .parse()?;
-    let wallet = trade.wallet_address();
+    let wallet = core.wallet_address();
 
     println!("🔍 Wallet: {}", wallet);
     println!("🪙 Token: {}", token);
@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     let deadline = U256::from(9999999999999999u64);
 
     // Get router information
-    let (router, expected_tokens) = trade.get_amount_out(token, mon_amount, true).await?;
+    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
     let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
     println!("📊 Router: {:?}", router);
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let buy_gas = match trade.estimate_gas(&router, buy_params).await {
+    let buy_gas = match core.estimate_gas(&router, buy_params).await {
         Ok(gas) => {
             println!("📈 Estimated gas for BUY: {}", gas);
             gas
@@ -146,7 +146,7 @@ async fn main() -> Result<()> {
     println!("🔄 Using amount for estimation: {}", actual_sell_amount);
 
     let (sell_router, expected_mon) =
-        match trade.get_amount_out(token, actual_sell_amount, false).await {
+        match core.get_amount_out(token, actual_sell_amount, false).await {
             Ok((router, amount)) => (router, amount),
             Err(e) => {
                 println!("⚠️ Could not get sell quote: {}", e);
@@ -205,7 +205,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let sell_gas = match trade.estimate_gas(&sell_router, sell_params).await {
+    let sell_gas = match core.estimate_gas(&sell_router, sell_params).await {
         Ok(gas) => {
             println!("📈 Estimated gas for SELL: {}", gas);
             gas
@@ -266,7 +266,7 @@ async fn main() -> Result<()> {
         s,
     };
 
-    let sell_permit_gas = match trade.estimate_gas(&sell_router, sell_permit_params).await {
+    let sell_permit_gas = match core.estimate_gas(&sell_router, sell_permit_params).await {
         Ok(gas) => {
             println!("📈 Estimated gas for SELL PERMIT: {}", gas);
             gas
