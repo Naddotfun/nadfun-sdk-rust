@@ -1,49 +1,18 @@
 use crate::types::*;
 use alloy::{
-    primitives::{Address, U256},
+    primitives::{Address, B256},
     providers::Provider,
     sol,
 };
 use anyhow::Result;
 use std::sync::Arc;
 
-sol! {
+// Load ABI from JSON file
+sol!(
     #[sol(rpc)]
-    interface IDexRouter {
-        struct BuyParams {
-            uint256 amountOutMin;
-            address token;
-            address to;
-            uint256 deadline;
-        }
-
-        struct SellParams {
-            uint256 amountIn;
-            uint256 amountOutMin;
-            address token;
-            address to;
-            uint256 deadline;
-        }
-
-        struct SellPermitParams {
-            uint256 amountIn;
-            uint256 amountOutMin;
-            uint256 amountAllowance;
-            address token;
-            address to;
-            uint256 deadline;
-            uint8 v;
-            bytes32 r;
-            bytes32 s;
-        }
-
-        function buy(BuyParams memory params) external payable returns (uint256);
-        function sell(SellParams memory params) external returns (uint256);
-        function sellPermit(SellPermitParams memory params) external returns (uint256);
-        function getAmountOut(address token, uint256 amountIn, bool isBuy) external view returns (uint256);
-        function getAmountIn(address token, uint256 amountOut, bool isBuy) external view returns (uint256);
-    }
-}
+    IDexRouter,
+    "abi/IDexRouter.json"
+);
 
 pub struct DexRouter<P> {
     pub address: Address,
@@ -55,35 +24,10 @@ impl<P: Provider + Clone> DexRouter<P> {
         Self { address, provider }
     }
 
-    pub async fn get_amount_out(
-        &self,
-        token: Address,
-        amount_in: U256,
-        is_buy: bool,
-    ) -> Result<U256> {
-        let contract = IDexRouter::new(self.address, self.provider.as_ref());
-        let result = contract
-            .getAmountOut(token, amount_in, is_buy)
-            .call()
-            .await?;
-        Ok(result)
-    }
+    // Note: get_amount_out and get_amount_in are now handled by LensContract
+    // for better gas efficiency and unified interface
 
-    pub async fn get_amount_in(
-        &self,
-        token: Address,
-        amount_out: U256,
-        is_buy: bool,
-    ) -> Result<U256> {
-        let contract = IDexRouter::new(self.address, self.provider.as_ref());
-        let result = contract
-            .getAmountIn(token, amount_out, is_buy)
-            .call()
-            .await?;
-        Ok(result)
-    }
-
-    pub async fn buy(&self, params: BuyParams) -> Result<TransactionResult> {
+    pub async fn buy(&self, params: BuyParams) -> Result<B256> {
         let contract = IDexRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IDexRouter::BuyParams {
@@ -99,8 +43,21 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
         }
 
         if let Some(nonce) = params.nonce {
@@ -108,19 +65,10 @@ impl<P: Provider + Clone> DexRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
-    pub async fn sell(&self, params: crate::types::SellParams) -> Result<TransactionResult> {
+    pub async fn sell(&self, params: crate::types::SellParams) -> Result<B256> {
         let contract = IDexRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IDexRouter::SellParams {
@@ -137,8 +85,21 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
         }
 
         if let Some(nonce) = params.nonce {
@@ -146,21 +107,13 @@ impl<P: Provider + Clone> DexRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+        Ok(*tx.tx_hash())
     }
 
     pub async fn sell_permit(
         &self,
         params: crate::types::SellPermitParams,
-    ) -> Result<TransactionResult> {
+    ) -> Result<B256> {
         let contract = IDexRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IDexRouter::SellPermitParams {
@@ -181,8 +134,21 @@ impl<P: Provider + Clone> DexRouter<P> {
             tx_builder = tx_builder.gas(gas_limit);
         }
 
-        if let Some(gas_price) = params.gas_price {
-            tx_builder = tx_builder.gas_price(gas_price);
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
         }
 
         if let Some(nonce) = params.nonce {
@@ -190,14 +156,145 @@ impl<P: Provider + Clone> DexRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
+        Ok(*tx.tx_hash())
+    }
 
-        Ok(TransactionResult {
-            transaction_hash: receipt.transaction_hash,
-            block_number: receipt.block_number,
-            gas_used: Some(U256::from(receipt.gas_used)),
-            status: receipt.status(),
-            logs: receipt.logs().to_vec(),
-        })
+    pub async fn exact_out_buy(
+        &self,
+        params: crate::types::ExactOutBuyParams,
+    ) -> Result<B256> {
+        let contract = IDexRouter::new(self.address, self.provider.as_ref());
+
+        let router_params = IDexRouter::ExactOutBuyParams {
+            amountInMax: params.amount_in_max,
+            amountOut: params.amount_out,
+            token: params.token,
+            to: params.to,
+            deadline: params.deadline,
+        };
+
+        let mut tx_builder = contract.exactOutBuy(router_params).value(params.amount_in_max);
+
+        if let Some(gas_limit) = params.gas_limit {
+            tx_builder = tx_builder.gas(gas_limit.into());
+        }
+
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price((*gas_price).into());
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        }
+
+        if let Some(nonce) = params.nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        Ok(*tx.tx_hash())
+    }
+
+    pub async fn exact_out_sell(
+        &self,
+        params: crate::types::ExactOutSellParams,
+    ) -> Result<B256> {
+        let contract = IDexRouter::new(self.address, self.provider.as_ref());
+
+        let router_params = IDexRouter::ExactOutSellParams {
+            amountInMax: params.amount_in_max,
+            amountOut: params.amount_out,
+            token: params.token,
+            to: params.to,
+            deadline: params.deadline,
+        };
+
+        let mut tx_builder = contract.exactOutSell(router_params);
+
+        if let Some(gas_limit) = params.gas_limit {
+            tx_builder = tx_builder.gas(gas_limit);
+        }
+
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        }
+
+        if let Some(nonce) = params.nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        Ok(*tx.tx_hash())
+    }
+
+    pub async fn exact_out_sell_permit(
+        &self,
+        params: crate::types::ExactOutSellPermitParams,
+    ) -> Result<B256> {
+        let contract = IDexRouter::new(self.address, self.provider.as_ref());
+
+        let router_params = IDexRouter::ExactOutSellPermitParams {
+            amountInMax: params.amount_in_max,
+            amountOut: params.amount_out,
+            amountAllowance: params.amount_allowance,
+            token: params.token,
+            to: params.to,
+            deadline: params.deadline,
+            v: params.v,
+            r: params.r,
+            s: params.s,
+        };
+
+        let mut tx_builder = contract.exactOutSellPermit(router_params);
+
+        if let Some(gas_limit) = params.gas_limit {
+            tx_builder = tx_builder.gas(gas_limit);
+        }
+
+        if let Some(gas_price) = &params.gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price(*gas_price);
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
+        }
+
+        if let Some(nonce) = params.nonce {
+            tx_builder = tx_builder.nonce(nonce);
+        }
+
+        let tx = tx_builder.send().await?;
+        Ok(*tx.tx_hash())
     }
 }

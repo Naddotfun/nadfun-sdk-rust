@@ -50,7 +50,7 @@ sol! {
 
         event CurveTokenLocked(address indexed token);
 
-        event CurveTokenListed(address indexed token, address indexed pool);
+        event CurveGraduate(address indexed token, address indexed pool);
     }
 }
 
@@ -62,7 +62,7 @@ pub enum EventType {
     Sell,
     Sync,
     Lock,
-    Listed,
+    Graduate,
 }
 
 impl EventType {
@@ -74,7 +74,7 @@ impl EventType {
             EventType::Sell => IBondingCurve::CurveSell::SIGNATURE_HASH,
             EventType::Sync => IBondingCurve::CurveSync::SIGNATURE_HASH,
             EventType::Lock => IBondingCurve::CurveTokenLocked::SIGNATURE_HASH,
-            EventType::Listed => IBondingCurve::CurveTokenListed::SIGNATURE_HASH,
+            EventType::Graduate => IBondingCurve::CurveGraduate::SIGNATURE_HASH,
         }
     }
 }
@@ -147,9 +147,9 @@ pub struct LockEvent {
     pub log_index: u64,
 }
 
-/// Listed event - when token is listed on Uniswap
+/// Graduate event - when token graduates to DEX
 #[derive(Debug, Clone)]
-pub struct ListedEvent {
+pub struct GraduateEvent {
     pub token: Address,
     pub pool: Address,
     pub block_number: u64,
@@ -166,7 +166,7 @@ pub enum BondingCurveEvent {
     Sell(SellEvent),
     Sync(SyncEvent),
     Lock(LockEvent),
-    Listed(ListedEvent),
+    Graduate(GraduateEvent),
 }
 
 impl BondingCurveEvent {
@@ -177,7 +177,7 @@ impl BondingCurveEvent {
             BondingCurveEvent::Sell(e) => e.token,
             BondingCurveEvent::Sync(e) => e.token,
             BondingCurveEvent::Lock(e) => e.token,
-            BondingCurveEvent::Listed(e) => e.token,
+            BondingCurveEvent::Graduate(e) => e.token,
         }
     }
 
@@ -188,7 +188,7 @@ impl BondingCurveEvent {
             BondingCurveEvent::Sell(_) => EventType::Sell,
             BondingCurveEvent::Sync(_) => EventType::Sync,
             BondingCurveEvent::Lock(_) => EventType::Lock,
-            BondingCurveEvent::Listed(_) => EventType::Listed,
+            BondingCurveEvent::Graduate(_) => EventType::Graduate,
         }
     }
 
@@ -199,7 +199,7 @@ impl BondingCurveEvent {
             BondingCurveEvent::Sell(e) => e.block_number,
             BondingCurveEvent::Sync(e) => e.block_number,
             BondingCurveEvent::Lock(e) => e.block_number,
-            BondingCurveEvent::Listed(e) => e.block_number,
+            BondingCurveEvent::Graduate(e) => e.block_number,
         }
     }
 
@@ -210,7 +210,7 @@ impl BondingCurveEvent {
             BondingCurveEvent::Sell(e) => e.transaction_index,
             BondingCurveEvent::Sync(e) => e.transaction_index,
             BondingCurveEvent::Lock(e) => e.transaction_index,
-            BondingCurveEvent::Listed(e) => e.transaction_index,
+            BondingCurveEvent::Graduate(e) => e.transaction_index,
         }
     }
 
@@ -221,7 +221,7 @@ impl BondingCurveEvent {
             BondingCurveEvent::Sell(e) => e.log_index,
             BondingCurveEvent::Sync(e) => e.log_index,
             BondingCurveEvent::Lock(e) => e.log_index,
-            BondingCurveEvent::Listed(e) => e.log_index,
+            BondingCurveEvent::Graduate(e) => e.log_index,
         }
     }
 }
@@ -327,10 +327,10 @@ pub fn decode_bonding_curve_event(log: Log) -> Result<BondingCurveEvent> {
             transaction_index: log.transaction_index.unwrap_or(0),
             log_index: log.log_index.unwrap_or(0),
         }))
-    } else if *topic0 == IBondingCurve::CurveTokenListed::SIGNATURE_HASH {
-        let IBondingCurve::CurveTokenListed { token, pool } = log.log_decode()?.inner.data;
+    } else if *topic0 == IBondingCurve::CurveGraduate::SIGNATURE_HASH {
+        let IBondingCurve::CurveGraduate { token, pool } = log.log_decode()?.inner.data;
 
-        Ok(BondingCurveEvent::Listed(ListedEvent {
+        Ok(BondingCurveEvent::Graduate(GraduateEvent {
             token,
             pool,
             block_number: log.block_number.unwrap_or(0),
@@ -349,4 +349,4 @@ pub const CURVE_BUY_SIGNATURE: B256 = IBondingCurve::CurveBuy::SIGNATURE_HASH;
 pub const CURVE_SELL_SIGNATURE: B256 = IBondingCurve::CurveSell::SIGNATURE_HASH;
 pub const CURVE_SYNC_SIGNATURE: B256 = IBondingCurve::CurveSync::SIGNATURE_HASH;
 pub const CURVE_TOKEN_LOCKED_SIGNATURE: B256 = IBondingCurve::CurveTokenLocked::SIGNATURE_HASH;
-pub const CURVE_TOKEN_LISTED_SIGNATURE: B256 = IBondingCurve::CurveTokenListed::SIGNATURE_HASH;
+pub const CURVE_GRADUATE_SIGNATURE: B256 = IBondingCurve::CurveGraduate::SIGNATURE_HASH;

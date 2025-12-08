@@ -1,0 +1,442 @@
+[
+  {
+    "type": "function",
+    "name": "buy",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IDexRouter.BuyParams",
+        "components": [
+          {
+            "name": "amountOutMin",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "calculateFeeAmount",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "feeAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "exactOutBuy",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IDexRouter.ExactOutBuyParams",
+        "components": [
+          {
+            "name": "amountInMax",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "exactOutSell",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IDexRouter.ExactOutSellParams",
+        "components": [
+          {
+            "name": "amountInMax",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "exactOutSellPermit",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IDexRouter.ExactOutSellPermitParams",
+        "components": [
+          {
+            "name": "amountInMax",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountAllowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "v",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "r",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "s",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "routerFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint24",
+        "internalType": "uint24"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "sell",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IDexRouter.SellParams",
+        "components": [
+          {
+            "name": "amountIn",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountOutMin",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "sellPermit",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IDexRouter.SellPermitParams",
+        "components": [
+          {
+            "name": "amountIn",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountOutMin",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "amountAllowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "v",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "r",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "s",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "DexRouterBuy",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DexRouterSell",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "ExpiredDeadLine",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientInput",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientOutput",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAmountIn",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAmountOut",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidCallback",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Unauthorized",
+    "inputs": []
+  }
+]

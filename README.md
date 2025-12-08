@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.2.1"
+nadfun_sdk = "0.3.1"
 ```
 
 ## Quick Start
@@ -22,30 +22,98 @@ async fn main() -> Result<()> {
     let rpc_url = "https://your-rpc-endpoint".to_string();
     let private_key = "your_private_key_here".to_string();
 
-    // Trading with new gas estimation system
-    let trade = Trade::new(rpc_url.clone(), private_key.clone()).await?;
-    let token: Address = "0x...".parse()?;
-    let (router, amount_out) = trade.get_amount_out(token, parse_ether("0.1")?, true).await?;
+    // Initialize Core - set network once, it's used everywhere automatically
+    let core = Core::new(rpc_url.clone(), private_key.clone(), Network::Mainnet).await?;
 
-    // New unified gas estimation (v0.2.0)
+    // 1. Get quote for buying tokens
+    let token: Address = "0x...".parse()?;
+    let mon_amount = parse_ether("0.1")?; // Buy with 0.1 MON
+    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+
+    // 2. Apply slippage protection (5%)
+    let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
+
+    // 3. Estimate gas
     let gas_params = GasEstimationParams::Buy {
         token,
-        amount_in: parse_ether("0.1")?,
-        amount_out_min: amount_out,
-        to: trade.wallet_address(),
+        amount_in: mon_amount,
+        amount_out_min: min_tokens,
+        to: core.wallet_address(),
         deadline: U256::from(9999999999999999u64),
     };
-    let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+    let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+    let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
-    // Token operations
-    let token_helper = TokenHelper::new(rpc_url, private_key).await?;
-    let balance = token_helper.balance_of(token, "0x...".parse()?).await?;
+    // 4. Execute buy
+    let buy_params = BuyParams {
+        token,
+        amount_in: mon_amount,
+        amount_out_min: min_tokens,
+        to: core.wallet_address(),
+        deadline: U256::from(9999999999999999u64),
+        gas_limit: Some(gas_with_buffer),
+        gas_price: None, // Or use Some(GasPricing::Eip1559 { ... })
+        nonce: None,     // Auto-increment
+    };
+
+    // Execute buy - returns tx_hash immediately
+    let tx_hash = core.buy(buy_params, router).await?;
+    println!("Transaction submitted: {}", tx_hash);
+
+    // Optionally wait for receipt to check status
+    let receipt = core.get_receipt(tx_hash).await?;
+    println!("Transaction confirmed in block: {:?}", receipt.block_number);
+    println!("Gas used: {:?}", receipt.gas_used);
+    println!("Status: {}", if receipt.status { "Success" } else { "Failed" });
 
     Ok(())
 }
 ```
 
 ## Features
+
+### 🎨 Token Creation
+
+Create new tokens with automatic image upload, metadata storage, and initial buy:
+
+```rust
+use nadfun_sdk::{ActionId, Core, CreateTokenParams, Network};
+use alloy::primitives::utils::parse_ether;
+
+// Initialize Core
+let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+
+// Calculate initial buy amount
+let initial_buy_mon = parse_ether("1.5")?;
+let amount_out = core.get_initial_buy_amount_out(initial_buy_mon).await?;
+
+// Create token with all metadata
+let params = CreateTokenParams {
+    name: "My Token".to_string(),
+    symbol: "MTK".to_string(),
+    description: "My awesome token".to_string(),
+    image_uri: "https://i.imgur.com/yourimage.png".to_string(),
+    website: Some("https://mytoken.com".to_string()),
+    twitter: Some("https://x.com/mytoken".to_string()),
+    telegram: Some("https://t.me/mytoken".to_string()),
+    creator_address: core.wallet_address(),
+    amount_out,
+    value: initial_buy_mon,
+    action_id: ActionId::CapricornActor, // Choose CapricornActor (1) or AmplifyActor (2)
+};
+
+let result = core.create_token(params).await?;
+println!("Token created at: {}", result.token_address);
+```
+
+**Features:**
+- 🖼️ Automatic image upload to IPFS (JPEG, PNG, WEBP, SVG only)
+- 🤖 AI-powered NSFW detection and rejection
+- 📝 Metadata creation and storage
+- 🎲 Vanity address generation via salt mining
+- 💰 Initial buy transaction integration
+- 🔐 Automatic deploy fee calculation
+- 🎭 Type-safe actor selection via `ActionId` enum
 
 ### 🚀 Trading
 
@@ -55,7 +123,7 @@ Execute buy/sell operations on bonding curves with slippage protection:
 use nadfun_sdk::{Trade, SlippageUtils, GasEstimationParams, types::BuyParams};
 
 // Get quote and execute buy
-let (router, expected_tokens) = trade.get_amount_out(token, mon_amount, true).await?;
+let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
 let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
 // Use new unified gas estimation system
@@ -68,7 +136,7 @@ let gas_params = GasEstimationParams::Buy {
 };
 
 // Get accurate gas estimation from network
-let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.estimate_gas(&router, gas_params).await?;
 let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
 let buy_params = BuyParams {
@@ -78,16 +146,70 @@ let buy_params = BuyParams {
     to: wallet_address,
     deadline: U256::from(deadline),
     gas_limit: Some(gas_with_buffer), // Use network-based estimation
-    gas_price: Some(50_000_000_000), // 50 gwei
-    nonce: None, // Auto-detect
+    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 50_000_000_000 }), // 50 gwei
+    nonce: None,                       // Auto-detect
 };
 
-let result = trade.buy(buy_params, router).await?;
+// Execute buy - returns tx_hash immediately (fast!)
+let tx_hash = core.buy(buy_params, router).await?;
+println!("Transaction submitted: {}", tx_hash);
+
+// Later, check the transaction status if needed
+let receipt = core.get_receipt(tx_hash).await?;
+if receipt.status {
+    println!("Trade successful! Gas used: {:?}", receipt.gas_used);
+}
+```
+
+#### Fast Transaction Submission
+
+**New in v0.3.0**: All trading functions now return transaction hash immediately without waiting for confirmation. This makes your trading bot much faster!
+
+```rust
+// OLD - Waits for confirmation (slow)
+let result = core.buy(params, router).await?;  // Waits ~2-15 seconds
+
+// NEW - Returns immediately (fast!)
+let tx_hash = core.buy(params, router).await?;  // Returns in milliseconds
+println!("Submitted: {}", tx_hash);
+
+// Check status later when you need it
+let receipt = core.get_receipt(tx_hash).await?;
+println!("Confirmed: {}", receipt.status);
 ```
 
 ### ⛽ Gas Management
 
-**v0.2.0 introduces a unified gas estimation system** that replaces static constants with real-time network estimation:
+**v0.2.0 introduces a unified gas estimation system** that replaces static constants with real-time network estimation.
+
+**v0.3.0 adds EIP-1559 gas pricing support** for better transaction fee control:
+
+#### Gas Pricing Options (New in v0.3.1)
+
+```rust
+use nadfun_sdk::types::GasPricing;
+
+// Option 1: Legacy (default) - uses network gas price
+let gas_price = Some(GasPricing::Legacy);
+
+// Option 2: Legacy with explicit gas price
+let gas_price = Some(GasPricing::LegacyWithPrice {
+    gas_price: 50_000_000_000, // 50 gwei
+});
+
+// Option 3: EIP-1559 (recommended for Monad)
+let gas_price = Some(GasPricing::Eip1559 {
+    max_fee_per_gas: 100_000_000_000,        // 100 gwei max
+    max_priority_fee_per_gas: 2_000_000_000, // 2 gwei tip
+});
+
+// Use in BuyParams/SellParams
+let buy_params = BuyParams {
+    // ... other fields
+    gas_price,  // Unified gas pricing field
+    nonce: None,
+};
+```
 
 #### Unified Gas Estimation (New in v0.2.0)
 
@@ -104,7 +226,7 @@ let gas_params = GasEstimationParams::Buy {
 };
 
 // Get real-time gas estimation from network
-let estimated_gas = trade.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
 let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
@@ -163,7 +285,7 @@ let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 // NEW (v0.2.0) - Network-based estimation
 use nadfun_sdk::GasEstimationParams;
 let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
-let estimated_gas = trade.estimate_gas(&router, params).await?;
+let estimated_gas = core.estimate_gas(&router, params).await?;
 let gas_limit = estimated_gas * 120 / 100; // Apply buffer
 ```
 
@@ -277,7 +399,7 @@ println!("Found {} events", events.len());
 
 ### 🔍 Pool Discovery
 
-Find Uniswap V3 pool addresses for tokens:
+Find Capricorn CL pool addresses for tokens:
 
 ```rust
 use nadfun_sdk::stream::UniswapSwapIndexer;
@@ -292,7 +414,7 @@ let indexer = UniswapSwapIndexer::discover_pool_for_token(provider, token).await
 
 ### 💱 DEX Monitoring
 
-Monitor Uniswap V3 swap events:
+Monitor Capricorn CL swap events:
 
 ```rust
 use nadfun_sdk::stream::UniswapSwapIndexer;
@@ -314,6 +436,21 @@ for swap in swaps {
 
 The SDK includes comprehensive examples in the `examples/` directory:
 
+### Token Creation Examples
+
+```bash
+# Create a new token
+cargo run --example create_token -- \
+  --private-key your_private_key \
+  --rpc-url https://your-rpc-url \
+  --network mainnet \
+  --name "My Token" \
+  --symbol "MTK" \
+  --description "My awesome token" \
+  --image-uri "https://i.imgur.com/yourimage.png" \
+  --initial-buy "1.5"
+```
+
 ### Trading Examples
 
 ```bash
@@ -326,7 +463,7 @@ export RECIPIENT="0xRecipientAddress"  # For token operations
 cargo run --example buy              # Buy tokens with network-based gas estimation
 cargo run --example sell             # Sell tokens with automatic approval handling
 cargo run --example sell_permit      # Gasless sell with real permit signatures
-cargo run --example gas_estimation   # Comprehensive gas estimation example (NEW)
+cargo run --example gas_estimation   # Comprehensive gas estimation example
 cargo run --example basic_operations # Token operations (requires recipient)
 
 # Using command line arguments
@@ -346,7 +483,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 
 **Features:**
 
-- **Unified Gas Estimation**: Demonstrates `trade.estimate_gas()` for all operation types
+- **Unified Gas Estimation**: Demonstrates `core.estimate_gas()` for all operation types
 - **Automatic Approval**: Handles token approval for SELL operations automatically
 - **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
 - **Buffer Strategies**: Shows different buffer calculation methods (fixed +50k, percentage 20%-25%)
@@ -445,7 +582,7 @@ cargo run --example dex_stream -- \
 - ✅ Automatic pool discovery for tokens
 - ✅ Direct pool address monitoring
 - ✅ Single token pool discovery
-- ✅ Real-time Uniswap V3 swap events
+- ✅ Real-time Capricorn CL swap events
 - ✅ Pool metadata included
 - ✅ WebSocket streaming
 
@@ -454,7 +591,7 @@ cargo run --example dex_stream -- \
 **5. pool_discovery** - Automated pool address discovery
 
 ```bash
-# Find Uniswap V3 pools for multiple tokens
+# Find Capricorn CL pools for multiple tokens
 cargo run --example pool_discovery -- \
   --rpc-url https://your-rpc-endpoint \
   --tokens 0xToken1,0xToken2
@@ -524,7 +661,7 @@ cargo run --example dex_stream -- --token 0xTokenAddress --ws-url wss://your-ws-
 - `BondingCurveEvent`: Unified enum for all bonding curve events
   - `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Listed` variants
   - Methods: `.token()`, `.event_type()`, `.block_number()`, `.transaction_index()`
-- `SwapEvent`: Uniswap V3 swap events with complete metadata
+- `SwapEvent`: Capricorn CL swap events with complete metadata
   - Fields: `pool_address`, `amount0`, `amount1`, `sender`, `recipient`, `liquidity`, `tick`, `sqrt_price_x96`
 - `EventType`: Enum for filtering bonding curve events
   - Variants: `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Listed`
@@ -617,8 +754,8 @@ The SDK uses `anyhow::Result` for error handling:
 use anyhow::Result;
 
 async fn example() -> Result<()> {
-    let trade = Trade::new(rpc_url, private_key).await?;
-    let result = trade.get_amount_out(token, amount, true).await?;
+    let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+    let result = core.get_amount_out(token, amount, true).await?;
     Ok(())
 }
 ```
@@ -638,7 +775,7 @@ async fn example() -> Result<()> {
 - **Bonding Curve**: 4 scenarios (all events, filtered events, filtered tokens, combined)
 - **DEX Streaming**: 3 scenarios (specific pools, token discovery, single token)
 - **Historical Data**: Block range processing with automatic batching
-- **Pool Discovery**: Automatic Uniswap V3 pool detection for tokens
+- **Pool Discovery**: Automatic Capricorn CL pool detection for tokens
 
 ### ⚡ Performance Features
 

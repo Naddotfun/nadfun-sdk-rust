@@ -1,4 +1,4 @@
-use crate::constants::BONDING_CURVE;
+use crate::constants::get_bonding_curve;
 use crate::types::{BondingCurveEvent, EventType, decode_bonding_curve_event};
 use alloy::{
     primitives::{Address, B256},
@@ -19,7 +19,7 @@ impl<P: Provider + Clone> CurveIndexer<P> {
     }
 
     fn bonding_curve_address(&self) -> Address {
-        BONDING_CURVE
+        get_bonding_curve()
             .parse()
             .expect("Invalid bonding curve address")
     }

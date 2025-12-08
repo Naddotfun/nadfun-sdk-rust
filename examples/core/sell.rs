@@ -25,8 +25,8 @@ use alloy::eips::BlockId;
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
-use nadfun_sdk::types::SellParams;
-use nadfun_sdk::{GasEstimationParams, SlippageUtils, TokenHelper, Trade};
+use nadfun_sdk::types::{SellParams, GasPricing};
+use nadfun_sdk::{Core, GasEstimationParams, SlippageUtils, TokenHelper};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -56,15 +56,15 @@ async fn main() -> Result<()> {
     // Slippage protection (5%)
     let slippage_percent = 5.0;
 
-    // Create Trade and TokenHelper instances
-    let trade = Trade::new(config.rpc_url.clone(), private_key.clone()).await?;
+    // Create Core and TokenHelper instances with network
+    let core = Core::new(config.rpc_url.clone(), private_key.clone(), config.network).await?;
     let token_helper = TokenHelper::new(config.rpc_url, private_key).await?;
 
-    // Get wallet address from trade instance
-    let wallet = trade.wallet_address();
+    // Get wallet address from core instance
+    let wallet = core.wallet_address();
 
     // Get quote: how much ETH we'll receive
-    let (router, expected_eth) = trade.get_amount_out(token, token_amount, false).await?;
+    let (router, expected_eth) = core.get_amount_out(token, token_amount, false).await?;
 
     println!("📊 Quote:");
     println!("  Tokens to sell: {}", token_amount);
@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
     println!("⏰ Deadline: {}", deadline);
 
     // Get current account nonce
-    let current_nonce = trade
+    let current_nonce = core
         .provider()
         .get_transaction_count(wallet)
         .block_id(BlockId::latest())
@@ -120,7 +120,7 @@ async fn main() -> Result<()> {
     println!("📊 Current account nonce: {}", current_nonce);
 
     // Get current network gas price
-    let network_gas_price_raw = trade.provider().get_gas_price().await?;
+    let network_gas_price_raw = core.provider().get_gas_price().await?;
     let network_gas_price = U256::from(network_gas_price_raw);
     let recommended_gas_price = network_gas_price * U256::from(300) / U256::from(100); // 200% higher than network for EIP-1559
     println!(
@@ -141,7 +141,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let estimated_gas = match trade.estimate_gas(&router, gas_params).await {
+    let estimated_gas = match core.estimate_gas(&router, gas_params).await {
         Ok(gas) => {
             println!("⛽ Estimated gas for sell: {}", gas);
             gas
@@ -165,7 +165,9 @@ async fn main() -> Result<()> {
         to: wallet,
         deadline,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
-        gas_price: Some(recommended_gas_price.try_into().unwrap_or(50_000_000_000)), // Use higher gas price
+        gas_price: Some(GasPricing::LegacyWithPrice {
+            gas_price: recommended_gas_price.try_into().unwrap_or(50_000_000_000)
+        }),
         nonce: Some(current_nonce), // Use actual account nonce
     };
 
@@ -178,17 +180,21 @@ async fn main() -> Result<()> {
 
     println!("🚀 Executing sell transaction...");
 
-    // Execute sell transaction
-    let result = trade.sell(sell_params, router).await?;
+    // Execute sell transaction - returns tx_hash immediately
+    let tx_hash = core.sell(sell_params, router).await?;
+    println!("✅ Transaction submitted!");
+    println!("  Transaction hash: {}", tx_hash);
 
-    if result.status {
+    // Wait for transaction receipt
+    println!("⏳ Waiting for confirmation...");
+    let receipt = core.get_receipt(tx_hash).await?;
+
+    if receipt.status {
         println!("✅ Sell successful!");
-        println!("  Transaction hash: {}", result.transaction_hash);
-        println!("  Block number: {:?}", result.block_number);
-        println!("  Gas used: {:?}", result.gas_used);
+        println!("  Block number: {:?}", receipt.block_number);
+        println!("  Gas used: {:?}", receipt.gas_used);
     } else {
         println!("❌ Sell failed!");
-        println!("  Transaction hash: {}", result.transaction_hash);
     }
 
     Ok(())
