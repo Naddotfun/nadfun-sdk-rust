@@ -44,12 +44,9 @@ pub struct BuyParams {
     pub to: Address,
     pub deadline: U256,
     pub gas_limit: Option<u64>,
-    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
-    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
-    /// If set, gas_price is ignored
-    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,12 +57,9 @@ pub struct SellParams {
     pub to: Address,
     pub deadline: U256,
     pub gas_limit: Option<u64>,
-    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
-    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
-    /// If set, gas_price is ignored
-    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,11 +74,9 @@ pub struct SellPermitParams {
     pub r: B256,                // r part of the signature
     pub s: B256,                // s part of the signature
     pub gas_limit: Option<u64>,
-    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
-    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
-    pub gas_pricing: Option<GasPricing>,
 }
 
 // ExactOut variants - specify exact output amount, get variable input
@@ -97,11 +89,9 @@ pub struct ExactOutBuyParams {
     pub to: Address,            // Address to receive the tokens
     pub deadline: U256,         // Timestamp after which the transaction will revert
     pub gas_limit: Option<u64>,
-    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
-    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
-    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -112,11 +102,9 @@ pub struct ExactOutSellParams {
     pub to: Address,            // Address to receive the MON
     pub deadline: U256,         // Timestamp after which the transaction will revert
     pub gas_limit: Option<u64>,
-    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
-    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
-    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -131,11 +119,9 @@ pub struct ExactOutSellPermitParams {
     pub r: B256,                // r part of the signature
     pub s: B256,                // s part of the signature
     pub gas_limit: Option<u64>,
-    /// Legacy gas price (Type 0) - deprecated, use gas_pricing instead
-    pub gas_price: Option<u128>,
+    /// Gas pricing strategy (Legacy, LegacyWithPrice, or EIP-1559)
+    pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
-    /// EIP-1559 gas pricing (Type 2) - Recommended for Monad
-    pub gas_pricing: Option<GasPricing>,
 }
 
 #[derive(Debug, Clone)]
@@ -204,16 +190,15 @@ mod tests {
             to,
             deadline: U256::from(1000000000u64),
             gas_limit: Some(21000), // Standard gas for transfer
-            gas_price: Some(20000000000), // 20 gwei
+            gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 20000000000 }), // 20 gwei
             nonce: Some(42),
-            gas_pricing: None,
         };
 
         assert_eq!(params.token, token);
         assert_eq!(params.amount_in, U256::from(1000000000000000000u64));
         assert_eq!(params.to, to);
         assert_eq!(params.gas_limit, Some(21000));
-        assert_eq!(params.gas_price, Some(20000000000));
+        assert!(matches!(params.gas_price, Some(GasPricing::LegacyWithPrice { gas_price: 20000000000 })));
         assert_eq!(params.nonce, Some(42));
     }
 
@@ -233,16 +218,15 @@ mod tests {
             to,
             deadline: U256::from(1000000000u64),
             gas_limit: Some(25000), // Slightly higher gas for sell
-            gas_price: Some(15000000000), // 15 gwei
+            gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 15000000000 }), // 15 gwei
             nonce: None,
-            gas_pricing: None,
         };
 
         assert_eq!(params.token, token);
         assert_eq!(params.amount_in, U256::from(1000000000000000000u64));
         assert_eq!(params.amount_out_min, U256::from(0));
         assert_eq!(params.gas_limit, Some(25000));
-        assert_eq!(params.gas_price, Some(15000000000));
+        assert!(matches!(params.gas_price, Some(GasPricing::LegacyWithPrice { gas_price: 15000000000 })));
         assert_eq!(params.nonce, None);
     }
 
@@ -266,16 +250,15 @@ mod tests {
             r: B256::ZERO,
             s: B256::ZERO,
             gas_limit: Some(30000), // Test gas amount
-            gas_price: Some(25000000000), // 25 gwei
+            gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 25000000000 }), // 25 gwei
             nonce: Some(100),
-            gas_pricing: None,
         };
 
         assert_eq!(params.token, token);
         assert_eq!(params.v, 27);
         assert_eq!(params.r, B256::ZERO);
         assert_eq!(params.gas_limit, Some(30000));
-        assert_eq!(params.gas_price, Some(25000000000));
+        assert!(matches!(params.gas_price, Some(GasPricing::LegacyWithPrice { gas_price: 25000000000 })));
         assert_eq!(params.nonce, Some(100));
     }
 

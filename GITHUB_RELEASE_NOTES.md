@@ -1,5 +1,46 @@
 # Release Notes
 
+## v0.3.1 (2025-01-16)
+
+### 🔧 API Simplification
+
+**Unified `gas_price` Field** - Merged `gas_price` and `gas_pricing` into a single field for cleaner API:
+
+#### Before (v0.3.0)
+```rust
+let buy_params = BuyParams {
+    // ... other fields
+    gas_price: Some(50_000_000_000),    // Legacy u128
+    gas_pricing: Some(GasPricing::Eip1559 { ... }), // Separate field
+};
+```
+
+#### After (v0.3.1)
+```rust
+let buy_params = BuyParams {
+    // ... other fields
+    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 50_000_000_000 }),
+    // Or: Some(GasPricing::Eip1559 { max_fee_per_gas, max_priority_fee_per_gas })
+    // Or: Some(GasPricing::Legacy) for network default
+    // Or: None for network default
+};
+```
+
+### ⚠️ Breaking Changes
+
+- **`gas_price` field type changed**: `Option<u128>` → `Option<GasPricing>`
+- **`gas_pricing` field removed**: Use `gas_price` with `GasPricing` enum instead
+- Affected structs: `BuyParams`, `SellParams`, `SellPermitParams`, `ExactOutBuyParams`, `ExactOutSellParams`, `ExactOutSellPermitParams`
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.1"
+```
+
+---
+
 ## v0.3.0 (2025-01-16)
 
 ### 🚀 Major Changes
@@ -58,6 +99,16 @@ This major release introduces comprehensive token creation capabilities, enhance
   - `IDexRouter.json` - DEX router for graduated tokens
   - `ILens.json` - Batch query optimization contract
 
+#### **EIP-1559 Gas Pricing Support**
+- **New `GasPricing` Enum** - Flexible gas pricing strategy for transactions
+  - `GasPricing::Legacy` - Default legacy gas pricing (Type 0)
+  - `GasPricing::LegacyWithPrice { gas_price }` - Legacy with explicit gas price
+  - `GasPricing::Eip1559 { max_fee_per_gas, max_priority_fee_per_gas }` - EIP-1559 (Type 2, recommended)
+- **Updated Trade Params** - All trade parameter structs now include `gas_price: Option<GasPricing>` field
+  - `BuyParams`, `SellParams`, `SellPermitParams`
+  - `ExactOutBuyParams`, `ExactOutSellParams`, `ExactOutSellPermitParams`
+- **Backward Compatible** - `gas_price: None` uses network default
+
 #### **Event Streaming Enhancements**
 - **Graduate Event Support** - Full support for token graduation events
   - Stream monitoring for `CurveGraduate` events
@@ -98,6 +149,26 @@ let result = core.create_token(params).await?;
 println!("Token created at: {}", result.token_address);
 ```
 
+#### **EIP-1559 Gas Pricing Example**
+```rust
+use nadfun_sdk::types::{BuyParams, GasPricing};
+
+// Use EIP-1559 for better fee control
+let buy_params = BuyParams {
+    token,
+    amount_in: mon_amount,
+    amount_out_min: min_tokens,
+    to: wallet_address,
+    deadline,
+    gas_limit: Some(300_000),
+    gas_price: Some(GasPricing::Eip1559 {
+        max_fee_per_gas: 100_000_000_000,        // 100 gwei
+        max_priority_fee_per_gas: 2_000_000_000, // 2 gwei tip
+    }),
+    nonce: None,
+};
+```
+
 ### 🔧 Breaking Changes
 
 #### **Module Restructuring**
@@ -128,6 +199,18 @@ println!("Token created at: {}", result.token_address);
 - Deploy fee automatically calculated and added to transaction value
 - Optional social media URLs (empty strings treated as `None`)
 - **ActionId Enum** - Choose between `ActionId::CapricornActor` (1) or `ActionId::AmplifyActor` (2)
+
+#### **Trade Parameter Updates**
+- All trade params (`BuyParams`, `SellParams`, etc.) now include `gas_price: Option<GasPricing>` field
+- Use `gas_price: None` for network default gas pricing
+- **New `GasPricing` Enum**:
+  ```rust
+  pub enum GasPricing {
+      Legacy,                                    // Network default
+      LegacyWithPrice { gas_price: u128 },       // Explicit legacy price
+      Eip1559 { max_fee_per_gas: u128, max_priority_fee_per_gas: u128 },
+  }
+  ```
 
 ### ⚠️ Migration Guide
 
@@ -207,7 +290,7 @@ twitter: Some("https://x.com/project".to_string())
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.0"
+nadfun_sdk = "0.3.1"
 ```
 
 **Full Changelog**: [v0.2.1...v0.3.0](https://github.com/Naddotfun/nadfun-sdk-rust/compare/v0.2.1...v0.3.0)
