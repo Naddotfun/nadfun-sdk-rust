@@ -1,5 +1,34 @@
 # Release Notes
 
+## v0.3.2 (2025-01-16)
+
+### 🔧 Enhancement
+
+- **`create` function now supports EIP-1559** - Token creation now uses unified `GasPricing` like other trade functions
+  - `gas_price: Option<u128>` → `gas_price: Option<GasPricing>`
+
+```rust
+// Example: Create token with EIP-1559
+bonding_curve_router.create(
+    name, symbol, token_uri, amount_out, salt, action_id, value,
+    Some(300_000), // gas_limit
+    Some(GasPricing::Eip1559 {
+        max_fee_per_gas: 100_000_000_000,
+        max_priority_fee_per_gas: 2_000_000_000,
+    }),
+    None, // nonce
+).await?;
+```
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.2"
+```
+
+---
+
 ## v0.3.1 (2025-01-16)
 
 ### 🔧 API Simplification
