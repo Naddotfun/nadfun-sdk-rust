@@ -1,5 +1,28 @@
 # Release Notes
 
+## v0.3.3 (2025-01-16)
+
+### 🔧 Update
+
+- **Testnet contract addresses updated** - All testnet addresses updated to latest deployment
+
+| Contract | Address |
+|----------|---------|
+| DEX_FACTORY | `0xE6dc50f36E26bAfC5f103021e01EF111402Cd940` |
+| BONDING_CURVE | `0x985Ae3529A1875698772C5fFbc66b8327049E094` |
+| BONDING_CURVE_ROUTER | `0x2D729C91aB77a887b3579aa50f55B50E5bC6dE46` |
+| DEX_ROUTER | `0x8a7697098da7F8692325046DB98F3dA9c480B529` |
+| LENS | `0x143dc84ac094edECABeF577Fb326aa4d9893D97B` |
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.3"
+```
+
+---
+
 ## v0.3.2 (2025-01-16)
 
 ### 🔧 Enhancement
