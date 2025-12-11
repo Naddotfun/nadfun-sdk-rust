@@ -57,7 +57,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         action_id: crate::types::ActionId,
         value: U256,
         gas_limit: Option<u64>,
-        gas_price: Option<u128>,
+        gas_price: Option<GasPricing>,
         nonce: Option<u64>,
     ) -> Result<(Address, TransactionResult)> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
@@ -77,8 +77,21 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             tx_builder = tx_builder.gas(gas_limit.into());
         }
 
-        if let Some(gas_price) = gas_price {
-            tx_builder = tx_builder.gas_price(gas_price.into());
+        if let Some(gas_price) = &gas_price {
+            match gas_price {
+                GasPricing::Legacy => {}
+                GasPricing::LegacyWithPrice { gas_price } => {
+                    tx_builder = tx_builder.gas_price((*gas_price).into());
+                }
+                GasPricing::Eip1559 {
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                } => {
+                    tx_builder = tx_builder
+                        .max_fee_per_gas(*max_fee_per_gas)
+                        .max_priority_fee_per_gas(*max_priority_fee_per_gas);
+                }
+            }
         }
 
         if let Some(nonce) = nonce {
