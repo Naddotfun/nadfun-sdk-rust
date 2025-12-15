@@ -3,7 +3,6 @@ use alloy::{
     primitives::{Address, B256, U256},
     providers::Provider,
     sol,
-    sol_types::SolEvent,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -46,7 +45,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         Ok(fee_config.deployFeeAmount)
     }
 
-    /// Create a new token
+    /// Create a new token - returns tx_hash immediately without waiting for receipt
     pub async fn create(
         &self,
         name: String,
@@ -59,7 +58,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         gas_limit: Option<u64>,
         gas_price: Option<GasPricing>,
         nonce: Option<u64>,
-    ) -> Result<(Address, TransactionResult)> {
+    ) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let params = IBondingCurveRouter::TokenCreationParams {
@@ -99,32 +98,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         }
 
         let tx = tx_builder.send().await?;
-        let receipt = tx.get_receipt().await?;
-
-        // Parse the CurveCreate event to get the token address
-        let mut token_address = Address::ZERO;
-        for log in receipt.inner.logs() {
-            // Convert RPC log to primitives log
-            let primitive_log = alloy::primitives::Log {
-                address: log.address(),
-                data: log.data().clone(),
-            };
-            if let Ok(decoded) = IBondingCurve::CurveCreate::decode_log(&primitive_log) {
-                token_address = decoded.data.token;
-                break;
-            }
-        }
-
-        Ok((
-            token_address,
-            TransactionResult {
-                transaction_hash: receipt.transaction_hash,
-                block_number: receipt.block_number,
-                gas_used: Some(U256::from(receipt.gas_used)),
-                status: receipt.status(),
-                logs: receipt.logs().to_vec(),
-            },
-        ))
+        Ok(*tx.tx_hash())
     }
 
     pub async fn buy(&self, params: BuyParams) -> Result<B256> {

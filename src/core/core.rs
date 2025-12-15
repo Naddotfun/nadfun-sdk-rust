@@ -300,17 +300,20 @@ impl Core {
     /// println!("Token created at: {}", result.token_address);
     /// ```
     pub async fn create_token(&self, params: CreateTokenParams) -> Result<TokenCreationResult> {
-        // Step 1-3: Prepare token creation (image upload, metadata, salt)
+        // Step 1-3: Prepare token creation (image upload, metadata, salt, token_address)
         let creation_client = TokenCreationClient::new();
-        let (metadata_uri, image_uri, salt, is_nsfw) =
+        let (metadata_uri, image_uri, salt, token_address_str, is_nsfw) =
             creation_client.prepare_token_creation(&params).await?;
+
+        // Parse token address
+        let token_address: Address = token_address_str.parse()?;
 
         // Get deploy fee
         let deploy_fee = self.get_deploy_fee().await?;
         let total_value = params.value + deploy_fee;
 
-        // Step 4: Execute create transaction on bonding curve
-        let (token_address, tx_result) = self
+        // Step 4: Execute create transaction on bonding curve - returns tx_hash immediately
+        let tx_hash = self
             .bonding_curve_router
             .create(
                 params.name.clone(),
@@ -331,7 +334,7 @@ impl Core {
             metadata_uri,
             image_uri,
             salt: format!("0x{}", hex::encode(salt)),
-            transaction_hash: tx_result.transaction_hash,
+            transaction_hash: tx_hash,
             is_nsfw, // Return is_nsfw status from server
         })
     }
