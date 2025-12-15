@@ -1,5 +1,23 @@
 # Release Notes
 
+## v0.3.4 (2025-01-16)
+
+### 🚀 Enhancement
+
+- **`create` function now returns tx_hash immediately** - No longer waits for receipt
+  - `bonding_curve.create()` returns `B256` (tx_hash) instead of `(Address, TransactionResult)`
+  - Token address is now obtained from salt API response (CREATE2 pre-calculation)
+  - Faster token creation flow
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.4"
+```
+
+---
+
 ## v0.3.3 (2025-01-16)
 
 ### 🔧 Update

@@ -68,6 +68,7 @@ pub struct SaltParams {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PostSaltData {
     pub salt: String,
+    pub address: String,
 }
 
 /// Complete token creation parameters

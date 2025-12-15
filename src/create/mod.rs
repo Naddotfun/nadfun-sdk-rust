@@ -199,7 +199,7 @@ impl TokenCreationClient {
     /// 1. Download image from URI and upload to metadata server
     /// 2. Create metadata on server
     /// 3. Get salt value from server
-    /// 4. Return all prepared data for transaction execution (including is_nsfw status)
+    /// 4. Return all prepared data for transaction execution (including is_nsfw status and token address)
     ///
     /// Returns an error if the server detects NSFW content (is_nsfw = true)
     ///
@@ -208,7 +208,7 @@ impl TokenCreationClient {
     pub async fn prepare_token_creation(
         &self,
         params: &CreateTokenParams,
-    ) -> Result<(String, String, [u8; 32], bool)> {
+    ) -> Result<(String, String, [u8; 32], String, bool)> {
         // Step 1: Download and upload image
         let upload_result = self.upload_image_from_uri(&params.image_uri).await?;
 
@@ -245,7 +245,7 @@ impl TokenCreationClient {
         };
         let metadata_result = self.post_metadata(metadata_params).await?;
 
-        // Step 3: Get salt
+        // Step 3: Get salt and token address
         let salt_params = SaltParams {
             creator: format!("{:?}", params.creator_address),
             metadata_uri: metadata_result.metadata_uri.clone(),
@@ -261,6 +261,7 @@ impl TokenCreationClient {
             metadata_result.metadata_uri,
             upload_result.image_uri,
             salt_bytes,
+            salt_result.address, // Token address from CREATE2 calculation
             upload_result.is_nsfw, // Return is_nsfw status from server
         ))
     }
