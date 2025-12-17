@@ -103,16 +103,16 @@ pub mod addresses {
         pub const WMON: &str = "0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701";
 
         /// Main bonding curve contract where new tokens are created and initially traded
-        pub const BONDING_CURVE: &str = "0x985Ae3529A1875698772C5fFbc66b8327049E094";
+        pub const BONDING_CURVE: &str = "0xbD40afc47F0a42680819513d556C2eBCcd1eBC68";
 
         /// Bonding curve router for optimized trading operations
-        pub const BONDING_CURVE_ROUTER: &str = "0x2D729C91aB77a887b3579aa50f55B50E5bC6dE46";
+        pub const BONDING_CURVE_ROUTER: &str = "0xC703bCe420882b1A35428773B92731adCB4a1f7f";
 
         /// DEX router for Capricorn CL operations
-        pub const DEX_ROUTER: &str = "0x8a7697098da7F8692325046DB98F3dA9c480B529";
+        pub const DEX_ROUTER: &str = "0x65586647FC66221c5f208F9b8FC0A93C72e3a598";
 
         /// Utility LENS contract for batched operations
-        pub const LENS_ADDRESS: &str = "0x143dc84ac094edECABeF577Fb326aa4d9893D97B";
+        pub const LENS_ADDRESS: &str = "0x181B05cD8D73564A22C17825F3413A0f30634CCF";
     }
 
     // Legacy exports for backward compatibility (defaults to mainnet)
