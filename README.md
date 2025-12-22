@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.4"
+nadfun_sdk = "0.3.5"
 ```
 
 ## Quick Start
