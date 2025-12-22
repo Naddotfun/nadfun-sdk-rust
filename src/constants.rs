@@ -92,6 +92,9 @@ pub mod addresses {
 
         /// Utility LENS contract for batched operations
         pub const LENS_ADDRESS: &str = "0x7e78A8DE94f21804F7a17F4E8BF9EC2c872187ea";
+
+        /// API server URL for metadata and token creation
+        pub const API_SERVER_URL: &str = "https://api.nad.fun";
     }
 
     /// Testnet contract addresses
@@ -113,6 +116,9 @@ pub mod addresses {
 
         /// Utility LENS contract for batched operations
         pub const LENS_ADDRESS: &str = "0x181B05cD8D73564A22C17825F3413A0f30634CCF";
+
+        /// API server URL for metadata and token creation
+        pub const API_SERVER_URL: &str = "https://dev-api.nad.fun";
     }
 
     // Legacy exports for backward compatibility (defaults to mainnet)
@@ -177,6 +183,14 @@ pub fn get_lens_address() -> &'static str {
     match get_current_network() {
         Network::Mainnet => addresses::mainnet::LENS_ADDRESS,
         Network::Testnet => addresses::testnet::LENS_ADDRESS,
+    }
+}
+
+/// Get API server URL for the current network
+pub fn get_api_server_url() -> &'static str {
+    match get_current_network() {
+        Network::Mainnet => addresses::mainnet::API_SERVER_URL,
+        Network::Testnet => addresses::testnet::API_SERVER_URL,
     }
 }
 

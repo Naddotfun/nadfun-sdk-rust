@@ -6,14 +6,12 @@
 //! 3. Get salt value from server
 //! 4. Execute create transaction on bonding curve
 
+use crate::constants::get_api_server_url;
 use crate::types::{
     CreateTokenParams, MetadataParams, PostMetadataData, PostSaltData, SaltParams, UploadImageData,
 };
 use anyhow::Result;
 use reqwest;
-
-/// Base API server URL
-pub const API_SERVER_URL: &str = "https://api.nad.fun";
 
 /// Allowed image types for token creation
 pub const ALLOWED_IMAGE_TYPES: [&str; 4] =
@@ -27,10 +25,11 @@ pub struct TokenCreationClient {
 
 impl TokenCreationClient {
     /// Create a new token creation client
+    /// Uses the API server URL based on the current network setting
     pub fn new() -> Self {
         Self {
             http_client: reqwest::Client::new(),
-            api_url: API_SERVER_URL.to_string(),
+            api_url: get_api_server_url().to_string(),
         }
     }
 
