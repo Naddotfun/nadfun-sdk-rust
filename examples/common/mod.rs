@@ -194,7 +194,9 @@ impl Config {
                     println!("  --token <ADDRESS>    Token address for operations");
                     println!("  --tokens <ADDRS>     Token addresses: 'addr1,addr2' or '[\"addr1\",\"addr2\"]'");
                     println!("  --recipient <ADDR>   Recipient address for transfers/allowances");
-                    println!("  --network <NET>      Network: mainnet or testnet (default: mainnet)");
+                    println!(
+                        "  --network <NET>      Network: mainnet or testnet (default: mainnet)"
+                    );
                     println!();
                     println!("Token creation options:");
                     println!("  --name <NAME>        Token name");

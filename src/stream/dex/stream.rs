@@ -63,7 +63,7 @@ impl DexStream {
 
     /// Subscribe to swap events - provides raw swap events
     pub async fn subscribe(&self) -> Result<Pin<Box<dyn Stream<Item = Result<SwapEvent>> + Send>>> {
-        use crate::types::{ICapricornCLPool, decode_swap_event};
+        use crate::types::{decode_swap_event, ICapricornCLPool};
         use alloy::rpc::types::Filter;
         use futures_util::StreamExt;
 
@@ -78,7 +78,7 @@ impl DexStream {
 
         let stream = sub
             .into_stream()
-            .map(move |log| decode_swap_event(log))
+            .map(decode_swap_event)
             .filter_map(|result| async move {
                 match result {
                     Ok(event) => Some(Ok(event)),

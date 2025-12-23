@@ -161,7 +161,7 @@ pub async fn estimate_buy_gas<P: Provider>(
                 )
                 .await?;
 
-            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+            Ok(gas)
         }
         Router::Dex(router_addr) => {
             use crate::contracts::dex::IDexRouter;
@@ -187,7 +187,7 @@ pub async fn estimate_buy_gas<P: Provider>(
                 )
                 .await?;
 
-            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+            Ok(gas)
         }
     }
 }
@@ -227,7 +227,7 @@ pub async fn estimate_sell_gas<P: Provider>(
                 )
                 .await?;
 
-            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+            Ok(gas)
         }
         Router::Dex(router_addr) => {
             use crate::contracts::dex::IDexRouter;
@@ -253,12 +253,13 @@ pub async fn estimate_sell_gas<P: Provider>(
                 )
                 .await?;
 
-            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+            Ok(gas)
         }
     }
 }
 
 /// Estimate gas for sell permit operation
+#[allow(clippy::too_many_arguments)]
 pub async fn estimate_sell_permit_gas<P: Provider>(
     provider: Arc<P>,
     router: &Router,
@@ -300,9 +301,7 @@ pub async fn estimate_sell_permit_gas<P: Provider>(
                 )
                 .await?;
 
-            Ok(gas
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+            Ok(gas)
         }
         Router::Dex(router_addr) => {
             use crate::contracts::dex::IDexRouter;
@@ -332,8 +331,7 @@ pub async fn estimate_sell_permit_gas<P: Provider>(
                 )
                 .await?;
 
-            Ok(gas.try_into().map_err(|_| anyhow::anyhow!("Gas estimation overflow"))?)
+            Ok(gas)
         }
     }
 }
-

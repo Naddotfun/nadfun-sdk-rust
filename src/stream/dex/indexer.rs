@@ -3,7 +3,7 @@
 //! This module provides historical indexing for DEX (Capricorn CL) Swap events.
 //! All types are defined in the types::uniswap module.
 
-use crate::types::{SwapEvent, ICapricornCLPool, decode_swap_event};
+use crate::types::{decode_swap_event, ICapricornCLPool, SwapEvent};
 use alloy::{
     primitives::Address,
     providers::{DynProvider, Provider, ProviderBuilder},
@@ -25,7 +25,7 @@ impl DexIndexer {
     pub fn new(rpc_url: String, pool_addresses: Vec<Address>) -> Result<Self> {
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
         let dyn_provider = Arc::new(DynProvider::new(provider));
-        
+
         Ok(Self {
             provider: dyn_provider,
             pool_addresses,

@@ -13,7 +13,7 @@ impl SlippageUtils {
     /// # Returns
     /// Minimum amount out considering slippage
     pub fn calculate_amount_out_min(amount_out: U256, slippage_percent: f64) -> U256 {
-        if slippage_percent < 0.0 || slippage_percent >= 100.0 {
+        if !(0.0..100.0).contains(&slippage_percent) {
             return U256::ZERO; // Invalid slippage
         }
 
@@ -32,7 +32,7 @@ impl SlippageUtils {
     /// # Returns
     /// Maximum amount in considering slippage
     pub fn calculate_amount_in_max(amount_in: U256, slippage_percent: f64) -> U256 {
-        if slippage_percent < 0.0 || slippage_percent >= 100.0 {
+        if !(0.0..100.0).contains(&slippage_percent) {
             return U256::MAX; // Invalid slippage
         }
 

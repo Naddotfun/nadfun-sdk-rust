@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
         event_filter = Some(parse_event_types(&events_env)?);
     }
 
-    // Parse tokens if provided  
+    // Parse tokens if provided
     if !config.tokens.is_empty() {
         token_filter = Some(
             config
@@ -69,7 +69,10 @@ async fn main() -> Result<()> {
             run_specific_events_scenario(&config.ws_url, events.clone()).await?;
         }
         (None, Some(tokens)) => {
-            println!("🏷️ SCENARIO 3: Specific tokens only: {} tokens", tokens.len());
+            println!(
+                "🏷️ SCENARIO 3: Specific tokens only: {} tokens",
+                tokens.len()
+            );
             run_specific_tokens_scenario(&config.ws_url, tokens.clone()).await?;
         }
         (Some(events), Some(tokens)) => {
@@ -119,11 +122,11 @@ async fn run_all_events_scenario(ws_url: &str) -> Result<()> {
 /// Scenario 2: Specific event types only
 async fn run_specific_events_scenario(ws_url: &str, event_types: Vec<EventType>) -> Result<()> {
     println!("📡 Creating CurveStream for specific events...");
-    
+
     let curve_stream = CurveStream::new(ws_url.to_string())
         .await?
         .subscribe_events(event_types.clone());
-    
+
     let stream = curve_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -159,7 +162,10 @@ async fn run_specific_tokens_scenario(
     let stream = curve_stream.subscribe().await?;
     pin_mut!(stream);
 
-    println!("🏷️ Listening for {} specific tokens", monitored_tokens.len());
+    println!(
+        "🏷️ Listening for {} specific tokens",
+        monitored_tokens.len()
+    );
     for (i, token) in monitored_tokens.iter().enumerate() {
         println!("   {}. {}", i + 1, token);
     }
@@ -195,16 +201,20 @@ async fn run_combined_scenario(
     monitored_tokens: Vec<alloy::primitives::Address>,
 ) -> Result<()> {
     println!("📡 Creating CurveStream for specific events AND tokens...");
-    
+
     let curve_stream = CurveStream::new(ws_url.to_string())
         .await?
         .subscribe_events(event_types.clone())
         .filter_tokens(monitored_tokens.clone());
-    
+
     let stream = curve_stream.subscribe().await?;
     pin_mut!(stream);
 
-    println!("🎯🏷️ Listening for {:?} events on {} tokens", event_types, monitored_tokens.len());
+    println!(
+        "🎯🏷️ Listening for {:?} events on {} tokens",
+        event_types,
+        monitored_tokens.len()
+    );
 
     while let Some(event_result) = stream.next().await {
         match event_result {

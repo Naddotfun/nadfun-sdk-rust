@@ -1,14 +1,14 @@
 use crate::{
     constants::*,
     contracts::{BondingCurveRouter, DexRouter, Lens},
+    core::gas::{estimate_gas, GasEstimationParams},
     create::TokenCreationClient,
     types::*,
-    core::gas::{estimate_gas, GasEstimationParams},
 };
 use alloy::{
     network::EthereumWallet,
     primitives::{Address, B256, U256},
-    providers::{DynProvider, ProviderBuilder, Provider},
+    providers::{DynProvider, Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
 use anyhow::Result;
@@ -132,11 +132,7 @@ impl Core {
 
     /// Sell tokens using SellPermitParams struct
     /// User must provide valid permit signature (v, r, s)
-    pub async fn sell_permit(
-        &self,
-        params: SellPermitParams,
-        router: Router,
-    ) -> Result<B256> {
+    pub async fn sell_permit(&self, params: SellPermitParams, router: Router) -> Result<B256> {
         match router {
             Router::Dex(_) => self.dex_router.sell_permit(params).await,
             Router::BondingCurve(_) => self.bonding_curve_router.sell_permit(params).await,
@@ -162,7 +158,10 @@ impl Core {
     /// println!("Gas used: {:?}", receipt.gas_used);
     /// ```
     pub async fn get_receipt(&self, tx_hash: B256) -> Result<TransactionResult> {
-        let receipt = self.provider.get_transaction_receipt(tx_hash).await?
+        let receipt = self
+            .provider
+            .get_transaction_receipt(tx_hash)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found"))?;
 
         Ok(TransactionResult {
@@ -256,11 +255,7 @@ impl Core {
     /// let estimated_gas = core.estimate_gas(&router, params).await?;
     /// let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
     /// ```
-    pub async fn estimate_gas(
-        &self,
-        router: &Router,
-        params: GasEstimationParams,
-    ) -> Result<u64> {
+    pub async fn estimate_gas(&self, router: &Router, params: GasEstimationParams) -> Result<u64> {
         estimate_gas(self.provider.clone(), router, params).await
     }
 
@@ -322,10 +317,10 @@ impl Core {
                 params.amount_out,
                 salt,
                 params.action_id, // Actor type (CapricornActor or AmplifyActor)
-                total_value, // Initial buy amount + deploy fee
-                None, // gas_limit (auto-estimate)
-                None, // gas_price (use network default)
-                None, // nonce (auto-increment)
+                total_value,      // Initial buy amount + deploy fee
+                None,             // gas_limit (auto-estimate)
+                None,             // gas_price (use network default)
+                None,             // nonce (auto-increment)
             )
             .await?;
 

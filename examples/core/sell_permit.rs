@@ -25,7 +25,7 @@ use alloy::eips::BlockId;
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
-use nadfun_sdk::types::{SellPermitParams, GasPricing};
+use nadfun_sdk::types::{GasPricing, SellPermitParams};
 use nadfun_sdk::{Core, GasEstimationParams, TokenHelper};
 
 #[path = "../common/mod.rs"]
@@ -171,7 +171,7 @@ async fn main() -> Result<()> {
         s,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(GasPricing::LegacyWithPrice {
-            gas_price: recommended_gas_price.try_into().unwrap_or(100_000_000_000)
+            gas_price: recommended_gas_price.try_into().unwrap_or(100_000_000_000),
         }),
         nonce: Some(current_nonce), // Use actual account nonce
     };

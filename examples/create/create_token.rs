@@ -70,7 +70,9 @@ async fn main() -> Result<()> {
         None => {
             eprintln!("❌ Image URI is required for token creation!");
             eprintln!("   Set it with: --image-uri https://your-image-url.png");
-            eprintln!("   Or use environment variable: export IMAGE_URI=https://your-image-url.png");
+            eprintln!(
+                "   Or use environment variable: export IMAGE_URI=https://your-image-url.png"
+            );
             eprintln!();
             eprintln!("💡 Image Requirements:");
             eprintln!("   - Format: JPEG, PNG, WEBP, or SVG only");
@@ -90,55 +92,49 @@ async fn main() -> Result<()> {
     };
 
     // Validate and normalize social media URLs (treat empty strings as None)
-    let twitter = config.twitter
-        .filter(|s| !s.is_empty())
-        .map(|tw| {
-            // Convert twitter.com to x.com if needed
-            let normalized = if tw.contains("twitter.com") {
-                tw.replace("twitter.com", "x.com")
-            } else {
-                tw.clone()
-            };
+    let twitter = config.twitter.filter(|s| !s.is_empty()).map(|tw| {
+        // Convert twitter.com to x.com if needed
+        let normalized = if tw.contains("twitter.com") {
+            tw.replace("twitter.com", "x.com")
+        } else {
+            tw.clone()
+        };
 
-            // Validate x.com format
-            if !normalized.starts_with("https://") || !normalized.contains("x.com") {
-                eprintln!("❌ Invalid Twitter URL: {}", tw);
-                eprintln!("   Twitter URLs must:");
-                eprintln!("   - Use https://");
-                eprintln!("   - Contain x.com (not twitter.com)");
-                eprintln!("   Example: https://x.com/mytoken");
-                panic!("Invalid Twitter URL format");
-            }
-            normalized
-        });
+        // Validate x.com format
+        if !normalized.starts_with("https://") || !normalized.contains("x.com") {
+            eprintln!("❌ Invalid Twitter URL: {}", tw);
+            eprintln!("   Twitter URLs must:");
+            eprintln!("   - Use https://");
+            eprintln!("   - Contain x.com (not twitter.com)");
+            eprintln!("   Example: https://x.com/mytoken");
+            panic!("Invalid Twitter URL format");
+        }
+        normalized
+    });
 
-    let telegram = config.telegram
-        .filter(|s| !s.is_empty())
-        .and_then(|tg| {
-            // Validate telegram format
-            if !tg.starts_with("https://") || !tg.contains("t.me") {
-                eprintln!("❌ Invalid Telegram URL: {}", tg);
-                eprintln!("   Telegram URLs must:");
-                eprintln!("   - Use https://");
-                eprintln!("   - Contain t.me");
-                eprintln!("   Example: https://t.me/mytoken");
-                return None;
-            }
-            Some(tg)
-        });
+    let telegram = config.telegram.filter(|s| !s.is_empty()).and_then(|tg| {
+        // Validate telegram format
+        if !tg.starts_with("https://") || !tg.contains("t.me") {
+            eprintln!("❌ Invalid Telegram URL: {}", tg);
+            eprintln!("   Telegram URLs must:");
+            eprintln!("   - Use https://");
+            eprintln!("   - Contain t.me");
+            eprintln!("   Example: https://t.me/mytoken");
+            return None;
+        }
+        Some(tg)
+    });
 
-    let website = config.website
-        .filter(|s| !s.is_empty())
-        .and_then(|ws| {
-            // Validate website format
-            if !ws.starts_with("https://") {
-                eprintln!("❌ Invalid Website URL: {}", ws);
-                eprintln!("   Website URLs must use https://");
-                eprintln!("   Example: https://mytoken.com");
-                return None;
-            }
-            Some(ws)
-        });
+    let website = config.website.filter(|s| !s.is_empty()).and_then(|ws| {
+        // Validate website format
+        if !ws.starts_with("https://") {
+            eprintln!("❌ Invalid Website URL: {}", ws);
+            eprintln!("   Website URLs must use https://");
+            eprintln!("   Example: https://mytoken.com");
+            return None;
+        }
+        Some(ws)
+    });
 
     println!("\n📝 Token Details:");
     println!("  Name: {}", name);
@@ -164,8 +160,8 @@ async fn main() -> Result<()> {
         twitter,
         telegram,
         creator_address,
-        amount_out,             // Calculated from Lens
-        value: initial_buy_mon, // 1.5 MON
+        amount_out,                          // Calculated from Lens
+        value: initial_buy_mon,              // 1.5 MON
         action_id: ActionId::CapricornActor, // Use CapricornActor (1)
     };
 

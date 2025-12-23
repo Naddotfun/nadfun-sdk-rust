@@ -64,6 +64,7 @@
 //! - **Error Handling**: Comprehensive error types for different failure scenarios
 
 /// Core trading interface and execution logic
+#[allow(clippy::module_inception)]
 pub mod core;
 
 /// Mathematical utilities for slippage calculations and amount conversions
@@ -73,7 +74,10 @@ pub mod utils;
 pub mod gas;
 
 // Re-export main types for convenience
-pub use core::Core;
 pub use crate::types::Router;
+pub use core::Core;
+pub use gas::{
+    estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas,
+    GasEstimationParams,
+};
 pub use utils::SlippageUtils;
-pub use gas::{estimate_gas, estimate_buy_gas, estimate_sell_gas, estimate_sell_permit_gas, GasEstimationParams};

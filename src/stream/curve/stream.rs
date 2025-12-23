@@ -52,8 +52,7 @@ impl CurveStream {
             .expect("Invalid bonding curve address");
         let event_types = self
             .event_types
-            .as_ref()
-            .map(|v| v.clone())
+            .clone()
             .unwrap_or_else(|| {
                 vec![
                     EventType::Create,

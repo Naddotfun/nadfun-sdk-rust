@@ -40,7 +40,7 @@
 //!
 //! // Get comprehensive token information
 //! let metadata = token_helper.get_token_metadata(token).await?;
-//! println!("Token: {} ({}) - {} decimals", 
+//! println!("Token: {} ({}) - {} decimals",
 //!     metadata.name, metadata.symbol, metadata.decimals);
 //!
 //! // Check balances and allowances
@@ -74,6 +74,7 @@
 //! - **Gas Estimation**: Automatic gas estimation with safety margins
 
 /// ERC-20 token interaction utilities and helpers
+#[allow(clippy::module_inception)]
 pub mod token;
 
 // Re-export main types for convenience

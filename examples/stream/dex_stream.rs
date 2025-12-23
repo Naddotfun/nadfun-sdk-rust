@@ -56,11 +56,17 @@ async fn main() -> Result<()> {
     // Determine scenario based on arguments
     match (&pools_filter, &tokens_filter, &single_token) {
         (Some(pools), _, _) => {
-            println!("🎯 SCENARIO 1: Monitoring specific pool addresses: {} pools", pools.len());
+            println!(
+                "🎯 SCENARIO 1: Monitoring specific pool addresses: {} pools",
+                pools.len()
+            );
             run_specific_pools_scenario(&config.ws_url, pools.clone()).await?;
         }
         (None, Some(tokens), _) => {
-            println!("🔍 SCENARIO 2: Auto-discovering pools for {} tokens", tokens.len());
+            println!(
+                "🔍 SCENARIO 2: Auto-discovering pools for {} tokens",
+                tokens.len()
+            );
             run_token_discovery_scenario(&config.ws_url, tokens.clone()).await?;
         }
         (None, None, Some(token)) => {
@@ -85,7 +91,10 @@ async fn main() -> Result<()> {
 }
 
 /// Scenario 1: Monitor specific pool addresses directly
-async fn run_specific_pools_scenario(ws_url: &str, pool_addresses: Vec<alloy::primitives::Address>) -> Result<()> {
+async fn run_specific_pools_scenario(
+    ws_url: &str,
+    pool_addresses: Vec<alloy::primitives::Address>,
+) -> Result<()> {
     println!("📡 Creating DexStream for specific pools...");
 
     for (i, pool) in pool_addresses.iter().enumerate() {
@@ -113,14 +122,18 @@ async fn run_specific_pools_scenario(ws_url: &str, pool_addresses: Vec<alloy::pr
 }
 
 /// Scenario 2: Auto-discover pools for specific tokens
-async fn run_token_discovery_scenario(ws_url: &str, token_addresses: Vec<alloy::primitives::Address>) -> Result<()> {
+async fn run_token_discovery_scenario(
+    ws_url: &str,
+    token_addresses: Vec<alloy::primitives::Address>,
+) -> Result<()> {
     println!("📡 Auto-discovering pools for tokens...");
-    
+
     for (i, token) in token_addresses.iter().enumerate() {
         println!("   {}. Token: {}", i + 1, token);
     }
 
-    let swap_stream = DexStream::discover_pools_for_tokens(ws_url.to_string(), token_addresses).await?;
+    let swap_stream =
+        DexStream::discover_pools_for_tokens(ws_url.to_string(), token_addresses).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -141,7 +154,10 @@ async fn run_token_discovery_scenario(ws_url: &str, token_addresses: Vec<alloy::
 }
 
 /// Scenario 3: Single token pool discovery
-async fn run_single_token_scenario(ws_url: &str, token_address: alloy::primitives::Address) -> Result<()> {
+async fn run_single_token_scenario(
+    ws_url: &str,
+    token_address: alloy::primitives::Address,
+) -> Result<()> {
     println!("📡 Discovering pool for single token...");
     println!("   Token: {}", token_address);
 
@@ -168,33 +184,34 @@ async fn run_single_token_scenario(ws_url: &str, token_address: alloy::primitive
 fn handle_swap_event(event: &SwapEvent, scenario: &str) {
     println!(
         "💱 [{}] Swap in pool {} | Block: {} | TxIndex: {}",
-        scenario,
-        event.pool_address,
-        event.block_number,
-        event.transaction_index
+        scenario, event.pool_address, event.block_number, event.transaction_index
     );
-    
+
     println!(
         "   💰 Amount0: {} | Amount1: {}",
         event.amount0, event.amount1
     );
-    
+
     println!(
         "   👤 Sender: {} | Recipient: {}",
         event.sender, event.recipient
     );
-    
+
     println!(
         "   📊 Liquidity: {} | Tick: {} | Price: {}",
         event.liquidity, event.tick, event.sqrt_price_x96
     );
-    
+
     println!("   ─────────────────────────────────────");
 }
 
 fn parse_addresses(addrs_str: &str) -> Result<Vec<alloy::primitives::Address>> {
     addrs_str
         .split(',')
-        .map(|s| s.trim().parse::<alloy::primitives::Address>().map_err(|e| anyhow::anyhow!("Invalid address {}: {}", s, e)))
+        .map(|s| {
+            s.trim()
+                .parse::<alloy::primitives::Address>()
+                .map_err(|e| anyhow::anyhow!("Invalid address {}: {}", s, e))
+        })
         .collect()
 }

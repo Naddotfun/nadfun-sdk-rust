@@ -33,7 +33,9 @@ async fn main() -> Result<()> {
 
     // Token addresses - can be provided via CLI or use examples
     let tokens: Vec<alloy::primitives::Address> = if !config.tokens.is_empty() {
-        config.tokens.iter()
+        config
+            .tokens
+            .iter()
             .filter_map(|addr| addr.parse().ok())
             .collect()
     } else if let Some(token_address) = config.token {

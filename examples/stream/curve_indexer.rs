@@ -46,7 +46,13 @@ async fn main() -> Result<()> {
         .fetch_events(
             current_block - 100, // from_block (wider range)
             current_block,       // to_block
-            vec![EventType::Create, EventType::Buy, EventType::Sell, EventType::Graduate, EventType::Lock], // event types
+            vec![
+                EventType::Create,
+                EventType::Buy,
+                EventType::Sell,
+                EventType::Graduate,
+                EventType::Lock,
+            ], // event types
             None,                // token_filter (None = all tokens)
         )
         .await?;
@@ -97,7 +103,13 @@ async fn main() -> Result<()> {
         .fetch_all_events(
             start_block,
             batch_size,
-            vec![EventType::Create, EventType::Buy, EventType::Sell, EventType::Graduate, EventType::Lock],
+            vec![
+                EventType::Create,
+                EventType::Buy,
+                EventType::Sell,
+                EventType::Graduate,
+                EventType::Lock,
+            ],
             None, // No token filter for this test
         )
         .await?;
