@@ -248,6 +248,18 @@ pub struct BurnEvent {
     pub log_index: u64,
 }
 
+/// DEX Initialize event (pool initialized)
+#[derive(Debug, Clone)]
+pub struct InitializeEvent {
+    pub sqrt_price_x96: U256, // uint160 fits in U256
+    pub tick: i32,            // int24 fits in i32
+    pub pool_address: Address,
+    pub block_number: u64,
+    pub transaction_hash: B256,
+    pub transaction_index: u64,
+    pub log_index: u64,
+}
+
 impl BurnEvent {
     /// Get WMON amount removed from liquidity
     pub fn wmon_amount(&self, wmon_is_token0: bool) -> U256 {
@@ -344,9 +356,36 @@ pub fn decode_burn_event(log: Log) -> Result<BurnEvent> {
     })
 }
 
+/// Decode a log into an InitializeEvent
+pub fn decode_initialize_event(log: Log) -> Result<InitializeEvent> {
+    let pool_address = log.address();
+
+    let topic0 = log
+        .topics()
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No topic0 found"))?;
+
+    if *topic0 != ICapricornCLPool::Initialize::SIGNATURE_HASH {
+        return Err(anyhow::anyhow!("Not an Initialize event"));
+    }
+
+    let ICapricornCLPool::Initialize { sqrtPriceX96, tick } = log.log_decode()?.inner.data;
+
+    Ok(InitializeEvent {
+        sqrt_price_x96: U256::from(sqrtPriceX96),
+        tick: tick.try_into().unwrap_or(0),
+        pool_address,
+        block_number: log.block_number.unwrap_or(0),
+        transaction_hash: log.transaction_hash.unwrap_or(B256::ZERO),
+        transaction_index: log.transaction_index.unwrap_or(0),
+        log_index: log.log_index.unwrap_or(0),
+    })
+}
+
 // Export event signatures
 pub const MINT_SIGNATURE: B256 = ICapricornCLPool::Mint::SIGNATURE_HASH;
 pub const BURN_SIGNATURE: B256 = ICapricornCLPool::Burn::SIGNATURE_HASH;
+pub const INITIALIZE_SIGNATURE: B256 = ICapricornCLPool::Initialize::SIGNATURE_HASH;
 
 /// Unified DEX event enum
 #[derive(Debug, Clone)]
@@ -354,6 +393,7 @@ pub enum DexEvent {
     Swap(SwapEvent),
     Mint(MintEvent),
     Burn(BurnEvent),
+    Initialize(InitializeEvent),
 }
 
 impl DexEvent {
@@ -363,6 +403,7 @@ impl DexEvent {
             DexEvent::Swap(e) => e.pool_address,
             DexEvent::Mint(e) => e.pool_address,
             DexEvent::Burn(e) => e.pool_address,
+            DexEvent::Initialize(e) => e.pool_address,
         }
     }
 
@@ -372,6 +413,7 @@ impl DexEvent {
             DexEvent::Swap(e) => e.block_number,
             DexEvent::Mint(e) => e.block_number,
             DexEvent::Burn(e) => e.block_number,
+            DexEvent::Initialize(e) => e.block_number,
         }
     }
 
@@ -381,6 +423,7 @@ impl DexEvent {
             DexEvent::Swap(e) => e.transaction_hash,
             DexEvent::Mint(e) => e.transaction_hash,
             DexEvent::Burn(e) => e.transaction_hash,
+            DexEvent::Initialize(e) => e.transaction_hash,
         }
     }
 
@@ -390,11 +433,12 @@ impl DexEvent {
             DexEvent::Swap(_) => "Swap",
             DexEvent::Mint(_) => "Mint",
             DexEvent::Burn(_) => "Burn",
+            DexEvent::Initialize(_) => "Initialize",
         }
     }
 }
 
-/// Decode a log into a DexEvent (Swap, Mint, or Burn)
+/// Decode a log into a DexEvent (Swap, Mint, Burn, or Initialize)
 pub fn decode_dex_event(log: Log) -> Result<DexEvent> {
     let topic0 = log
         .topics()
@@ -405,6 +449,7 @@ pub fn decode_dex_event(log: Log) -> Result<DexEvent> {
         SWAP_SIGNATURE => Ok(DexEvent::Swap(decode_swap_event(log)?)),
         MINT_SIGNATURE => Ok(DexEvent::Mint(decode_mint_event(log)?)),
         BURN_SIGNATURE => Ok(DexEvent::Burn(decode_burn_event(log)?)),
+        INITIALIZE_SIGNATURE => Ok(DexEvent::Initialize(decode_initialize_event(log)?)),
         _ => Err(anyhow::anyhow!("Unknown DEX event: {:?}", topic0)),
     }
 }
