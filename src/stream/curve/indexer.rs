@@ -1,5 +1,5 @@
 use crate::constants::get_bonding_curve;
-use crate::types::{BondingCurveEvent, EventType, decode_bonding_curve_event};
+use crate::types::{decode_bonding_curve_event, BondingCurveEvent, EventType};
 use alloy::{
     primitives::{Address, B256},
     providers::Provider,

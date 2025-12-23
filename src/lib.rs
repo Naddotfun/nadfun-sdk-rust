@@ -85,15 +85,15 @@ pub mod types;
 pub(crate) mod contracts;
 
 // Pool discovery is still useful for advanced users
-pub use contracts::{PoolDiscovery, get_pool_addresses_for_tokens};
+pub use constants::{get_current_network, set_network, Network};
+pub use contracts::{get_pool_addresses_for_tokens, PoolDiscovery};
+pub use core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
+pub use create::TokenCreationClient;
 pub use stream::{
     BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
     SwapEvent,
 };
-pub use create::TokenCreationClient;
 pub use token::TokenHelper;
-pub use constants::{Network, set_network, get_current_network};
-pub use core::{SlippageUtils, Core, Router, estimate_gas, GasEstimationParams};
 pub use types::*;
 
 /// Convenient prelude module for importing commonly used types and functions
@@ -110,7 +110,7 @@ pub use types::*;
 /// a standardized way to get started with the SDK quickly.
 pub mod prelude {
     // Core trading functionality
-    pub use crate::core::{SlippageUtils, Core, Router, estimate_gas, GasEstimationParams};
+    pub use crate::core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
 
     // Token creation
     pub use crate::create::TokenCreationClient;
@@ -123,10 +123,10 @@ pub mod prelude {
     pub use crate::stream::{DexIndexer, DexStream, PoolMetadata, SwapEvent};
 
     // Pool discovery utilities
-    pub use crate::contracts::{PoolDiscovery, get_pool_addresses_for_tokens};
+    pub use crate::contracts::{get_pool_addresses_for_tokens, PoolDiscovery};
 
     // Constants and types
-    pub use crate::constants::{Network, set_network, get_current_network};
+    pub use crate::constants::{get_current_network, set_network, Network};
     pub use crate::types::*;
 
     // Common Alloy primitives

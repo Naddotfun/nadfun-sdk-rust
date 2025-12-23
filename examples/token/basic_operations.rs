@@ -21,7 +21,7 @@
 //! cargo run --example basic_operations -- --private-key your_private_key_here --rpc-url https://your-rpc-url --token 0xTokenAddress --recipient 0xRecipientAddress
 //! ```
 
-use alloy::primitives::{Address, U256, utils::parse_ether};
+use alloy::primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
 use nadfun_sdk::TokenHelper;
 

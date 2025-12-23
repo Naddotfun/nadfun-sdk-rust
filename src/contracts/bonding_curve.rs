@@ -46,6 +46,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
     }
 
     /// Create a new token - returns tx_hash immediately without waiting for receipt
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
         name: String,
@@ -73,14 +74,14 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         let mut tx_builder = contract.create(params).value(value);
 
         if let Some(gas_limit) = gas_limit {
-            tx_builder = tx_builder.gas(gas_limit.into());
+            tx_builder = tx_builder.gas(gas_limit);
         }
 
         if let Some(gas_price) = &gas_price {
             match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
-                    tx_builder = tx_builder.gas_price((*gas_price).into());
+                    tx_builder = tx_builder.gas_price(*gas_price);
                 }
                 GasPricing::Eip1559 {
                     max_fee_per_gas,
@@ -114,14 +115,14 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         let mut tx_builder = contract.buy(router_params).value(params.amount_in);
 
         if let Some(gas_limit) = params.gas_limit {
-            tx_builder = tx_builder.gas(gas_limit.into());
+            tx_builder = tx_builder.gas(gas_limit);
         }
 
         if let Some(gas_price) = &params.gas_price {
             match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
-                    tx_builder = tx_builder.gas_price((*gas_price).into());
+                    tx_builder = tx_builder.gas_price(*gas_price);
                 }
                 GasPricing::Eip1559 {
                     max_fee_per_gas,
@@ -183,10 +184,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         Ok(*tx.tx_hash())
     }
 
-    pub async fn sell_permit(
-        &self,
-        params: crate::types::SellPermitParams,
-    ) -> Result<B256> {
+    pub async fn sell_permit(&self, params: crate::types::SellPermitParams) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::SellPermitParams {
@@ -232,10 +230,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         Ok(*tx.tx_hash())
     }
 
-    pub async fn exact_out_buy(
-        &self,
-        params: crate::types::ExactOutBuyParams,
-    ) -> Result<B256> {
+    pub async fn exact_out_buy(&self, params: crate::types::ExactOutBuyParams) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::ExactOutBuyParams {
@@ -246,17 +241,19 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
             deadline: params.deadline,
         };
 
-        let mut tx_builder = contract.exactOutBuy(router_params).value(params.amount_in_max);
+        let mut tx_builder = contract
+            .exactOutBuy(router_params)
+            .value(params.amount_in_max);
 
         if let Some(gas_limit) = params.gas_limit {
-            tx_builder = tx_builder.gas(gas_limit.into());
+            tx_builder = tx_builder.gas(gas_limit);
         }
 
         if let Some(gas_price) = &params.gas_price {
             match gas_price {
                 GasPricing::Legacy => {}
                 GasPricing::LegacyWithPrice { gas_price } => {
-                    tx_builder = tx_builder.gas_price((*gas_price).into());
+                    tx_builder = tx_builder.gas_price(*gas_price);
                 }
                 GasPricing::Eip1559 {
                     max_fee_per_gas,
@@ -277,10 +274,7 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         Ok(*tx.tx_hash())
     }
 
-    pub async fn exact_out_sell(
-        &self,
-        params: crate::types::ExactOutSellParams,
-    ) -> Result<B256> {
+    pub async fn exact_out_sell(&self, params: crate::types::ExactOutSellParams) -> Result<B256> {
         let contract = IBondingCurveRouter::new(self.address, self.provider.as_ref());
 
         let router_params = IBondingCurveRouter::ExactOutSellParams {
@@ -370,5 +364,4 @@ impl<P: Provider + Clone> BondingCurveRouter<P> {
         let tx = tx_builder.send().await?;
         Ok(*tx.tx_hash())
     }
-
 }

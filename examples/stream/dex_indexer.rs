@@ -56,8 +56,7 @@ async fn main() -> Result<()> {
 
     // Discover pools for the specified tokens
     let indexer =
-        DexIndexer::discover_pools_for_tokens(config.rpc_url.clone(), tokens.clone())
-            .await?;
+        DexIndexer::discover_pools_for_tokens(config.rpc_url.clone(), tokens.clone()).await?;
 
     println!("Pool addresses discovered and monitored:");
     for (i, pool) in indexer.pool_addresses().iter().enumerate() {

@@ -260,7 +260,7 @@ impl TokenCreationClient {
             metadata_result.metadata_uri,
             upload_result.image_uri,
             salt_bytes,
-            salt_result.address, // Token address from CREATE2 calculation
+            salt_result.address,   // Token address from CREATE2 calculation
             upload_result.is_nsfw, // Return is_nsfw status from server
         ))
     }

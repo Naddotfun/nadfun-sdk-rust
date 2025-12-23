@@ -16,6 +16,8 @@ pub use dex::{DexIndexer, DexStream};
 
 // Re-export types from the types module
 pub use crate::types::{
+    decode_bonding_curve_event,
+    decode_swap_event,
     BondingCurveEvent,
     BuyEvent,
     CreateEvent,
@@ -28,8 +30,6 @@ pub use crate::types::{
     // Uniswap types
     SwapEvent,
     SyncEvent,
-    decode_bonding_curve_event,
-    decode_swap_event,
 };
 
 /// Usage Examples:

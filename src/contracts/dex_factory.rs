@@ -10,8 +10,8 @@ sol! {
 }
 
 // Re-export constants from the central constants module
-pub use crate::constants::{DEFAULT_FEE_TIER, WMON};
 use crate::constants::get_dex_factory;
+pub use crate::constants::{DEFAULT_FEE_TIER, WMON};
 
 /// Pool discovery helper for finding DEX pools
 pub struct PoolDiscovery<P> {

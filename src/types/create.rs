@@ -85,7 +85,7 @@ pub struct CreateTokenParams {
     /// Amount of tokens to receive from initial buy.
     /// Use Core.get_initial_buy_amount_out(value) to calculate this value.
     pub amount_out: U256,
-    pub value: U256, // MON amount to send (typically 1.5 MON)
+    pub value: U256,         // MON amount to send (typically 1.5 MON)
     pub action_id: ActionId, // Actor type for token creation
 }
 

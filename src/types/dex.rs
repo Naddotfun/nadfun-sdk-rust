@@ -101,6 +101,12 @@ pub struct PoolMetadata {
     wmon_is_token0_cache: HashMap<Address, bool>,
 }
 
+impl Default for PoolMetadata {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PoolMetadata {
     pub fn new() -> Self {
         Self {
@@ -188,3 +194,217 @@ pub fn decode_swap_event(log: Log) -> Result<SwapEvent> {
 
 // Export swap event signature for convenience
 pub const SWAP_SIGNATURE: B256 = ICapricornCLPool::Swap::SIGNATURE_HASH;
+
+/// DEX Mint event (liquidity added)
+#[derive(Debug, Clone)]
+pub struct MintEvent {
+    pub sender: Address,
+    pub owner: Address,
+    pub tick_lower: i32,
+    pub tick_upper: i32,
+    pub amount: u128,
+    pub amount0: U256,
+    pub amount1: U256,
+    pub pool_address: Address,
+    pub block_number: u64,
+    pub transaction_hash: B256,
+    pub transaction_index: u64,
+    pub log_index: u64,
+}
+
+impl MintEvent {
+    /// Get WMON amount added as liquidity
+    pub fn wmon_amount(&self, wmon_is_token0: bool) -> U256 {
+        if wmon_is_token0 {
+            self.amount0
+        } else {
+            self.amount1
+        }
+    }
+
+    /// Get token amount added as liquidity
+    pub fn token_amount(&self, wmon_is_token0: bool) -> U256 {
+        if wmon_is_token0 {
+            self.amount1
+        } else {
+            self.amount0
+        }
+    }
+}
+
+/// DEX Burn event (liquidity removed)
+#[derive(Debug, Clone)]
+pub struct BurnEvent {
+    pub owner: Address,
+    pub tick_lower: i32,
+    pub tick_upper: i32,
+    pub amount: u128,
+    pub amount0: U256,
+    pub amount1: U256,
+    pub pool_address: Address,
+    pub block_number: u64,
+    pub transaction_hash: B256,
+    pub transaction_index: u64,
+    pub log_index: u64,
+}
+
+impl BurnEvent {
+    /// Get WMON amount removed from liquidity
+    pub fn wmon_amount(&self, wmon_is_token0: bool) -> U256 {
+        if wmon_is_token0 {
+            self.amount0
+        } else {
+            self.amount1
+        }
+    }
+
+    /// Get token amount removed from liquidity
+    pub fn token_amount(&self, wmon_is_token0: bool) -> U256 {
+        if wmon_is_token0 {
+            self.amount1
+        } else {
+            self.amount0
+        }
+    }
+}
+
+/// Decode a log into a MintEvent
+pub fn decode_mint_event(log: Log) -> Result<MintEvent> {
+    let pool_address = log.address();
+
+    let topic0 = log
+        .topics()
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No topic0 found"))?;
+
+    if *topic0 != ICapricornCLPool::Mint::SIGNATURE_HASH {
+        return Err(anyhow::anyhow!("Not a Mint event"));
+    }
+
+    let ICapricornCLPool::Mint {
+        sender,
+        owner,
+        tickLower,
+        tickUpper,
+        amount,
+        amount0,
+        amount1,
+    } = log.log_decode()?.inner.data;
+
+    Ok(MintEvent {
+        sender,
+        owner,
+        tick_lower: tickLower.try_into().unwrap_or(0),
+        tick_upper: tickUpper.try_into().unwrap_or(0),
+        amount,
+        amount0,
+        amount1,
+        pool_address,
+        block_number: log.block_number.unwrap_or(0),
+        transaction_hash: log.transaction_hash.unwrap_or(B256::ZERO),
+        transaction_index: log.transaction_index.unwrap_or(0),
+        log_index: log.log_index.unwrap_or(0),
+    })
+}
+
+/// Decode a log into a BurnEvent
+pub fn decode_burn_event(log: Log) -> Result<BurnEvent> {
+    let pool_address = log.address();
+
+    let topic0 = log
+        .topics()
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No topic0 found"))?;
+
+    if *topic0 != ICapricornCLPool::Burn::SIGNATURE_HASH {
+        return Err(anyhow::anyhow!("Not a Burn event"));
+    }
+
+    let ICapricornCLPool::Burn {
+        owner,
+        tickLower,
+        tickUpper,
+        amount,
+        amount0,
+        amount1,
+    } = log.log_decode()?.inner.data;
+
+    Ok(BurnEvent {
+        owner,
+        tick_lower: tickLower.try_into().unwrap_or(0),
+        tick_upper: tickUpper.try_into().unwrap_or(0),
+        amount,
+        amount0,
+        amount1,
+        pool_address,
+        block_number: log.block_number.unwrap_or(0),
+        transaction_hash: log.transaction_hash.unwrap_or(B256::ZERO),
+        transaction_index: log.transaction_index.unwrap_or(0),
+        log_index: log.log_index.unwrap_or(0),
+    })
+}
+
+// Export event signatures
+pub const MINT_SIGNATURE: B256 = ICapricornCLPool::Mint::SIGNATURE_HASH;
+pub const BURN_SIGNATURE: B256 = ICapricornCLPool::Burn::SIGNATURE_HASH;
+
+/// Unified DEX event enum
+#[derive(Debug, Clone)]
+pub enum DexEvent {
+    Swap(SwapEvent),
+    Mint(MintEvent),
+    Burn(BurnEvent),
+}
+
+impl DexEvent {
+    /// Get pool address from any event type
+    pub fn pool_address(&self) -> Address {
+        match self {
+            DexEvent::Swap(e) => e.pool_address,
+            DexEvent::Mint(e) => e.pool_address,
+            DexEvent::Burn(e) => e.pool_address,
+        }
+    }
+
+    /// Get block number from any event type
+    pub fn block_number(&self) -> u64 {
+        match self {
+            DexEvent::Swap(e) => e.block_number,
+            DexEvent::Mint(e) => e.block_number,
+            DexEvent::Burn(e) => e.block_number,
+        }
+    }
+
+    /// Get transaction hash from any event type
+    pub fn transaction_hash(&self) -> B256 {
+        match self {
+            DexEvent::Swap(e) => e.transaction_hash,
+            DexEvent::Mint(e) => e.transaction_hash,
+            DexEvent::Burn(e) => e.transaction_hash,
+        }
+    }
+
+    /// Get event type as string
+    pub fn event_type(&self) -> &'static str {
+        match self {
+            DexEvent::Swap(_) => "Swap",
+            DexEvent::Mint(_) => "Mint",
+            DexEvent::Burn(_) => "Burn",
+        }
+    }
+}
+
+/// Decode a log into a DexEvent (Swap, Mint, or Burn)
+pub fn decode_dex_event(log: Log) -> Result<DexEvent> {
+    let topic0 = log
+        .topics()
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No topic0 found"))?;
+
+    match *topic0 {
+        SWAP_SIGNATURE => Ok(DexEvent::Swap(decode_swap_event(log)?)),
+        MINT_SIGNATURE => Ok(DexEvent::Mint(decode_mint_event(log)?)),
+        BURN_SIGNATURE => Ok(DexEvent::Burn(decode_burn_event(log)?)),
+        _ => Err(anyhow::anyhow!("Unknown DEX event: {:?}", topic0)),
+    }
+}
