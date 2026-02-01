@@ -1,0 +1,519 @@
+# Nad.fun Rust SDK
+
+> Rust SDK for Nad.fun - bonding curve trading, token creation, and real-time event streaming on Monad blockchain.
+
+Nad.fun is a meme coin launchpad on Monad with bonding curve mechanics. Tokens graduate to Capricorn DEX after reaching target liquidity.
+
+## Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.11"
+```
+
+## Quick Start
+
+```rust
+use nadfun_sdk::prelude::*;
+use alloy::primitives::utils::parse_ether;
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let core = Core::new(
+        "https://rpc.monad.xyz".to_string(),
+        "your_private_key".to_string(),
+        Network::Mainnet,
+    ).await?;
+
+    // Get quote with auto-routing (bonding curve or DEX)
+    let token: Address = "0x...".parse()?;
+    let mon_amount = parse_ether("0.1")?;
+    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+
+    // Apply slippage (5%)
+    let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
+
+    // Execute buy - returns tx_hash immediately
+    let buy_params = BuyParams {
+        token,
+        amount_in: mon_amount,
+        amount_out_min: min_tokens,
+        to: core.wallet_address(),
+        deadline: U256::from(9999999999999999u64),
+        gas_limit: None,
+        gas_price: None,
+        nonce: None,
+    };
+
+    let tx_hash = core.buy(buy_params, router).await?;
+    println!("TX: {}", tx_hash);
+
+    // Optionally wait for confirmation
+    let receipt = core.get_receipt(tx_hash).await?;
+    println!("Status: {}", receipt.status);
+
+    Ok(())
+}
+```
+
+## Core Concepts
+
+- **Bonding Curve**: Tokens start on a bonding curve with virtual liquidity
+- **Graduation**: When target is reached, tokens migrate to Capricorn DEX
+- **Auto-Routing**: SDK automatically routes trades via Lens contract
+- **MON**: Native token of Monad, used for all transactions
+- **WMON**: Wrapped MON for DEX operations
+
+## Network Configuration
+
+```rust
+use nadfun_sdk::{Network, set_network, get_current_network};
+
+// Set network globally (done automatically by Core::new)
+set_network(Network::Mainnet);  // or Network::Testnet
+
+// Check current network
+let network = get_current_network();
+```
+
+## Trading
+
+| Function | Description |
+|----------|-------------|
+| `core.buy(params, router)` | Buy tokens, returns tx_hash immediately |
+| `core.sell(params, router)` | Sell tokens with approval |
+| `core.sell_permit(params, router)` | Gasless sell with EIP-2612 permit |
+| `core.get_amount_out(token, amount, is_buy)` | Get quote with auto-routing |
+| `core.get_amount_in(token, amount, is_buy)` | Get required input with auto-routing |
+
+### Lens Utility Functions
+
+```rust
+// Check token status
+let is_graduated = core.is_graduated(token).await?;
+let is_locked = core.is_locked(token).await?;
+
+// Get curve progress (0-10000 = 0-100%)
+let progress = core.get_progress(token).await?;
+
+// Get available buy tokens and required MON
+let (available_tokens, required_mon) = core.available_buy_tokens(token).await?;
+
+// Get initial buy amount for token creation
+let amount_out = core.get_initial_buy_amount_out(mon_amount).await?;
+```
+
+### Example: Buy with Gas Estimation
+
+```rust
+use nadfun_sdk::{Core, GasEstimationParams, BuyParams};
+
+// 1. Get quote
+let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
+
+// 2. Estimate gas
+let gas_params = GasEstimationParams::Buy {
+    token,
+    amount_in: mon_amount,
+    amount_out_min: min_tokens,
+    to: core.wallet_address(),
+    deadline: U256::from(9999999999999999u64),
+};
+let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
+
+// 3. Execute
+let tx_hash = core.buy(BuyParams {
+    token,
+    amount_in: mon_amount,
+    amount_out_min: min_tokens,
+    to: core.wallet_address(),
+    deadline: U256::from(9999999999999999u64),
+    gas_limit: Some(gas_with_buffer),
+    gas_price: None,
+    nonce: None,
+}, router).await?;
+
+// 4. Wait for confirmation
+let receipt = core.get_receipt(tx_hash).await?;
+```
+
+### Sell with Permit (Gasless Approval)
+
+```rust
+use nadfun_sdk::{TokenHelper, SellPermitParams};
+
+let token_helper = TokenHelper::new(rpc_url, private_key).await?;
+
+// Generate permit signature
+let (v, r, s) = token_helper.generate_permit_signature(
+    token,
+    wallet_address,
+    router.address(),
+    amount,
+    deadline,
+).await?;
+
+// Sell with permit in one transaction
+let params = SellPermitParams {
+    amount_in: amount,
+    amount_out_min: min_out,
+    amount_allowance: amount,
+    token,
+    to: wallet_address,
+    deadline,
+    v, r, s,
+    gas_limit: None,
+    gas_price: None,
+    nonce: None,
+};
+
+let tx_hash = core.sell_permit(params, router).await?;
+```
+
+## Gas Pricing Options
+
+```rust
+use nadfun_sdk::GasPricing;
+
+// Legacy (default - auto-estimate)
+let gas_price = Some(GasPricing::Legacy);
+
+// Legacy with explicit price
+let gas_price = Some(GasPricing::LegacyWithPrice {
+    gas_price: 50_000_000_000, // 50 gwei
+});
+
+// EIP-1559 (recommended for Monad)
+let gas_price = Some(GasPricing::Eip1559 {
+    max_fee_per_gas: 100_000_000_000,        // 100 gwei
+    max_priority_fee_per_gas: 2_000_000_000, // 2 gwei
+});
+```
+
+## Token Creation
+
+```rust
+use nadfun_sdk::{Core, CreateTokenParams, ActionId};
+use alloy::primitives::utils::parse_ether;
+
+let initial_buy_mon = parse_ether("1.5")?;
+
+let params = CreateTokenParams {
+    name: "My Token".to_string(),
+    symbol: "MTK".to_string(),
+    description: "My awesome token".to_string(),
+    image_uri: "https://i.imgur.com/image.png".to_string(),
+    website: Some("https://mytoken.com".to_string()),
+    twitter: Some("https://x.com/mytoken".to_string()),
+    telegram: Some("https://t.me/mytoken".to_string()),
+    creator_address: core.wallet_address(),
+    amount_out: core.get_initial_buy_amount_out(initial_buy_mon).await?,
+    value: initial_buy_mon,
+    action_id: ActionId::CapricornActor, // or ActionId::AmplifyActor
+};
+
+let result = core.create_token(params).await?;
+println!("Token: {}", result.token_address);
+println!("Metadata URI: {}", result.metadata_uri);
+println!("Is NSFW: {}", result.is_nsfw);
+```
+
+## Token Operations (ERC-20)
+
+```rust
+use nadfun_sdk::TokenHelper;
+
+let token_helper = TokenHelper::new(rpc_url, private_key).await?;
+
+// Metadata
+let metadata = token_helper.get_token_metadata(token).await?;
+println!("Name: {}, Symbol: {}, Decimals: {}",
+    metadata.name, metadata.symbol, metadata.decimals);
+
+// Balance & Allowance
+let balance = token_helper.balance_of(token, wallet).await?;
+let allowance = token_helper.allowance(token, owner, spender).await?;
+
+// Approve
+let tx = token_helper.approve(token, spender, amount).await?;
+
+// Transfer
+let tx = token_helper.transfer(token, to, amount).await?;
+
+// Burn
+let tx = token_helper.burn(token, amount).await?;
+
+// Get nonce for permit
+let nonce = token_helper.get_nonce(token, owner).await?;
+```
+
+## Real-time Streaming
+
+### Bonding Curve Events
+
+```rust
+use nadfun_sdk::stream::{CurveStream, EventType};
+use futures_util::{pin_mut, StreamExt};
+
+let curve_stream = CurveStream::new("wss://...".to_string()).await?
+    .subscribe_events(vec![EventType::Buy, EventType::Sell, EventType::Graduate])
+    .filter_tokens(vec![token_address]);
+
+let stream = curve_stream.subscribe().await?;
+pin_mut!(stream);
+
+while let Some(event_result) = stream.next().await {
+    match event_result {
+        Ok(event) => {
+            println!("{:?} for {} at block {}",
+                event.event_type(),
+                event.token(),
+                event.block_number());
+        }
+        Err(e) => println!("Error: {}", e),
+    }
+}
+```
+
+### DEX Swaps
+
+```rust
+use nadfun_sdk::stream::DexStream;
+
+// Auto-discover pools for tokens
+let swap_stream = DexStream::discover_pools_for_tokens(
+    "wss://...".to_string(),
+    vec![token_address],
+).await?;
+
+// Or provide pool addresses directly
+let swap_stream = DexStream::new(
+    "wss://...".to_string(),
+    vec![pool_address],
+).await?;
+
+let stream = swap_stream.subscribe().await?;
+pin_mut!(stream);
+
+while let Some(event_result) = stream.next().await {
+    if let Ok(event) = event_result {
+        println!("Swap: {} -> {} in pool {}",
+            event.amount0, event.amount1, event.pool);
+    }
+}
+```
+
+## Historical Indexing
+
+### Bonding Curve Events
+
+```rust
+use nadfun_sdk::stream::CurveIndexer;
+use alloy::providers::ProviderBuilder;
+use std::sync::Arc;
+
+let provider = Arc::new(ProviderBuilder::new().connect_http(rpc_url.parse()?));
+let bonding_curve: Address = "0x...".parse()?;
+let indexer = CurveIndexer::new(provider, bonding_curve);
+
+let events = indexer.fetch_events(
+    18_000_000,  // from block
+    18_010_000,  // to block
+    vec![EventType::Create, EventType::Buy, EventType::Graduate],
+    None,  // all tokens, or Some(vec![token_address])
+).await?;
+```
+
+### DEX Events
+
+```rust
+use nadfun_sdk::stream::DexIndexer;
+
+// From token addresses (auto-discovers pools)
+let indexer = DexIndexer::from_tokens(provider.clone(), vec![token_address]).await?;
+
+// Or from pool addresses directly
+let indexer = DexIndexer::from_pools(provider, vec![pool_address]);
+
+let swap_events = indexer.fetch_events(18_000_000, 18_010_000).await?;
+```
+
+## Event Types
+
+| Event | Description |
+|-------|-------------|
+| `Create` | New token created on curve |
+| `Buy` | Token purchased on curve |
+| `Sell` | Token sold on curve |
+| `Sync` | Curve state updated (reserves) |
+| `Lock` | Token locked before graduation |
+| `Graduate` | Token graduated to DEX |
+
+## Core Types
+
+```rust
+pub struct BuyParams {
+    pub token: Address,
+    pub amount_in: U256,
+    pub amount_out_min: U256,
+    pub to: Address,
+    pub deadline: U256,
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<GasPricing>,
+    pub nonce: Option<u64>,
+}
+
+pub struct SellParams {
+    pub amount_in: U256,
+    pub amount_out_min: U256,
+    pub token: Address,
+    pub to: Address,
+    pub deadline: U256,
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<GasPricing>,
+    pub nonce: Option<u64>,
+}
+
+pub struct SellPermitParams {
+    pub amount_in: U256,
+    pub amount_out_min: U256,
+    pub amount_allowance: U256,
+    pub token: Address,
+    pub to: Address,
+    pub deadline: U256,
+    pub v: u8,
+    pub r: B256,
+    pub s: B256,
+    pub gas_limit: Option<u64>,
+    pub gas_price: Option<GasPricing>,
+    pub nonce: Option<u64>,
+}
+
+pub enum Router {
+    Dex(Address),
+    BondingCurve(Address),
+}
+
+pub enum GasPricing {
+    Legacy,
+    LegacyWithPrice { gas_price: u128 },
+    Eip1559 { max_fee_per_gas: u128, max_priority_fee_per_gas: u128 },
+}
+
+pub enum GasEstimationParams {
+    Buy { token, amount_in, amount_out_min, to, deadline },
+    Sell { token, amount_in, amount_out_min, to, deadline },
+    SellPermit { token, amount_in, amount_out_min, to, deadline, v, r, s },
+}
+
+pub enum BondingCurveEvent {
+    Create(CreateEvent),
+    Buy(BuyEvent),
+    Sell(SellEvent),
+    Sync(SyncEvent),
+    Lock(LockEvent),
+    Graduate(GraduateEvent),
+}
+
+pub enum ActionId {
+    CapricornActor = 1,
+    AmplifyActor = 2,
+}
+```
+
+## Contract Addresses
+
+### Mainnet
+
+| Contract | Address |
+|----------|---------|
+| Bonding Curve | `0xA7283d07812a02AFB7C09B60f8896bCEA3F90aCE` |
+| Bonding Curve Router | `0x6F6B8F1a20703309951a5127c45B49b1CD981A22` |
+| DEX Router | `0x0B79d71AE99528D1dB24A4148b5f4F865cc2b137` |
+| DEX Factory | `0x6B5F564339DbAD6b780249827f2198a841FEB7F3` |
+| WMON | `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A` |
+| Lens | `0x7e78A8DE94f21804F7a17F4E8BF9EC2c872187ea` |
+
+### Testnet
+
+| Contract | Address |
+|----------|---------|
+| Bonding Curve | `0x1228b0dc9481C11D3071E7A924B794CfB038994e` |
+| Bonding Curve Router | `0x865054F0F6A288adaAc30261731361EA7E908003` |
+| DEX Router | `0x5D4a4f430cA3B1b2dB86B9cFE48a5316800F5fb2` |
+| DEX Factory | `0xd0a37cf728CE2902eB8d4F6f2afc76854048253b` |
+| WMON | `0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd` |
+| Lens | `0xB056d79CA5257589692699a46623F901a3BB76f1` |
+
+## CLI Examples
+
+```bash
+# Buy tokens
+cargo run --example buy -- \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --token 0x...
+
+# Sell with permit (gasless approval)
+cargo run --example sell_permit -- \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL \
+  --token 0x...
+
+# Create token
+cargo run --example create_token -- \
+  --private-key $PRIVATE_KEY \
+  --rpc-url $RPC_URL
+
+# Stream curve events
+cargo run --example curve_stream -- --ws-url $WS_URL
+
+# Stream DEX swaps
+cargo run --example dex_stream -- \
+  --ws-url $WS_URL \
+  --tokens 0x...,0x...
+
+# Index historical events
+cargo run --example curve_indexer -- \
+  --rpc-url $RPC_URL \
+  --from-block 18000000 \
+  --to-block 18010000
+```
+
+## Pool Discovery
+
+```rust
+use nadfun_sdk::{get_pool_addresses_for_tokens, PoolDiscovery};
+
+// Get pool addresses for tokens
+let pools = get_pool_addresses_for_tokens(provider, vec![token1, token2]).await?;
+
+// Or use PoolDiscovery directly
+let discovery = PoolDiscovery::new(provider);
+let pool = discovery.get_pool(token).await?;
+let pools = discovery.get_pools(vec![token1, token2]).await?;
+```
+
+## Slippage Utilities
+
+```rust
+use nadfun_sdk::SlippageUtils;
+
+// For buying: calculate minimum tokens to receive
+let min_out = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0); // 5% slippage
+
+// For selling: calculate maximum tokens to spend
+let max_in = SlippageUtils::calculate_amount_in_max(expected_tokens, 5.0); // 5% slippage
+```
+
+## Links
+
+- GitHub: https://github.com/Naddotfun/nadfun-sdk-rust
+- TypeScript SDK: https://github.com/Naddotfun/nadfun-sdk-typescript
+- Documentation: https://nad-fun.gitbook.io/nad.fun
+- Website: https://nad.fun
+- API Server (Mainnet): https://api.nad.fun
+- API Server (Testnet): https://dev-api.nad.fun

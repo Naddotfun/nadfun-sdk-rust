@@ -9,5 +9,10 @@
     "deny": [],
     "ask": [],
     "defaultMode": "acceptEdits"
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "filesystem",
+    "github"
+  ]
 }
