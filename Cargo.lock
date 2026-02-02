@@ -2635,7 +2635,7 @@ dependencies = [
 
 [[package]]
 name = "nadfun_sdk"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "alloy",
  "anyhow",

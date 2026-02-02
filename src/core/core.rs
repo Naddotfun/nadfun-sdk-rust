@@ -1,8 +1,8 @@
 use crate::{
+    api::ApiClient,
     constants::*,
-    contracts::{BondingCurveRouter, DexRouter, Lens},
+    contracts::{BondingCurveRouter, CreatorClient, DexRouter, Lens},
     core::gas::{estimate_gas, GasEstimationParams},
-    create::TokenCreationClient,
     types::*,
 };
 use alloy::{
@@ -269,14 +269,18 @@ impl Core {
     ///
     /// # Arguments
     /// * `params` - Token creation parameters including metadata and transaction details
+    /// * `api_client` - ApiClient for API access (with optional API key for higher rate limits)
     ///
     /// # Returns
     /// * `TokenCreationResult` - Contains token address, metadata URI, image URI, salt, and transaction hash
     ///
     /// # Example
     /// ```rust,ignore
-    /// use nadfun_sdk::{Core, CreateTokenParams};
+    /// use nadfun_sdk::{Core, CreateTokenParams, ApiClient};
     /// use alloy::primitives::utils::parse_ether;
+    ///
+    /// // Create API client (with optional API key)
+    /// let api = ApiClient::new().with_api_key("your-api-key".to_string());
     ///
     /// let params = CreateTokenParams {
     ///     name: "My Token".to_string(),
@@ -291,14 +295,17 @@ impl Core {
     ///     value: parse_ether("1.5")?, // 1.5 MON
     /// };
     ///
-    /// let result = core.create_token(params).await?;
+    /// let result = core.create_token(params, &api).await?;
     /// println!("Token created at: {}", result.token_address);
     /// ```
-    pub async fn create_token(&self, params: CreateTokenParams) -> Result<TokenCreationResult> {
+    pub async fn create_token(
+        &self,
+        params: CreateTokenParams,
+        api_client: &ApiClient,
+    ) -> Result<TokenCreationResult> {
         // Step 1-3: Prepare token creation (image upload, metadata, salt, token_address)
-        let creation_client = TokenCreationClient::new();
         let (metadata_uri, image_uri, salt, token_address_str, is_nsfw) =
-            creation_client.prepare_token_creation(&params).await?;
+            api_client.prepare_token_creation(&params).await?;
 
         // Parse token address
         let token_address: Address = token_address_str.parse()?;
@@ -332,5 +339,59 @@ impl Core {
             transaction_hash: tx_hash,
             is_nsfw, // Return is_nsfw status from server
         })
+    }
+
+    /// Claim creator reward from CreatorTreasury for a single token
+    ///
+    /// Claims accumulated trading fees for a token you created.
+    /// The wMON reward is automatically converted to native MON.
+    ///
+    /// # Arguments
+    /// * `params` - Claim parameters including token, amount, and merkle proof
+    ///
+    /// # Returns
+    /// * Transaction hash
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use nadfun_sdk::{Core, CreatorClaimParams, TokenCreationClient};
+    ///
+    /// // Get created tokens and their reward info from API
+    /// let client = TokenCreationClient::new();
+    /// let response = client.get_created_tokens(wallet, 1, 10).await?;
+    ///
+    /// // Build claim params for a claimable token
+    /// if let Some(params) = TokenCreationClient::build_claim_params(&response.tokens[0]) {
+    ///     let tx_hash = core.claim_creator_reward(params).await?;
+    ///     println!("Claimed reward, tx: {}", tx_hash);
+    /// }
+    /// ```
+    pub async fn claim_creator_reward(&self, params: CreatorClaimParams) -> Result<B256> {
+        let treasury_address: Address = get_creator_treasury().parse()?;
+        let creator = CreatorClient::new(treasury_address, self.provider.clone());
+        creator.claim(params).await
+    }
+
+    /// Claim creator rewards for multiple tokens in a single transaction
+    ///
+    /// More gas efficient than calling claim_creator_reward() multiple times.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let client = TokenCreationClient::new();
+    /// let response = client.get_created_tokens(wallet, 1, 10).await?;
+    ///
+    /// if let Some(batch_params) = TokenCreationClient::build_batch_claim_params(&response.tokens) {
+    ///     let tx_hash = core.claim_creator_rewards_batch(batch_params).await?;
+    ///     println!("Batch claimed rewards, tx: {}", tx_hash);
+    /// }
+    /// ```
+    pub async fn claim_creator_rewards_batch(
+        &self,
+        params: CreatorBatchClaimParams,
+    ) -> Result<B256> {
+        let treasury_address: Address = get_creator_treasury().parse()?;
+        let creator = CreatorClient::new(treasury_address, self.provider.clone());
+        creator.claim_batch(params).await
     }
 }

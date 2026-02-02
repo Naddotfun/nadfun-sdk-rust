@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.5"
+nadfun_sdk = "0.3.11"
 ```
 
 ## Quick Start
@@ -72,16 +72,100 @@ async fn main() -> Result<()> {
 
 ## Features
 
+### 🔑 API Authentication
+
+The SDK uses optional API key authentication for higher rate limits:
+
+```rust
+use nadfun_sdk::ApiClient;
+
+// Option 1: Without API key (lower rate limit, but works)
+let api = ApiClient::new();
+
+// Option 2: With API key (higher rate limit)
+let api = ApiClient::new().with_api_key("nadfun_xxxxx".to_string());
+
+// Option 3: From environment variable (recommended)
+// Set NAD_API_KEY in .env or shell
+let api = ApiClient::from_env();
+```
+
+#### Environment Variable Setup
+
+```bash
+# .env file
+NAD_API_KEY=nadfun_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Or export in shell
+export NAD_API_KEY=nadfun_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+#### Rate Limits
+
+| Request Origin | API Key | Rate Limit |
+|----------------|---------|------------|
+| External (no key) | ❌ | 10 req/min |
+| External (with key) | ✅ | 100 req/min |
+| nad.fun, nadapp.net | - | Unlimited |
+
+#### Getting an API Key
+
+1. **Login**: Visit [nad.fun](https://nad.fun) and connect your wallet
+2. **Navigate**: Go to Settings → API Keys
+3. **Create**: Click "Generate API Key"
+
+```bash
+# Or via API (requires session cookie from login)
+curl -X POST https://api.nadapp.net/api-key \
+  -H "Content-Type: application/json" \
+  -H "Cookie: nadfun-v3-api=<your_session>" \
+  -d '{
+    "name": "My SDK Integration",
+    "description": "Rust SDK for trading bot",
+    "expires_in_days": 365
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": 7185139933124608001,
+  "api_key": "nadfun_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "key_prefix": "nadfun_xxxxxxxx",
+  "name": "My SDK Integration"
+}
+```
+
+> ⚠️ **Important**: The `api_key` is shown only once! Store it securely.
+
+#### API Key Management
+
+```bash
+# List your API keys
+curl https://api.nadapp.net/api-key -H "Cookie: nadfun-v3-api=<your_session>"
+
+# Delete an API key
+curl -X DELETE https://api.nadapp.net/api-key/<id> -H "Cookie: nadfun-v3-api=<your_session>"
+```
+
+#### Limits & Security
+
+- **Max 5 keys** per account
+- Keys can have **expiration dates** (or unlimited)
+- **Revoke immediately** if compromised
+- Never commit API keys to git - use `.env` files
+
 ### 🎨 Token Creation
 
 Create new tokens with automatic image upload, metadata storage, and initial buy:
 
 ```rust
-use nadfun_sdk::{ActionId, Core, CreateTokenParams, Network};
+use nadfun_sdk::{ActionId, ApiClient, Core, CreateTokenParams, Network};
 use alloy::primitives::utils::parse_ether;
 
-// Initialize Core
+// Initialize Core and API client
 let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+let api = ApiClient::new().with_api_key("your-api-key".to_string()); // Optional
 
 // Calculate initial buy amount
 let initial_buy_mon = parse_ether("1.5")?;
@@ -92,7 +176,7 @@ let params = CreateTokenParams {
     name: "My Token".to_string(),
     symbol: "MTK".to_string(),
     description: "My awesome token".to_string(),
-    image_uri: "https://i.imgur.com/yourimage.png".to_string(),
+    image_uri: "https://example.com/image.png".to_string(),
     website: Some("https://mytoken.com".to_string()),
     twitter: Some("https://x.com/mytoken".to_string()),
     telegram: Some("https://t.me/mytoken".to_string()),
@@ -102,7 +186,7 @@ let params = CreateTokenParams {
     action_id: ActionId::CapricornActor, // Choose CapricornActor (1) or AmplifyActor (2)
 };
 
-let result = core.create_token(params).await?;
+let result = core.create_token(params, &api).await?;
 println!("Token created at: {}", result.token_address);
 ```
 
@@ -114,6 +198,43 @@ println!("Token created at: {}", result.token_address);
 - 💰 Initial buy transaction integration
 - 🔐 Automatic deploy fee calculation
 - 🎭 Type-safe actor selection via `ActionId` enum
+
+### 💰 Creator Rewards
+
+Claim trading fee rewards for tokens you created:
+
+```rust
+use nadfun_sdk::{ApiClient, Core, Network};
+
+// Initialize
+let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
+let api = ApiClient::new();
+
+// Get created tokens with reward info
+let response = api.get_created_tokens(core.wallet_address(), 1, 10).await?;
+println!("Found {} tokens", response.total_count);
+
+// Claim rewards for each claimable token
+for token in &response.tokens {
+    if let Some(params) = ApiClient::build_claim_params(token) {
+        println!("Claiming {} wei from {}", token.reward_info.amount, token.token_info.name);
+        let tx_hash = core.claim_creator_reward(params).await?;
+        println!("TX: {}", tx_hash);
+    }
+}
+
+// Or batch claim all at once (more gas efficient)
+if let Some(batch_params) = ApiClient::build_batch_claim_params(&response.tokens) {
+    let tx_hash = core.claim_creator_rewards_batch(batch_params).await?;
+    println!("Batch claim TX: {}", tx_hash);
+}
+```
+
+**Features:**
+- 📊 Query claimable rewards via API
+- 🧾 Merkle proof-based claiming
+- 📦 Batch claim for gas efficiency
+- 💸 Automatic wMON → MON conversion
 
 ### 🚀 Trading
 

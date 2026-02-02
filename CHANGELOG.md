@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.12] - 2025-02-02
+
+### Added
+
+- **API Key Authentication** - Optional API key support for higher rate limits
+  - `ApiClient::new()` - No auth (10 req/min)
+  - `ApiClient::from_env()` - Load API key from `NAD_API_KEY` environment variable
+  - `ApiClient::new().with_api_key()` - Explicit API key (100 req/min)
+
+- **Creator Rewards** - Claim trading fee rewards for created tokens
+  - `ApiClient::get_created_tokens()` - Query created tokens with reward info
+  - `ApiClient::build_claim_params()` - Build claim parameters from reward info
+  - `ApiClient::build_batch_claim_params()` - Build batch claim parameters
+  - `Core::claim_creator_reward()` - Claim reward for single token
+  - `Core::claim_creator_rewards_batch()` - Batch claim for multiple tokens
+
+### Changed
+
+- **API URL Updated** - Mainnet API URL changed to `https://api.nadapp.net`
+- **Agent API Paths** - Token creation now uses `/agent/*` endpoints
+  - `/agent/token/image` - Image upload
+  - `/agent/token/metadata` - Metadata creation
+  - `/agent/salt` - Salt generation
+  - `/agent/token/created/:address` - Get created tokens
+- **Simplified Architecture** - `TokenCreationClient` deprecated, use `ApiClient` directly
+- **Core::create_token()** now takes `&ApiClient` instead of `&TokenCreationClient`
+
+### Deprecated
+
+- `TokenCreationClient` - Use `ApiClient` directly for all API operations
+
+### Migration Guide
+
+```rust
+// Before (deprecated)
+let api = ApiClient::new();
+let client = TokenCreationClient::with_client(Arc::new(api));
+core.create_token(params, &client).await?;
+
+// After (recommended)
+let api = ApiClient::from_env(); // or ApiClient::new().with_api_key(key)
+core.create_token(params, &api).await?;
+
+// Creator rewards
+let response = api.get_created_tokens(address, 1, 10).await?;
+if let Some(params) = ApiClient::build_claim_params(&token) {
+    core.claim_creator_reward(params).await?;
+}
+```
+
 ## [0.3.0] - 2025-01-XX
 
 ### Changed - Fast Transaction Submission

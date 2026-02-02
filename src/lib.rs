@@ -6,6 +6,7 @@
 //!
 //! - **Trading**: Buy/sell tokens with automatic routing (bonding curve ↔ DEX)
 //! - **Event Streaming**: Real-time streaming and historical indexing
+//! - **API Client**: Authenticated API access with session management
 //! - **Simple API**: Two main modules - `Core` for trading, `stream` for events
 //!
 //! ## Quick Start
@@ -38,6 +39,12 @@
 //! }
 //! ```
 
+/// Authenticated API client with session management
+///
+/// Provides automatic authentication flow (nonce → sign → session) and
+/// handles cookie-based authentication for API requests.
+pub mod api;
+
 /// Constants and contract addresses for the Nad.fun ecosystem
 ///
 /// Contains all contract addresses, fee tiers, and other system constants.
@@ -51,10 +58,9 @@ pub mod constants;
 /// calculation utilities (`SlippageUtils`) for precise trade protection.
 pub mod core;
 
-/// Token creation functionality
-///
-/// Provides complete token creation flow including image upload, metadata creation,
-/// salt generation, and on-chain token deployment.
+// Token creation functionality moved to api module
+// Keeping create module for backward compatibility (deprecated)
+#[deprecated(note = "Use ApiClient directly for token creation")]
 pub mod create;
 
 /// Token interaction utilities for ERC-20 operations
@@ -85,10 +91,12 @@ pub mod types;
 pub(crate) mod contracts;
 
 // Pool discovery is still useful for advanced users
-pub use constants::{get_current_network, set_network, Network};
-pub use contracts::{get_pool_addresses_for_tokens, PoolDiscovery};
+pub use api::{ApiClient, ALLOWED_IMAGE_TYPES};
+pub use constants::{
+    get_creator_manager, get_creator_treasury, get_current_network, set_network, Network,
+};
+pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PoolDiscovery};
 pub use core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
-pub use create::TokenCreationClient;
 pub use stream::{
     BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
     SwapEvent,
@@ -109,11 +117,11 @@ pub use types::*;
 /// This saves you from having to import each type individually and provides
 /// a standardized way to get started with the SDK quickly.
 pub mod prelude {
+    // API client (handles all API operations including token creation)
+    pub use crate::api::{ApiClient, ALLOWED_IMAGE_TYPES};
+
     // Core trading functionality
     pub use crate::core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
-
-    // Token creation
-    pub use crate::create::TokenCreationClient;
 
     // Token operations
     pub use crate::token::TokenHelper;
@@ -128,6 +136,9 @@ pub mod prelude {
     // Constants and types
     pub use crate::constants::{get_current_network, set_network, Network};
     pub use crate::types::*;
+
+    // Creator reward claiming
+    pub use crate::contracts::CreatorClient;
 
     // Common Alloy primitives
     pub use alloy::primitives::{Address, B256, U256};

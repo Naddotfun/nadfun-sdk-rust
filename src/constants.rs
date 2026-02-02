@@ -94,7 +94,13 @@ pub mod addresses {
         pub const LENS_ADDRESS: &str = "0x7e78A8DE94f21804F7a17F4E8BF9EC2c872187ea";
 
         /// API server URL for metadata and token creation
-        pub const API_SERVER_URL: &str = "https://api.nad.fun";
+        pub const API_SERVER_URL: &str = "https://api.nadapp.net";
+
+        /// CreatorTreasury contract for creator reward claims
+        pub const CREATOR_TREASURY: &str = "0x24dFf9B68fA36f8400302e2babC3e049eA19459E";
+
+        /// CreatorManager contract for creator verification
+        pub const CREATOR_MANAGER: &str = "0x8796a581801533fA5c16D1C6ac4f7F57923870C9";
     }
 
     /// Testnet contract addresses
@@ -119,6 +125,12 @@ pub mod addresses {
 
         /// API server URL for metadata and token creation
         pub const API_SERVER_URL: &str = "https://dev-api.nad.fun";
+
+        /// CreatorTreasury contract for creator reward claims
+        pub const CREATOR_TREASURY: &str = "0x24dFf9B68fA36f8400302e2babC3e049eA19459E";
+
+        /// CreatorManager contract for creator verification
+        pub const CREATOR_MANAGER: &str = "0x8796a581801533fA5c16D1C6ac4f7F57923870C9";
     }
 
     // Legacy exports for backward compatibility (defaults to mainnet)
@@ -191,6 +203,22 @@ pub fn get_api_server_url() -> &'static str {
     match get_current_network() {
         Network::Mainnet => addresses::mainnet::API_SERVER_URL,
         Network::Testnet => addresses::testnet::API_SERVER_URL,
+    }
+}
+
+/// Get CreatorTreasury address for the current network
+pub fn get_creator_treasury() -> &'static str {
+    match get_current_network() {
+        Network::Mainnet => addresses::mainnet::CREATOR_TREASURY,
+        Network::Testnet => addresses::testnet::CREATOR_TREASURY,
+    }
+}
+
+/// Get CreatorManager address for the current network
+pub fn get_creator_manager() -> &'static str {
+    match get_current_network() {
+        Network::Mainnet => addresses::mainnet::CREATOR_MANAGER,
+        Network::Testnet => addresses::testnet::CREATOR_MANAGER,
     }
 }
 
