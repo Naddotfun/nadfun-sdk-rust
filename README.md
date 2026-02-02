@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.11"
+nadfun_sdk = "0.3.12"
 ```
 
 ## Quick Start
@@ -157,47 +157,78 @@ curl -X DELETE https://api.nadapp.net/api-key/<id> -H "Cookie: nadfun-v3-api=<yo
 
 ### 🎨 Token Creation
 
-Create new tokens with automatic image upload, metadata storage, and initial buy:
+Launch tokens on Nad.fun bonding curve with full metadata, image upload, and initial buy in a single transaction.
+
+#### Complete Flow
 
 ```rust
 use nadfun_sdk::{ActionId, ApiClient, Core, CreateTokenParams, Network};
 use alloy::primitives::utils::parse_ether;
+use anyhow::Result;
 
-// Initialize Core and API client
-let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
-let api = ApiClient::new().with_api_key("your-api-key".to_string()); // Optional
+#[tokio::main]
+async fn main() -> Result<()> {
+    // 1. Initialize clients
+    let core = Core::new(
+        "https://rpc.monad.xyz".to_string(),
+        std::env::var("PRIVATE_KEY")?,
+        Network::Mainnet,
+    ).await?;
 
-// Calculate initial buy amount
-let initial_buy_mon = parse_ether("1.5")?;
-let amount_out = core.get_initial_buy_amount_out(initial_buy_mon).await?;
+    let api = ApiClient::from_env(); // Reads NAD_API_KEY from env
 
-// Create token with all metadata
-let params = CreateTokenParams {
-    name: "My Token".to_string(),
-    symbol: "MTK".to_string(),
-    description: "My awesome token".to_string(),
-    image_uri: "https://example.com/image.png".to_string(),
-    website: Some("https://mytoken.com".to_string()),
-    twitter: Some("https://x.com/mytoken".to_string()),
-    telegram: Some("https://t.me/mytoken".to_string()),
-    creator_address: core.wallet_address(),
-    amount_out,
-    value: initial_buy_mon,
-    action_id: ActionId::CapricornActor, // Choose CapricornActor (1) or AmplifyActor (2)
-};
+    // 2. Calculate token output for initial buy
+    let initial_buy = parse_ether("1.5")?; // 1.5 MON
+    let tokens_out = core.get_initial_buy_amount_out(initial_buy).await?;
 
-let result = core.create_token(params, &api).await?;
-println!("Token created at: {}", result.token_address);
+    // 3. Configure token parameters
+    let params = CreateTokenParams {
+        name: "Rocket Pepe".to_string(),
+        symbol: "RPEPE".to_string(),
+        description: "The fastest pepe in the galaxy 🚀".to_string(),
+        image_uri: "https://i.imgur.com/your-image.png".to_string(),
+        website: Some("https://rocketpepe.xyz".to_string()),
+        twitter: Some("https://x.com/rocketpepe".to_string()),
+        telegram: Some("https://t.me/rocketpepe".to_string()),
+        creator_address: core.wallet_address(),
+        amount_out: tokens_out,
+        value: initial_buy,
+        action_id: ActionId::CapricornActor,
+    };
+
+    // 4. Create token (uploads image, creates metadata, deploys contract)
+    let result = core.create_token(params, &api).await?;
+
+    println!("✅ Token deployed: {}", result.token_address);
+    println!("📄 Metadata: {}", result.metadata_uri);
+    println!("🔞 NSFW: {}", result.is_nsfw);
+
+    Ok(())
+}
 ```
 
-**Features:**
-- 🖼️ Automatic image upload to IPFS (JPEG, PNG, WEBP, SVG only)
-- 🤖 AI-powered NSFW detection and rejection
-- 📝 Metadata creation and storage
-- 🎲 Vanity address generation via salt mining
-- 💰 Initial buy transaction integration
-- 🔐 Automatic deploy fee calculation
-- 🎭 Type-safe actor selection via `ActionId` enum
+#### What Happens Under the Hood
+
+1. **Image Upload** → Downloads from URI, validates format, uploads to IPFS
+2. **Metadata Creation** → Creates JSON metadata with all token info
+3. **Salt Mining** → Generates vanity address for your token
+4. **Contract Deploy** → Deploys token + initial buy in one transaction
+
+#### Supported Image Formats
+
+| Format | MIME Type |
+|--------|-----------|
+| JPEG | `image/jpeg` |
+| PNG | `image/png` |
+| WebP | `image/webp` |
+| SVG | `image/svg+xml` |
+
+#### Actor Types
+
+| ActionId | Description |
+|----------|-------------|
+| `CapricornActor` | Standard token launch (default) |
+| `AmplifyActor` | Amplified marketing features |
 
 ### 💰 Creator Rewards
 
