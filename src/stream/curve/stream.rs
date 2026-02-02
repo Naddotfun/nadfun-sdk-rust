@@ -50,19 +50,16 @@ impl CurveStream {
         let bonding_curve_address: Address = get_bonding_curve()
             .parse()
             .expect("Invalid bonding curve address");
-        let event_types = self
-            .event_types
-            .clone()
-            .unwrap_or_else(|| {
-                vec![
-                    EventType::Create,
-                    EventType::Buy,
-                    EventType::Sell,
-                    EventType::Sync,
-                    EventType::Lock,
-                    EventType::Graduate,
-                ]
-            });
+        let event_types = self.event_types.clone().unwrap_or_else(|| {
+            vec![
+                EventType::Create,
+                EventType::Buy,
+                EventType::Sell,
+                EventType::Sync,
+                EventType::Lock,
+                EventType::Graduate,
+            ]
+        });
 
         let signatures: Vec<B256> = event_types.iter().map(|et| et.signature()).collect();
 

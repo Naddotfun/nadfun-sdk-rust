@@ -1,12 +1,13 @@
 [package]
 name = "nadfun_sdk"
-version = "0.3.11"
+version = "0.3.12"
 edition = "2021"
 description = "Rust SDK for Nad.fun"
 license = "MIT"
 repository = "https://github.com/Naddotfun/nadfun-sdk-rust"
 documentation = "https://github.com/Naddotfun/nadfun-sdk-rust"
 keywords = ["memecoin", "nadfun", "nadfun-sdk"]
+exclude = [".omc/", "benches/"]
 
 readme = "README.md"
 
@@ -86,3 +87,8 @@ path = "examples/stream/dex_stream.rs"
 [[example]]
 name = "pool_discovery"
 path = "examples/stream/pool_discovery.rs"
+
+# Creator Examples
+[[example]]
+name = "claim_reward"
+path = "examples/creator/claim_reward.rs"
