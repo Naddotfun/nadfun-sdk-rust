@@ -186,6 +186,96 @@ async fn salt_params_v2_serializes_version_uppercase() {
     assert_eq!(body.get("version").and_then(|v| v.as_str()), Some("V2"));
 }
 
+/// `prepare_token_creation_v2` orchestrates image upload + metadata + salt
+/// with `version: "V2"` and returns a fully-populated V2PreparedCreation.
+#[tokio::test]
+async fn prepare_token_creation_v2_full_offchain_flow() {
+    use nadfun_sdk::V2PrepareCreationParams;
+
+    let server = MockServer::start().await;
+
+    // PNG magic bytes — image upload step detects content type from magic.
+    let png_bytes: Vec<u8> = {
+        let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        bytes.extend(std::iter::repeat(0).take(64));
+        bytes
+    };
+
+    // 1) Image source download (uploaded by ApiClient on a different
+    //    "external" URL, so we mock it on the same wiremock and pass the
+    //    full URI to ApiClient via params.image_uri).
+    Mock::given(method("GET"))
+        .and(path("/external/img.png"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "image/png")
+                .set_body_bytes(png_bytes.clone()),
+        )
+        .mount(&server)
+        .await;
+
+    // 2) Upload to /agent/token/image
+    Mock::given(method("POST"))
+        .and(path("/agent/token/image"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "image_uri": "ipfs://image-cid",
+            "is_nsfw": false
+        })))
+        .mount(&server)
+        .await;
+
+    // 3) Create metadata at /agent/token/metadata
+    Mock::given(method("POST"))
+        .and(path("/agent/token/metadata"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "metadata_uri": "ipfs://meta-cid",
+            "metadata": { "name": "Foo", "symbol": "FOO" }
+        })))
+        .mount(&server)
+        .await;
+
+    // 4) Salt mining at /agent/salt — assert version V2 was sent.
+    Mock::given(method("POST"))
+        .and(path("/agent/salt"))
+        .and(body_json(json!({
+            "creator": format!("{:?}", parse_address(SAMPLE_CREATOR_RAW)),
+            "metadata_uri": "ipfs://meta-cid",
+            "name": "Foo",
+            "symbol": "FOO",
+            "version": "V2"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "salt": "0x0000000000000000000000000000000000000000000000000000000000000042",
+            "address": SAMPLE_TOKEN_RAW
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let api = client_for(&server);
+    let prepared = api
+        .prepare_token_creation_v2(&V2PrepareCreationParams {
+            name: "Foo".into(),
+            symbol: "FOO".into(),
+            description: "A token".into(),
+            image_uri: format!("{}/external/img.png", server.uri()),
+            website: None,
+            twitter: None,
+            telegram: None,
+            creator_address: parse_address(SAMPLE_CREATOR_RAW),
+        })
+        .await
+        .expect("prepare_token_creation_v2");
+
+    assert_eq!(prepared.image_uri, "ipfs://image-cid");
+    assert_eq!(prepared.metadata_uri, "ipfs://meta-cid");
+    assert_eq!(prepared.token_address, parse_address(SAMPLE_TOKEN_RAW));
+    assert!(!prepared.is_nsfw);
+    // Salt should be the 32-byte hex value we returned (last byte = 0x42).
+    let salt_bytes = prepared.salt.0;
+    assert_eq!(salt_bytes[31], 0x42);
+}
+
 /// `post_salt` round-trips through wiremock with the V2 version field set,
 /// confirming both the request body shape and the response parsing.
 #[tokio::test]
