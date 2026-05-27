@@ -1,8 +1,9 @@
 use crate::types::{
     GasPricing, V2BuyParams, V2BuyWithNativeParams, V2BuyWithPermitParams, V2CreateParams,
     V2CreateWithNativeParams, V2ExactOutBuyParams, V2ExactOutBuyWithNativeParams,
-    V2ExactOutSellParams, V2ExactOutSellToNativeParams, V2SellParams, V2SellToNativeParams,
-    V2SellToNativeWithPermitParams, V2SellWithPermitParams,
+    V2ExactOutSellParams, V2ExactOutSellToNativeParams, V2GasEstimationParams, V2SellParams,
+    V2SellToNativeParams, V2SellToNativeWithPermitParams, V2SellWithPermitParams,
+    V2VaultAllocation,
 };
 use alloy::{
     primitives::{Address, B256, U256},
@@ -402,5 +403,194 @@ impl<P: Provider + Clone> NadFunRouter<P> {
     pub async fn wrapped_native(&self) -> Result<Address> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         Ok(contract.wrappedNative().call().await?)
+    }
+
+    /// Estimate gas for any v2 trading or creation operation.
+    ///
+    /// Builds the same calldata the equivalent send method would produce, but
+    /// runs `eth_estimateGas` (with the caller's `from` address so balance /
+    /// allowance checks succeed) instead of broadcasting. Caller should apply
+    /// their own buffer (15-25% is typical) on top of the returned value.
+    pub async fn estimate_gas(
+        &self,
+        params: V2GasEstimationParams,
+        from: Address,
+    ) -> Result<u64> {
+        let contract = INadFunRouter::new(self.address, self.provider.as_ref());
+        let map_vaults = |vs: Vec<V2VaultAllocation>| {
+            vs.into_iter()
+                .map(|v| VaultAllocation {
+                    vault: v.vault,
+                    bps: v.bps,
+                    setupData: v.setup_data,
+                })
+                .collect::<Vec<_>>()
+        };
+        let gas = match params {
+            V2GasEstimationParams::Create(p) => {
+                let rp = INadFunRouter::CreateParams {
+                    name: p.name,
+                    symbol: p.symbol,
+                    tokenURI: p.token_uri,
+                    quoteToken: p.quote_token,
+                    creatorFeeRate: p.creator_fee_rate,
+                    vaults: map_vaults(p.vaults),
+                    salt: p.salt,
+                    dexType: p.dex_type.as_u8(),
+                    buyQuoteAmount: p.buy_quote_amount,
+                    deadline: p.deadline,
+                };
+                contract.create(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::CreateWithNative(p) => {
+                let rp = INadFunRouter::CreateParams {
+                    name: p.name,
+                    symbol: p.symbol,
+                    tokenURI: p.token_uri,
+                    quoteToken: Address::ZERO,
+                    creatorFeeRate: p.creator_fee_rate,
+                    vaults: map_vaults(p.vaults),
+                    salt: p.salt,
+                    dexType: p.dex_type.as_u8(),
+                    buyQuoteAmount: p.buy_quote_amount,
+                    deadline: p.deadline,
+                };
+                contract
+                    .createWithNative(rp)
+                    .from(from)
+                    .value(p.native_value)
+                    .estimate_gas()
+                    .await?
+            }
+            V2GasEstimationParams::Buy(p) => {
+                let rp = INadFunRouter::BuyParams {
+                    token: p.token,
+                    amountIn: p.amount_in,
+                    amountOutMin: p.amount_out_min,
+                    deadline: p.deadline,
+                };
+                contract.buy(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::BuyWithNative { params, value } => {
+                let rp = INadFunRouter::BuyWithNativeParams {
+                    token: params.token,
+                    amountOutMin: params.amount_out_min,
+                    deadline: params.deadline,
+                };
+                contract
+                    .buyWithNative(rp)
+                    .from(from)
+                    .value(value)
+                    .estimate_gas()
+                    .await?
+            }
+            V2GasEstimationParams::BuyWithPermit(p) => {
+                let rp = INadFunRouter::BuyWithPermitParams {
+                    token: p.token,
+                    amountIn: p.amount_in,
+                    amountOutMin: p.amount_out_min,
+                    deadline: p.deadline,
+                    v: p.permit.v,
+                    r: p.permit.r,
+                    s: p.permit.s,
+                };
+                contract.buyWithPermit(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::Sell(p) => {
+                let rp = INadFunRouter::SellParams {
+                    token: p.token,
+                    amountIn: p.amount_in,
+                    amountOutMin: p.amount_out_min,
+                    deadline: p.deadline,
+                };
+                contract.sell(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::SellToNative(p) => {
+                let rp = INadFunRouter::SellToNativeParams {
+                    token: p.token,
+                    amountIn: p.amount_in,
+                    amountOutMin: p.amount_out_min,
+                    deadline: p.deadline,
+                };
+                contract.sellToNative(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::SellWithPermit(p) => {
+                let rp = INadFunRouter::SellWithPermitParams {
+                    token: p.token,
+                    amountIn: p.amount_in,
+                    amountOutMin: p.amount_out_min,
+                    deadline: p.deadline,
+                    v: p.permit.v,
+                    r: p.permit.r,
+                    s: p.permit.s,
+                };
+                contract
+                    .sellWithPermit(rp)
+                    .from(from)
+                    .estimate_gas()
+                    .await?
+            }
+            V2GasEstimationParams::SellToNativeWithPermit(p) => {
+                let rp = INadFunRouter::SellToNativeWithPermitParams {
+                    token: p.token,
+                    amountIn: p.amount_in,
+                    amountOutMin: p.amount_out_min,
+                    deadline: p.deadline,
+                    v: p.permit.v,
+                    r: p.permit.r,
+                    s: p.permit.s,
+                };
+                contract
+                    .sellToNativeWithPermit(rp)
+                    .from(from)
+                    .estimate_gas()
+                    .await?
+            }
+            V2GasEstimationParams::ExactOutBuy(p) => {
+                let rp = INadFunRouter::ExactOutBuyParams {
+                    token: p.token,
+                    amountOut: p.amount_out,
+                    amountInMax: p.amount_in_max,
+                    deadline: p.deadline,
+                };
+                contract.exactOutBuy(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::ExactOutBuyWithNative(p) => {
+                let rp = INadFunRouter::ExactOutBuyWithNativeParams {
+                    token: p.token,
+                    amountOut: p.amount_out,
+                    deadline: p.deadline,
+                };
+                contract
+                    .exactOutBuyWithNative(rp)
+                    .from(from)
+                    .value(p.amount_in_max)
+                    .estimate_gas()
+                    .await?
+            }
+            V2GasEstimationParams::ExactOutSell(p) => {
+                let rp = INadFunRouter::ExactOutSellParams {
+                    token: p.token,
+                    amountInMax: p.amount_in_max,
+                    amountOut: p.amount_out,
+                    deadline: p.deadline,
+                };
+                contract.exactOutSell(rp).from(from).estimate_gas().await?
+            }
+            V2GasEstimationParams::ExactOutSellToNative(p) => {
+                let rp = INadFunRouter::ExactOutSellToNativeParams {
+                    token: p.token,
+                    amountInMax: p.amount_in_max,
+                    amountOut: p.amount_out,
+                    deadline: p.deadline,
+                };
+                contract
+                    .exactOutSellToNative(rp)
+                    .from(from)
+                    .estimate_gas()
+                    .await?
+            }
+        };
+        Ok(gas)
     }
 }
