@@ -551,6 +551,158 @@ let min_out = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0); // 
 let max_in = SlippageUtils::calculate_amount_in_max(expected_tokens, 5.0); // 5% slippage
 ```
 
+## v2 Contracts (NadFunRouter ecosystem)
+
+The SDK ships a parallel `CoreV2` surface for v2 tokens. v2 introduces a
+single `NadFunRouter` that handles bonding curve and DEX trades, multi-
+quote-token (MON or arbitrary ERC-20), exact-output swaps, EIP-2612 permit
+flows, and a vault system (BurnVault / LPVault / CreatorFeeVault /
+GiftVault) for creator fees. v1 callers keep using `Core` unchanged.
+
+### Detecting Token Version
+
+Two ways to find out whether a token is v1 or v2:
+
+```rust
+// (a) Off-chain: ApiClient::get_token returns ApiTokenInfo.version
+let info = api.get_token(token).await?;
+match info.version {
+    SdkVersion::V1 => /* use Core */,
+    SdkVersion::V2 => /* use CoreV2 */,
+}
+
+// (b) On-chain: TokenRegistry::is_registered (true for v2 tokens)
+let registered = core_v2.token_registry().is_registered(token).await?;
+```
+
+### CoreV2 Quick Start
+
+```rust
+use nadfun_sdk::*;
+use alloy::primitives::utils::parse_ether;
+
+let core = CoreV2::new(rpc, private_key, Network::Mainnet).await?;
+
+// Auto-routed quote (bonding curve pre-graduation, DEX post-graduation)
+let expected = core.quote(token, parse_ether("0.1")?, /*is_buy*/ true).await?;
+let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
+
+// Buy with native MON
+let tx = core.buy_with_native(V2BuyWithNativeParams {
+    token, amount_out_min: min_out, deadline: U256::from(9_999_999_999u64),
+    gas_limit: None, gas_price: None, nonce: None,
+}, parse_ether("0.1")?).await?;
+```
+
+### v2 Trading API
+
+```rust
+// Buy / Sell variants (all return tx hash immediately):
+core_v2.buy(V2BuyParams { ... })                                  // ERC-20 quote
+core_v2.buy_with_native(V2BuyWithNativeParams { ... }, value)     // MON
+core_v2.buy_with_permit(V2BuyWithPermitParams { ... })            // permit
+core_v2.sell(V2SellParams { ... })                                // ERC-20 quote
+core_v2.sell_to_native(V2SellToNativeParams { ... })              // MON
+core_v2.sell_with_permit(V2SellWithPermitParams { ... })          // permit
+core_v2.sell_to_native_with_permit(V2SellToNativeWithPermitParams { ... })
+
+// Exact-output:
+core_v2.exact_out_buy(V2ExactOutBuyParams { ... })
+core_v2.exact_out_buy_with_native(V2ExactOutBuyWithNativeParams { ... })
+core_v2.exact_out_sell(V2ExactOutSellParams { ... })
+core_v2.exact_out_sell_to_native(V2ExactOutSellToNativeParams { ... })
+
+// Quote:
+core_v2.quote(token, amount_in, is_buy)                  // auto-route
+core_v2.quote_in(token, amount_out, is_buy)              // inverse
+core_v2.quote_bonding_curve(token, amount_in, is_buy)    // BC only
+core_v2.quote_dex(token, amount_in, is_buy)              // DEX only
+
+// State:
+core_v2.is_graduated(token)
+core_v2.pool_address(token)        // via TokenRegistry
+core_v2.wrapped_native()
+
+// Gas estimation:
+core_v2.estimate_gas(V2GasEstimationParams::BuyWithNative { params, value }).await?
+
+// Escape hatches (raw alloy bindings):
+core_v2.router(), core_v2.factory(), core_v2.bonding_curve(),
+core_v2.token_registry(), core_v2.provider()
+```
+
+### v2 Token Creation
+
+```rust
+let result = core_v2.create_token(V2CreateTokenParams {
+    name: "Foo".into(),
+    symbol: "FOO".into(),
+    description: "..".into(),
+    image_uri: "https://...".into(),
+    website: None, twitter: None, telegram: None,
+    creator_address: wallet,
+    creator_fee_rate: 100,       // BPS
+    vaults: vec![V2VaultAllocation { vault: burn_vault, bps: 5000, setup_data: Bytes::default() }, ...],
+    dex_type: V2DexType::NadFun,
+    buy_quote_amount: initial_buy,
+    payment: V2CreatePayment::Native { value: initial_buy },
+    deadline,
+    gas_limit: None, gas_price: None, nonce: None,
+}, &api).await?;
+// result.token_address, .metadata_uri, .image_uri, .salt, .transaction_hash, .is_nsfw
+```
+
+### v2 Streaming
+
+```rust
+// Bonding curve events (Create / Buy / Sell / Sync / Graduate / SnipingPenalty)
+let stream = CurveStreamV2::new(ws_url).await?
+    .subscribe_events(vec![V2EventType::Buy, V2EventType::Sell])
+    .filter_tokens(vec![token]);
+let mut s = stream.subscribe().await?;
+while let Some(ev) = s.next().await { /* V2BondingCurveEvent */ }
+
+// NadFunPair swaps
+let pair = core_v2.pool_address(token).await?;
+let swaps = NadFunSwapStream::new(ws_url, vec![pair]).await?.subscribe().await?;
+```
+
+### Mixed Token Dispatch
+
+For wallets / UIs / agents that receive arbitrary tokens:
+
+```rust
+async fn auto_buy(v1: &Core, v2: &CoreV2, api: &ApiClient, token: Address, value: U256, ...)
+    -> Result<B256>
+{
+    match api.get_token(token).await?.version {
+        SdkVersion::V1 => {
+            let (router, expected) = v1.get_amount_out(token, value, true).await?;
+            let min = SlippageUtils::calculate_amount_out_min(expected, 5.0);
+            v1.buy(BuyParams { token, amount_in: value, amount_out_min: min, ... }, router).await
+        }
+        SdkVersion::V2 => {
+            let expected = v2.quote(token, value, true).await?;
+            let min = SlippageUtils::calculate_amount_out_min(expected, 5.0);
+            v2.buy_with_native(V2BuyWithNativeParams { token, amount_out_min: min, ... }, value).await
+        }
+    }
+}
+```
+
+Full example at `examples/unified_dispatch.rs`. Companion v2 examples at
+`examples/v2/{buy,sell,buy_erc20_quote,exact_out,create_token,curve_stream,dex_stream,pool_discovery}.rs`.
+
+### v2 Constants Helpers
+
+`get_nadfun_router_v2`, `get_nadfun_factory_v2`, `get_nadfun_pair_impl_v2`,
+`get_nad_swap_adapter_v2`, `get_token_registry_v2`, `get_token_impl_v2`,
+`get_protocol_manager_v2`, `get_bonding_curve_v2`, `get_fee_collector_v2`,
+`get_creator_fee_processor_v2`, `get_lp_manager_v2`, `get_vault_registry_v2`,
+`get_burn_vault_v2`, `get_lp_vault_v2`, `get_creator_fee_vault_v2`,
+`get_gift_vault_v2` — each returns `Option<&'static str>` for the active
+network. Both mainnet and testnet have v2 deployed.
+
 ## Links
 
 - GitHub: https://github.com/Naddotfun/nadfun-sdk-rust

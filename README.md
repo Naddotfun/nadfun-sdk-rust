@@ -70,6 +70,61 @@ async fn main() -> Result<()> {
 }
 ```
 
+## Choosing v1 vs v2
+
+Nad.fun ships two generations of contracts. The SDK exposes them as
+**separate, equivalent entry points**:
+
+| | v1 | v2 |
+|---|---|---|
+| Client type | [`Core`](#quick-start) | [`CoreV2`](#corev2-quick-start) |
+| Routers | `BondingCurveRouter` + `DexRouter` (Capricorn CL) | unified `NadFunRouter` |
+| Quote tokens | MON only | MON + arbitrary ERC-20 |
+| Exact-output | yes | yes (stricter slippage semantics) |
+| Vaults | n/a | Burn / LP / CreatorFee / Gift |
+| Streaming | `CurveStream` / `DexStream` | `CurveStreamV2` / `NadFunSwapStream` |
+| Creator rewards | `CreatorClient` (Merkle claim) | (vault claim — next minor) |
+
+The SDK **does not** auto-dispatch. Pick `Core` for v1 tokens and `CoreV2`
+for v2 tokens. For mixed-token scenarios (wallet UIs, AI agents, generic
+explorers), use `ApiClient::get_token(token).version` to learn the token's
+`SdkVersion` and route to the correct client — see
+[`examples/unified_dispatch.rs`](examples/unified_dispatch.rs) for a
+15-line helper.
+
+### CoreV2 Quick Start
+
+```rust
+use nadfun_sdk::*;
+use alloy::primitives::{utils::parse_ether, Address, U256};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let core = CoreV2::new(rpc_url, private_key, Network::Mainnet).await?;
+    let token: Address = "0x...".parse()?;
+    let mon_amount = parse_ether("0.1")?;
+
+    // Auto-routed quote: bonding curve pre-graduation, NadFunPair post.
+    let expected = core.quote(token, mon_amount, true).await?;
+    let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
+
+    let tx = core.buy_with_native(V2BuyWithNativeParams {
+        token,
+        amount_out_min: min_out,
+        deadline: U256::from(9_999_999_999u64),
+        gas_limit: None,
+        gas_price: None,
+        nonce: None,
+    }, mon_amount).await?;
+    println!("tx: {tx}");
+    Ok(())
+}
+```
+
+End-to-end v2 token creation, exact-output, ERC-20 quote, permits, pool
+discovery, and event streaming are covered under
+[`examples/v2/`](examples/v2/).
+
 ## Features
 
 ### 🔑 API Authentication
