@@ -3,6 +3,8 @@
 use alloy::primitives::{Address, U256};
 use serde::{Deserialize, Serialize};
 
+use crate::version::SdkVersion;
+
 /// Action ID for token creation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionId {
@@ -55,13 +57,20 @@ pub struct MetadataInfo {
     pub symbol: String,
 }
 
-/// Salt request parameters
-#[derive(Debug, Serialize, Deserialize)]
+/// Salt request parameters.
+///
+/// `version` is `None` for v1 callers (server treats absence as `"V1"`) and
+/// `Some(SdkVersion::V2)` for the v2 token-creation flow. The field is
+/// `skip_serializing_if = "Option::is_none"` so legacy v1 requests are
+/// byte-identical on the wire to the pre-v2 SDK.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaltParams {
     pub creator: String,
     pub metadata_uri: String,
     pub name: String,
     pub symbol: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<SdkVersion>,
 }
 
 /// Salt response
