@@ -2,15 +2,23 @@
 //!
 //! Organized by version:
 //! - `v1`: bonding curve + Capricorn CL DEX (legacy, supplied by `nadfun-contract` v1)
-//! - `v2`: NadFunRouter / BondingCurveV2 / NadFunPair (added with v2 contracts) — coming soon
+//! - `v2`: NadFunRouter / BondingCurveV2 / NadFunPair (added with v2 contracts)
 //!
-//! Both versions support real-time WebSocket streaming and historical HTTP indexing
-//! with 2-stage filtering.
+//! Both versions support real-time WebSocket streaming and historical HTTP
+//! indexing with 2-stage filtering.
 
 pub mod v1;
+pub mod v2;
 
 // Re-export v1 streaming surface at the legacy `crate::stream::*` paths.
 pub use v1::{CurveIndexer, CurveStream, DexIndexer, DexStream};
+
+// v2 surface re-exported at the top of `crate::stream::*` with v2-prefixed
+// names so v1 callers' wildcard imports keep working without surprise.
+pub use v2::{
+    discover_pools_unified, CurveIndexerV2, CurveStreamV2, NadFunSwapEvent, NadFunSwapIndexer,
+    NadFunSwapStream, PoolLocation, PoolSurface,
+};
 
 // Re-export types from the types module
 pub use crate::types::{
