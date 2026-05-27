@@ -9,6 +9,7 @@
 //! v1 callers use [`crate::Core`] — completely independent.
 
 use crate::{
+    api::ApiClient,
     constants::{
         get_bonding_curve_v2, get_nadfun_factory_v2, get_nadfun_router_v2, get_token_registry_v2,
         set_network, Network,
@@ -118,6 +119,93 @@ impl CoreV2 {
     /// Low-level: deploy a v2 token funded by native MON (`msg.value`).
     pub async fn create_with_native(&self, params: V2CreateWithNativeParams) -> Result<B256> {
         self.router.create_with_native(params).await
+    }
+
+    /// High-level: end-to-end v2 token creation.
+    ///
+    /// Orchestrates the full flow:
+    ///   1. Off-chain via `ApiClient`: upload image to IPFS, post metadata,
+    ///      and mine a CREATE2 salt with `version: "V2"`.
+    ///   2. On-chain: dispatch to `NadFunRouter::create` (when `payment` is
+    ///      [`V2CreatePayment::Erc20`]) or `NadFunRouter::createWithNative`
+    ///      (when `payment` is [`V2CreatePayment::Native`]).
+    ///
+    /// Returns the predicted token address (matches the salt-server output)
+    /// along with the metadata + image URIs, the salt, the transaction
+    /// hash, and the NSFW flag from server detection.
+    ///
+    /// Requires that the caller has approved the router for `buy_quote_amount`
+    /// of `quote_token` when using `V2CreatePayment::Erc20`.
+    pub async fn create_token(
+        &self,
+        params: V2CreateTokenParams,
+        api: &ApiClient,
+    ) -> Result<V2TokenCreationResult> {
+        // Off-chain: image + metadata + salt mining.
+        let prepared = api
+            .prepare_token_creation_v2(&V2PrepareCreationParams {
+                name: params.name.clone(),
+                symbol: params.symbol.clone(),
+                description: params.description.clone(),
+                image_uri: params.image_uri.clone(),
+                website: params.website.clone(),
+                twitter: params.twitter.clone(),
+                telegram: params.telegram.clone(),
+                creator_address: params.creator_address,
+            })
+            .await?;
+
+        // On-chain: dispatch by payment mode. We thread the prepared
+        // metadata_uri (not the raw image_uri) into the contract's tokenURI
+        // field; the prepared name/symbol may differ from the user's input
+        // if the server normalized them.
+        let tx_hash = match params.payment {
+            V2CreatePayment::Native { value } => {
+                let on_chain = V2CreateWithNativeParams {
+                    name: params.name.clone(),
+                    symbol: params.symbol.clone(),
+                    token_uri: prepared.metadata_uri.clone(),
+                    creator_fee_rate: params.creator_fee_rate,
+                    vaults: params.vaults.clone(),
+                    salt: prepared.salt,
+                    dex_type: params.dex_type,
+                    buy_quote_amount: params.buy_quote_amount,
+                    native_value: value,
+                    deadline: params.deadline,
+                    gas_limit: params.gas_limit,
+                    gas_price: params.gas_price.clone(),
+                    nonce: params.nonce,
+                };
+                self.router.create_with_native(on_chain).await?
+            }
+            V2CreatePayment::Erc20 { quote_token } => {
+                let on_chain = V2CreateParams {
+                    name: params.name.clone(),
+                    symbol: params.symbol.clone(),
+                    token_uri: prepared.metadata_uri.clone(),
+                    quote_token,
+                    creator_fee_rate: params.creator_fee_rate,
+                    vaults: params.vaults.clone(),
+                    salt: prepared.salt,
+                    dex_type: params.dex_type,
+                    buy_quote_amount: params.buy_quote_amount,
+                    deadline: params.deadline,
+                    gas_limit: params.gas_limit,
+                    gas_price: params.gas_price.clone(),
+                    nonce: params.nonce,
+                };
+                self.router.create(on_chain).await?
+            }
+        };
+
+        Ok(V2TokenCreationResult {
+            token_address: prepared.token_address,
+            metadata_uri: prepared.metadata_uri,
+            image_uri: prepared.image_uri,
+            salt: prepared.salt,
+            transaction_hash: tx_hash,
+            is_nsfw: prepared.is_nsfw,
+        })
     }
 
     // === Trading: exact-in ===
