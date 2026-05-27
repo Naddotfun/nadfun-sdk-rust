@@ -131,3 +131,7 @@ path = "examples/v2/pool_discovery.rs"
 [[example]]
 name = "unified_dispatch"
 path = "examples/unified_dispatch.rs"
+
+[[example]]
+name = "v2_smoke"
+path = "examples/v2/smoke.rs"
