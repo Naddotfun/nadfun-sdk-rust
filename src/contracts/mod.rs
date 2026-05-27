@@ -11,4 +11,7 @@ pub use v1::{
     get_pool_addresses_for_tokens, BondingCurveRouter, CreatorClient, DexRouter, Lens,
     PoolDiscovery,
 };
-pub use v2::NadFunRouter;
+pub use v2::{
+    BondingCurveV2, NadFunFactory, NadFunPair, NadFunRouter, PairReserves, TokenRegistryInfo,
+    TokenRegistryV2,
+};
