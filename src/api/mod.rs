@@ -21,10 +21,11 @@
 
 use crate::constants::get_api_server_url;
 use crate::types::{
-    ApiErrorResponse, CreatedToken, CreatedTokenResponse, CreateTokenParams,
+    ApiErrorResponse, ApiTokenInfo, CreatedToken, CreatedTokenResponse, CreateTokenParams,
     CreatorBatchClaimParams, CreatorClaimParams, MetadataParams, PostMetadataData, PostSaltData,
-    SaltParams, UploadImageData,
+    SaltParams, UploadImageData, V2PrepareCreationParams, V2PreparedCreation, VaultState,
 };
+use crate::version::SdkVersion;
 use alloy::primitives::{Address, B256, U256};
 use anyhow::Result;
 use reqwest::{Client, Method, RequestBuilder};
@@ -138,6 +139,16 @@ impl ApiClient {
     /// Set API key directly
     pub fn set_api_key(&mut self, api_key: String) {
         self.api_key = Some(api_key);
+    }
+
+    /// Override the base API URL.
+    ///
+    /// Useful for pointing the client at a custom deployment (staging, local
+    /// mock, etc.) or for tests against wiremock. By default the client uses
+    /// `get_api_server_url()` for the current network.
+    pub fn with_api_url(mut self, api_url: String) -> Self {
+        self.api_url = api_url;
+        self
     }
 }
 
@@ -304,6 +315,48 @@ impl ApiClient {
         Ok(salt_data)
     }
 
+    /// Internal helper shared between [`Self::prepare_token_creation`] (v1) and
+    /// [`Self::prepare_token_creation_v2`].
+    ///
+    /// Downloads the image from `image_uri`, uploads it to IPFS, and creates
+    /// the JSON metadata document on the metadata server. Returns the IPFS
+    /// image URI, the metadata URI, the (potentially-normalized) name/symbol
+    /// the server stored, and the NSFW flag.
+    async fn upload_image_and_metadata(
+        &self,
+        name: &str,
+        symbol: &str,
+        description: &str,
+        image_uri: &str,
+        website: Option<&str>,
+        twitter: Option<&str>,
+        telegram: Option<&str>,
+    ) -> Result<(UploadImageData, PostMetadataData)> {
+        let upload_result = self.upload_image_from_uri(image_uri).await?;
+
+        let metadata_params = MetadataParams {
+            name: name.to_string(),
+            symbol: symbol.to_string(),
+            image_uri: upload_result.image_uri.clone(),
+            description: description.to_string(),
+            website: website
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+            twitter: twitter
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+            telegram: telegram
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
+            is_nsfw: upload_result.is_nsfw,
+        };
+        let metadata_result = self.post_metadata(metadata_params).await?;
+        Ok((upload_result, metadata_result))
+    }
+
     /// Execute complete token creation preparation flow
     ///
     /// This function handles:
@@ -318,43 +371,25 @@ impl ApiClient {
         &self,
         params: &CreateTokenParams,
     ) -> Result<(String, String, [u8; 32], String, bool)> {
-        // Step 1: Download and upload image
-        let upload_result = self.upload_image_from_uri(&params.image_uri).await?;
+        let (upload_result, metadata_result) = self
+            .upload_image_and_metadata(
+                &params.name,
+                &params.symbol,
+                &params.description,
+                &params.image_uri,
+                params.website.as_deref(),
+                params.twitter.as_deref(),
+                params.telegram.as_deref(),
+            )
+            .await?;
 
-        // Step 2: Create metadata
-        let metadata_params = MetadataParams {
-            name: params.name.clone(),
-            symbol: params.symbol.clone(),
-            image_uri: upload_result.image_uri.clone(),
-            description: params.description.clone(),
-            website: params
-                .website
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned()
-                .unwrap_or_default(),
-            twitter: params
-                .twitter
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned()
-                .unwrap_or_default(),
-            telegram: params
-                .telegram
-                .as_ref()
-                .filter(|s| !s.is_empty())
-                .cloned()
-                .unwrap_or_default(),
-            is_nsfw: upload_result.is_nsfw,
-        };
-        let metadata_result = self.post_metadata(metadata_params).await?;
-
-        // Step 3: Get salt and token address
+        // Get salt and token address (v1: no version field on the wire)
         let salt_params = SaltParams {
             creator: format!("{:?}", params.creator_address),
             metadata_uri: metadata_result.metadata_uri.clone(),
             name: metadata_result.metadata.name.clone(),
             symbol: metadata_result.metadata.symbol.clone(),
+            version: None,
         };
         let salt_result = self.post_salt(salt_params).await?;
 
@@ -368,6 +403,115 @@ impl ApiClient {
             salt_result.address,
             upload_result.is_nsfw,
         ))
+    }
+
+    /// Execute the v2 token-creation preparation flow.
+    ///
+    /// Mirrors [`Self::prepare_token_creation`] but requests salt mining with
+    /// `version: "V2"`, which makes the server compute the CREATE2 address
+    /// against the v2 BondingCurve + Token implementation (see
+    /// `api-server v2/src/services/token/salt.rs`).
+    ///
+    /// The returned [`V2PreparedCreation`] feeds directly into
+    /// `CoreV2::create_token` (next step) — the caller does not normally
+    /// invoke this method directly.
+    pub async fn prepare_token_creation_v2(
+        &self,
+        params: &V2PrepareCreationParams,
+    ) -> Result<V2PreparedCreation> {
+        let (upload_result, metadata_result) = self
+            .upload_image_and_metadata(
+                &params.name,
+                &params.symbol,
+                &params.description,
+                &params.image_uri,
+                params.website.as_deref(),
+                params.twitter.as_deref(),
+                params.telegram.as_deref(),
+            )
+            .await?;
+
+        let salt_params = SaltParams {
+            creator: format!("{:?}", params.creator_address),
+            metadata_uri: metadata_result.metadata_uri.clone(),
+            name: metadata_result.metadata.name.clone(),
+            symbol: metadata_result.metadata.symbol.clone(),
+            version: Some(SdkVersion::V2),
+        };
+        let salt_result = self.post_salt(salt_params).await?;
+
+        let salt_bytes = parse_salt_to_bytes32(&salt_result.salt)?;
+        let token_address: Address = salt_result.address.parse().map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse token address '{}' from salt response: {}",
+                salt_result.address,
+                e
+            )
+        })?;
+
+        Ok(V2PreparedCreation {
+            image_uri: upload_result.image_uri,
+            metadata_uri: metadata_result.metadata_uri,
+            salt: B256::from(salt_bytes),
+            token_address,
+            is_nsfw: upload_result.is_nsfw,
+        })
+    }
+
+    /// Look up the API's record for a single token: name/symbol/socials,
+    /// creator profile, graduation flag, and — critically — the
+    /// [`SdkVersion`] discriminator.
+    ///
+    /// Use this for client-side v1/v2 dispatch when you receive a token
+    /// address from outside (e.g. a wallet UI or message). For tight loops,
+    /// cache the result; the version of a token does not change.
+    pub async fn get_token(&self, token: Address) -> Result<ApiTokenInfo> {
+        // `format!("{:?}", token)` produces the EIP-55 mixed-case `0x...` form.
+        let url = format!("{}/token/{:?}", self.api_url, token);
+        let response = self.get(&url).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        if !status.is_success() {
+            if let Ok(err) = serde_json::from_str::<ApiErrorResponse>(&body) {
+                anyhow::bail!("get_token({:?}) failed: {}", token, err.error);
+            }
+            anyhow::bail!("get_token({:?}) failed with {}: {}", token, status, body);
+        }
+        serde_json::from_str(&body).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse get_token response: {}. Body: {}",
+                e,
+                body
+            )
+        })
+    }
+
+    /// Look up the v2 vault state for a token (fees per vault slot, totals,
+    /// per-vault stats). v2-only — calling this on a v1 token will yield a
+    /// 404 from the API server.
+    pub async fn get_token_vaults(&self, token: Address) -> Result<VaultState> {
+        let url = format!("{}/vault/{:?}", self.api_url, token);
+        let response = self.get(&url).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        if !status.is_success() {
+            if let Ok(err) = serde_json::from_str::<ApiErrorResponse>(&body) {
+                anyhow::bail!("get_token_vaults({:?}) failed: {}", token, err.error);
+            }
+            anyhow::bail!(
+                "get_token_vaults({:?}) failed with {}: {}",
+                token,
+                status,
+                body
+            );
+        }
+        serde_json::from_str(&body).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse get_token_vaults response: {}. Body: {}",
+                e,
+                body
+            )
+        })
     }
 }
 
