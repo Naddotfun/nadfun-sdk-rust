@@ -194,55 +194,58 @@ pub mod addresses {
             pub const CREATOR_MANAGER: &str = "0x8796a581801533fA5c16D1C6ac4f7F57923870C9";
         }
 
-        /// v2 contracts.
+        /// v2 contracts (latest testnet redeploy).
         pub mod v2 {
             /// NadFun unified router proxy.
-            pub const NAD_FUN_ROUTER: &str = "0x75588668999cA0557b78046b8a5E86b47b9234ec";
+            pub const NAD_FUN_ROUTER: &str = "0xceB64d1F34EE21b5c1B170Fb6EDB866E2C38552E";
 
             /// NadFun pair factory.
-            pub const NAD_FUN_FACTORY: &str = "0x59C51c66B79c68F63d5446940CD13b6968788e36";
+            pub const NAD_FUN_FACTORY: &str = "0x296ea9bB015493FAAe7A776C39BacA4ef0B13E87";
 
             /// NadFun pair implementation.
-            pub const NAD_FUN_PAIR_IMPL: &str = "0x3cAd42e28BC0D373F4B9419d0835b159eE4CbF1F";
+            pub const NAD_FUN_PAIR_IMPL: &str = "0xd17d7EEccB463A3F928557D0956CB2673568a868";
 
             /// IDexAdapter implementation wrapping NadFunPair.
-            pub const NAD_SWAP_ADAPTER: &str = "0x3D7B853D59c5ED21072bF00C9509c5324e9E43c9";
+            pub const NAD_SWAP_ADAPTER: &str = "0x17aF81Fb470F2ADC079f6b62682De12b4a748225";
 
             /// TokenRegistry.
-            pub const TOKEN_REGISTRY: &str = "0x2Bc127be900aD290E703Cd2C71eB0EDCa162C898";
+            pub const TOKEN_REGISTRY: &str = "0x1b2b500a6f6C8a25Ca0436d8183Ba25C9415e28E";
 
             /// Token implementation contract.
-            pub const TOKEN_IMPL: &str = "0xFD870fEbeeA5C1Cd5b10cd950eFF8f4d63dc81f1";
+            pub const TOKEN_IMPL: &str = "0x22CaB8b60EEfE9e0b7010C0B4c9C2822B32868c6";
 
             /// ProtocolManager.
-            pub const PROTOCOL_MANAGER: &str = "0x2F98030aBD7c59e3E5Dc6b4b66b6008821d0fB41";
+            pub const PROTOCOL_MANAGER: &str = "0x599F6c2307C4b90809F59275613Ab285D1B6bD80";
 
             /// v2 BondingCurve.
-            pub const BONDING_CURVE: &str = "0x27063a38eC0D3281D354090EB92e669Ed1eB956C";
+            pub const BONDING_CURVE: &str = "0xf3e5434a6E8087c563eA2Bf82087e26C09BBA11D";
 
             /// FeeCollector.
-            pub const FEE_COLLECTOR: &str = "0x653cf4297fB3f7804173b8449950E20812DD6dC3";
+            pub const FEE_COLLECTOR: &str = "0x91079D81252018498ec4c808f7a55F8508E08Aa2";
 
             /// CreatorFeeProcessor.
-            pub const CREATOR_FEE_PROCESSOR: &str = "0xad208200b138F98F6223837464662DaF3a852F02";
+            pub const CREATOR_FEE_PROCESSOR: &str = "0x6b19114c53e108Bb8B40e8077a278D3b7273B733";
 
             /// LPManager.
-            pub const LP_MANAGER: &str = "0x35B8A48f32913d50253a63614206588Cb1D9C402";
+            pub const LP_MANAGER: &str = "0x8ffaa9f97bDf1A3b1becc635c43979f8B83724a3";
 
             /// VaultRegistry.
-            pub const VAULT_REGISTRY: &str = "0x4f7315F8Acde8C521615BA4312d5fC61e632c99D";
+            pub const VAULT_REGISTRY: &str = "0x22181652ea89572Ab14Cffe9c72D39b0D459452d";
 
             /// BurnVault.
-            pub const BURN_VAULT: &str = "0xFA707fe7d2c2894bf0436c7B73947cBA9E888017";
+            pub const BURN_VAULT: &str = "0xB1c3574e2E7Ca6Dd1b9E2BB833EcaB2b33d95C17";
 
             /// LPVault.
-            pub const LP_VAULT: &str = "0x2acD9C75fe16c909237D9e6f080210D26c8c956D";
+            pub const LP_VAULT: &str = "0xd5882161162be2E7C34b87a9bCf6b65551718F36";
 
             /// CreatorFeeVault.
-            pub const CREATOR_FEE_VAULT: &str = "0xfEB12B7698e296C57BBF9f0c9b38B3e908285A99";
+            pub const CREATOR_FEE_VAULT: &str = "0xFD8f6284504C9e7Aa46fB3F71827B5552F01936d";
 
             /// GiftVault.
-            pub const GIFT_VAULT: &str = "0xC112EB5C40FC9A22425300D232A31d00FF840ad0";
+            pub const GIFT_VAULT: &str = "0xd8F03855449Cc508A1B4442c072b1e1e3B064621";
+
+            /// Liquid-staked MON used by `ILvMonMinter` flows on v2.
+            pub const LV_MON: &str = "0xBe3fa50514D9617ce645a02B34F595541AF02b6b";
         }
 
         // Legacy flat access (`addresses::testnet::BONDING_CURVE`) — v1 names only.
@@ -472,6 +475,18 @@ pub fn get_gift_vault_v2() -> Option<&'static str> {
     match get_current_network() {
         Network::Mainnet => Some(addresses::mainnet::v2::GIFT_VAULT),
         Network::Testnet => Some(addresses::testnet::v2::GIFT_VAULT),
+    }
+}
+
+/// Get the v2 liquid-staked MON (LvMON) address for the current network.
+///
+/// Used by `ILvMonMinter` flows on v2 when the router needs to wrap/unwrap
+/// against the liquid-staking version of MON instead of plain WMON. Returns
+/// `None` on networks where LvMON isn't deployed yet (currently Mainnet).
+pub fn get_lv_mon_v2() -> Option<&'static str> {
+    match get_current_network() {
+        Network::Mainnet => None,
+        Network::Testnet => Some(addresses::testnet::v2::LV_MON),
     }
 }
 
