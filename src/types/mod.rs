@@ -1,14 +1,10 @@
-//! All types for the Nad.fun SDK
+//! All types for the Nad.fun SDK.
+//!
+//! Organized by version: `v1` (legacy bonding curve + Capricorn CL types) and `v2` (NadFun unified router types).
 
-pub mod bonding_curve;
-pub mod create;
-pub mod creator;
-pub mod dex;
-pub mod trade;
+pub mod v1;
+pub mod v2;
 
-// Re-export all types for easy access
-pub use bonding_curve::*;
-pub use create::*;
-pub use creator::*;
-pub use dex::*;
-pub use trade::*;
+// Re-export everything for easy access — preserves the existing `crate::types::*` flat access pattern.
+pub use v1::*;
+pub use v2::*;

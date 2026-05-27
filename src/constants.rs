@@ -131,6 +131,9 @@ pub mod addresses {
 
         /// CreatorManager contract for creator verification
         pub const CREATOR_MANAGER: &str = "0x8796a581801533fA5c16D1C6ac4f7F57923870C9";
+
+        /// NadFun v2 unified router proxy
+        pub const NADFUN_ROUTER_V2: &str = "0xceb64d1f34ee21b5c1b170fb6edb866e2c38552e";
     }
 
     // Legacy exports for backward compatibility (defaults to mainnet)
@@ -219,6 +222,17 @@ pub fn get_creator_manager() -> &'static str {
     match get_current_network() {
         Network::Mainnet => addresses::mainnet::CREATOR_MANAGER,
         Network::Testnet => addresses::testnet::CREATOR_MANAGER,
+    }
+}
+
+/// Get NadFun v2 unified router address for the current network.
+///
+/// v2 is currently configured for testnet only. Mainnet returns `None` until the
+/// v2 contracts are deployed there.
+pub fn get_nadfun_router_v2() -> Option<&'static str> {
+    match get_current_network() {
+        Network::Mainnet => None,
+        Network::Testnet => Some(addresses::testnet::NADFUN_ROUTER_V2),
     }
 }
 

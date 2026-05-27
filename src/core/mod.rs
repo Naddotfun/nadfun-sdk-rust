@@ -63,21 +63,16 @@
 //! - **Deadline Management**: Automatic deadline calculation for time-sensitive trades
 //! - **Error Handling**: Comprehensive error types for different failure scenarios
 
-/// Core trading interface and execution logic
-#[allow(clippy::module_inception)]
-pub mod core;
+/// v1 trading (Core, lens-routed buy/sell, slippage utils, gas estimation)
+pub mod v1;
 
-/// Mathematical utilities for slippage calculations and amount conversions
-pub mod utils;
+/// v2 trading (CoreV2, NadFunRouter, exact-out, multi-quote, permit)
+pub mod v2;
 
-/// Default gas limits for trading operations based on contract testing
-pub mod gas;
-
-// Re-export main types for convenience
+// Re-export main types for convenience — v1 surface unchanged.
 pub use crate::types::Router;
-pub use core::Core;
-pub use gas::{
-    estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas,
-    GasEstimationParams,
+pub use v1::{
+    estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas, Core,
+    GasEstimationParams, SlippageUtils,
 };
-pub use utils::SlippageUtils;
+pub use v2::CoreV2;

@@ -1,18 +1,16 @@
-//! Event streaming and indexing module
+//! Event streaming and indexing module.
 //!
-//! This module is organized by functionality:
-//! - `curve`: Bonding curve event streaming and indexing
-//! - `dex`: DEX (Capricorn CL) event streaming and indexing
+//! Organized by version:
+//! - `v1`: bonding curve + Capricorn CL DEX (legacy, supplied by `nadfun-contract` v1)
+//! - `v2`: NadFunRouter / BondingCurveV2 / NadFunPair (added with v2 contracts) — coming soon
 //!
-//! Both support real-time streaming and historical indexing with
-//! 2-stage filtering capabilities.
+//! Both versions support real-time WebSocket streaming and historical HTTP indexing
+//! with 2-stage filtering.
 
-pub mod curve;
-pub mod dex;
+pub mod v1;
 
-// Re-export main functionality
-pub use curve::{CurveIndexer, CurveStream};
-pub use dex::{DexIndexer, DexStream};
+// Re-export v1 streaming surface at the legacy `crate::stream::*` paths.
+pub use v1::{CurveIndexer, CurveStream, DexIndexer, DexStream};
 
 // Re-export types from the types module
 pub use crate::types::{
