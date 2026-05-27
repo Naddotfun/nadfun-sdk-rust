@@ -2,7 +2,7 @@ use crate::{
     api::ApiClient,
     constants::*,
     contracts::{BondingCurveRouter, CreatorClient, DexRouter, Lens},
-    core::gas::{estimate_gas, GasEstimationParams},
+    core::v1::gas::{estimate_gas, GasEstimationParams},
     types::*,
 };
 use alloy::{
