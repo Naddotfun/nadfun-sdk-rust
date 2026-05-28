@@ -1,4 +1,4 @@
-//! v2 buy with native MON via CoreV2.
+//! v2 buy with native MON via the unified `Core` (`*_v2` surface).
 //!
 //! Usage:
 //!   export PRIVATE_KEY="..." RPC_URL="..." TOKEN="0x..."
@@ -9,7 +9,7 @@
 
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
-use nadfun_sdk::{CoreV2, GasPricing, SlippageUtils, V2BuyWithNativeParams, V2GasEstimationParams};
+use nadfun_sdk::{Core, GasPricing, SlippageUtils, V2BuyWithNativeParams, V2GasEstimationParams};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -28,12 +28,12 @@ async fn main() -> Result<()> {
         .parse()?;
     let mon_amount = parse_ether("0.01")?;
 
-    let core = CoreV2::new(config.rpc_url, private_key, config.network).await?;
+    let core = Core::new(config.rpc_url, private_key, config.network).await?;
     let wallet = core.wallet_address();
-    println!("wallet: {}, router: {}", wallet, core.router().address);
+    println!("wallet: {}, router: {}", wallet, core.router_v2()?.address);
 
     // Quote: router auto-routes BC vs DEX based on graduation.
-    let expected = core.quote(token, mon_amount, true).await?;
+    let expected = core.quote_v2(token, mon_amount, true).await?;
     println!("expected tokens out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("Zero quote — token may not be tradeable on v2");
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
 
     // Estimate gas with the same params we'll send.
     let gas_estimate = core
-        .estimate_gas(V2GasEstimationParams::BuyWithNative {
+        .estimate_gas_v2(V2GasEstimationParams::BuyWithNative {
             params: params.clone(),
             value: mon_amount,
         })
@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     let mut params = params;
     params.gas_limit = Some(gas_with_buffer);
 
-    let tx_hash = core.buy_with_native(params, mon_amount).await?;
+    let tx_hash = core.buy_with_native_v2(params, mon_amount).await?;
     println!("tx: {}", tx_hash);
 
     let receipt = core.get_receipt(tx_hash).await?;

@@ -2,7 +2,7 @@
 
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
-use nadfun_sdk::{CoreV2, GasPricing, V2ExactOutBuyWithNativeParams};
+use nadfun_sdk::{Core, GasPricing, V2ExactOutBuyWithNativeParams};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -20,21 +20,21 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("--token required"))?
         .parse()?;
 
-    let core = CoreV2::new(config.rpc_url, private_key, config.network).await?;
+    let core = Core::new(config.rpc_url, private_key, config.network).await?;
 
     // Target: exactly 1 token (18 decimals).
     let amount_out: U256 = U256::from(10).pow(U256::from(18u64));
     let max_in = parse_ether("1")?; // willing to spend up to 1 MON
 
     // Optional sanity-check via inverse quote.
-    let required = core.quote_in(token, amount_out, true).await?;
+    let required = core.quote_in_v2(token, amount_out, true).await?;
     println!("required MON for exactly 1 token: {}", required);
     if required > max_in {
         anyhow::bail!("would cost more than max_in ({} > {})", required, max_in);
     }
 
     let tx_hash = core
-        .exact_out_buy_with_native(V2ExactOutBuyWithNativeParams {
+        .exact_out_buy_with_native_v2(V2ExactOutBuyWithNativeParams {
             token,
             amount_out,
             amount_in_max: max_in,

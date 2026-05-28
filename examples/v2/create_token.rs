@@ -4,8 +4,7 @@
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
 use nadfun_sdk::{
-    ApiClient, CoreV2, GasPricing, V2CreatePayment, V2CreateTokenParams, V2DexType,
-    V2VaultAllocation,
+    ApiClient, Core, GasPricing, V2CreatePayment, V2CreateTokenParams, V2DexType, V2VaultAllocation,
 };
 
 #[path = "../common/mod.rs"]
@@ -18,7 +17,7 @@ async fn main() -> Result<()> {
     config.print();
 
     let private_key = config.require_private_key()?;
-    let core = CoreV2::new(config.rpc_url, private_key, config.network).await?;
+    let core = Core::new(config.rpc_url, private_key, config.network).await?;
     let creator = core.wallet_address();
 
     // Resolve vault addresses from constants (allows the example to run
@@ -71,7 +70,7 @@ async fn main() -> Result<()> {
         nonce: None,
     };
 
-    let result = core.create_token(params, &api).await?;
+    let result = core.create_token_v2(params, &api).await?;
     println!("✅ token deployed: {}", result.token_address);
     println!("metadata_uri: {}", result.metadata_uri);
     println!("image_uri:    {}", result.image_uri);
