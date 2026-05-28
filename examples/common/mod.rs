@@ -238,6 +238,7 @@ impl Config {
     }
 
     /// Get private key or return error if not provided
+    #[allow(dead_code)] // Not every example needs a key; some are read-only.
     pub fn require_private_key(&self) -> Result<String> {
         match &self.private_key {
             Some(key) => Ok(key.clone()),
@@ -251,6 +252,7 @@ impl Config {
     }
 
     /// Print configuration
+    #[allow(dead_code)] // Some examples skip the banner.
     pub fn print(&self) {
         println!("📋 Configuration:");
         println!("  RPC URL: {}", self.rpc_url);

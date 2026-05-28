@@ -67,7 +67,6 @@ pub use crate::types::{
 ///     Ok(())
 /// }
 /// ```
-
 #[cfg(test)]
 mod tests {
     use crate::types::*;

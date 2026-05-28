@@ -309,7 +309,7 @@ mod tests {
         };
 
         assert_eq!(tx_result.block_number, Some(12345));
-        assert_eq!(tx_result.status, true);
+        assert!(tx_result.status);
         assert_eq!(tx_result.gas_used, Some(U256::from(21000)));
     }
 }

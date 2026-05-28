@@ -5,6 +5,11 @@
 //! and an EIP-2612 permit-enabled contract; only the read surface needed by the
 //! SDK is exposed here.
 
+// alloy `sol!` expansion exceeds clippy's default too_many_arguments threshold;
+// dead_code fires on view methods reserved for advanced callers (NadFunPair is
+// exposed via `contracts::v2::*` but no internal SDK code uses it yet).
+#![allow(clippy::too_many_arguments, dead_code)]
+
 use alloy::{
     primitives::{Address, U256},
     providers::Provider,
