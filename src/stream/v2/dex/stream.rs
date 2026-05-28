@@ -26,11 +26,21 @@ pub struct NadFunSwapStream {
 impl NadFunSwapStream {
     /// Connect over WebSocket and bind to a set of pair addresses on
     /// `network`.
+    ///
+    /// `pairs` MUST be non-empty — an empty filter would let `eth_subscribe`
+    /// fan out across every contract on chain, and the subscription would
+    /// just discard everything client-side. Returns an error so the misuse
+    /// surfaces immediately instead of silently going quiet (Codex P3 #18).
     pub async fn new(
         ws_url: String,
         pairs: Vec<Address>,
         network: Network,
     ) -> Result<NadFunSwapStream> {
+        if pairs.is_empty() {
+            return Err(anyhow::anyhow!(
+                "NadFunSwapStream::new: at least one pair address is required"
+            ));
+        }
         let ws = WsConnect::new(ws_url);
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
         Ok(NadFunSwapStream {

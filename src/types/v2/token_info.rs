@@ -9,6 +9,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Vault type discriminator returned by the `GET /vault/:token_id` endpoint.
+///
+/// Any unknown server-side `vault_type` string deserializes to
+/// [`VaultType::Custom`] instead of failing the entire response — keeps the
+/// SDK forward-compatible with vaults shipped after this SDK version
+/// (Codex P3 #17).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum VaultType {
@@ -22,7 +27,43 @@ pub enum VaultType {
     /// `GiftVault` — time-locked gift distribution with auto-expiry buyback.
     Gift,
     /// User-extension or future vault type the SDK does not specifically model.
+    #[serde(other)]
     Custom,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_vault_types_round_trip() {
+        assert_eq!(
+            serde_json::from_str::<VaultType>("\"BURN\"").unwrap(),
+            VaultType::Burn
+        );
+        assert_eq!(
+            serde_json::from_str::<VaultType>("\"LP\"").unwrap(),
+            VaultType::Lp
+        );
+        assert_eq!(
+            serde_json::from_str::<VaultType>("\"CREATOR_FEE\"").unwrap(),
+            VaultType::CreatorFee
+        );
+        assert_eq!(
+            serde_json::from_str::<VaultType>("\"GIFT\"").unwrap(),
+            VaultType::Gift
+        );
+    }
+
+    /// Codex P3 #17: unknown vault types fall back to Custom instead of
+    /// failing deserialization.
+    #[test]
+    fn unknown_vault_type_falls_back_to_custom() {
+        let v: VaultType = serde_json::from_str("\"FUTURE_VAULT\"").unwrap();
+        assert_eq!(v, VaultType::Custom);
+        let v: VaultType = serde_json::from_str("\"\"").unwrap();
+        assert_eq!(v, VaultType::Custom);
+    }
 }
 
 /// One vault slot attached to a v2 token.
