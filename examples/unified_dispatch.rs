@@ -56,7 +56,7 @@ async fn auto_buy(
         }
         SdkVersion::V2 => {
             let _ = to; // v2 buy_with_native infers recipient from msg.sender
-            let expected = core.quote_v2(token, value, true).await?;
+            let expected = core.get_amount_out_v2(token, value, true).await?;
             let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
             core.buy_with_native_v2(V2BuyWithNativeParams {
                 token,

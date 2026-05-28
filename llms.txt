@@ -594,7 +594,7 @@ use alloy::primitives::utils::parse_ether;
 let core = Core::new(rpc, private_key, Network::Mainnet).await?;
 
 // Auto-routed v2 quote (bonding curve pre-graduation, DEX post-graduation)
-let expected = core.quote_v2(token, parse_ether("0.1")?, /*is_buy*/ true).await?;
+let expected = core.get_amount_out_v2(token, parse_ether("0.1")?, /*is_buy*/ true).await?;
 let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
 // Buy with native MON
@@ -628,10 +628,10 @@ core.exact_out_sell_v2(V2ExactOutSellParams { ... })
 core.exact_out_sell_to_native_v2(V2ExactOutSellToNativeParams { ... })
 
 // Quote:
-core.quote_v2(token, amount_in, is_buy)                  // auto-route
-core.quote_in_v2(token, amount_out, is_buy)              // inverse
-core.quote_bonding_curve_v2(token, amount_in, is_buy)    // BC only
-core.quote_dex_v2(token, amount_in, is_buy)              // DEX only
+core.get_amount_out_v2(token, amount_in, is_buy)                  // auto-route
+core.get_amount_in_v2(token, amount_out, is_buy)              // inverse
+core.get_bonding_curve_amount_out_v2(token, amount_in, is_buy)    // BC only
+core.get_dex_amount_out_v2(token, amount_in, is_buy)              // DEX only
 
 // State:
 core.is_graduated_v2(token)
@@ -703,7 +703,7 @@ async fn auto_buy(core: &Core, token: Address, value: U256, to: Address, deadlin
                 deadline, gas_limit: None, gas_price: None, nonce: None }, router).await
         }
         SdkVersion::V2 => {
-            let expected = core.quote_v2(token, value, true).await?;
+            let expected = core.get_amount_out_v2(token, value, true).await?;
             let min = SlippageUtils::calculate_amount_out_min(expected, 5.0);
             core.buy_with_native_v2(V2BuyWithNativeParams { token, amount_out_min: min,
                 deadline, value, gas_limit: None, gas_price: None, nonce: None }).await

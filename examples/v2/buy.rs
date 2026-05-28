@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     println!("wallet: {}, router: {}", wallet, core.router_v2().address);
 
     // Quote: router auto-routes BC vs DEX based on graduation.
-    let expected = core.quote_v2(token, mon_amount, true).await?;
+    let expected = core.get_amount_out_v2(token, mon_amount, true).await?;
     println!("expected tokens out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("Zero quote — token may not be tradeable on v2");

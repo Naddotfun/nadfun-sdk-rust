@@ -651,7 +651,12 @@ impl Core {
     // ========================================================================
 
     /// Auto-routed v2 quote (bonding curve pre-graduation, DEX after).
-    pub async fn quote_v2(&self, token: Address, amount_in: U256, is_buy: bool) -> Result<U256> {
+    pub async fn get_amount_out_v2(
+        &self,
+        token: Address,
+        amount_in: U256,
+        is_buy: bool,
+    ) -> Result<U256> {
         self.v2
             .router
             .get_amount_out(token, amount_in, is_buy)
@@ -659,7 +664,7 @@ impl Core {
     }
 
     /// Auto-routed inverse v2 quote.
-    pub async fn quote_in_v2(
+    pub async fn get_amount_in_v2(
         &self,
         token: Address,
         amount_out: U256,
@@ -672,7 +677,7 @@ impl Core {
     }
 
     /// v2 bonding-curve-only quote (errors if graduated).
-    pub async fn quote_bonding_curve_v2(
+    pub async fn get_bonding_curve_amount_out_v2(
         &self,
         token: Address,
         amount_in: U256,
@@ -685,7 +690,7 @@ impl Core {
     }
 
     /// Inverse v2 bonding-curve-only quote.
-    pub async fn quote_bonding_curve_in_v2(
+    pub async fn get_bonding_curve_amount_in_v2(
         &self,
         token: Address,
         amount_out: U256,
@@ -698,7 +703,7 @@ impl Core {
     }
 
     /// v2 DEX-only quote (errors if not graduated).
-    pub async fn quote_dex_v2(
+    pub async fn get_dex_amount_out_v2(
         &self,
         token: Address,
         amount_in: U256,
@@ -711,7 +716,7 @@ impl Core {
     }
 
     /// Inverse v2 DEX-only quote.
-    pub async fn quote_dex_in_v2(
+    pub async fn get_dex_amount_in_v2(
         &self,
         token: Address,
         amount_out: U256,

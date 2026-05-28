@@ -198,12 +198,12 @@ async fn _core_v2_methods_compile(c: &Core) {
             nonce: None,
         })
         .await;
-    let _: Result<U256, _> = c.quote_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_in_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_bonding_curve_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_bonding_curve_in_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_dex_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_dex_in_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.get_amount_out_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.get_amount_in_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.get_bonding_curve_amount_out_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.get_bonding_curve_amount_in_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.get_dex_amount_out_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.get_dex_amount_in_v2(token, amount, true).await;
     let _: Result<bool, _> = c.is_graduated_v2(token).await;
     let _: Result<Address, _> = c.pool_address_v2(token).await;
     let _: Result<Address, _> = c.wrapped_native_v2().await;
