@@ -41,9 +41,8 @@ process-global `set_network` lock is gone — every entry point binds to a
   - `Core::detect_version(token)` / `Core::detect_versions(tokens)` —
     on-chain version classification via `TokenVersionLens` when deployed
     (one RPC call covers both v1 + v2 registries; explicit `None` for
-    unknown tokens) or `TokenRegistryV2::getPair` fallback. Result is
-    cached in-process. Use this to dispatch user code at v1 / v2
-    boundaries.
+    unknown tokens) or `TokenRegistryV2::getPair` fallback. Stateless —
+    each call hits the chain; callers cache externally if needed.
   - `SdkVersion::None` — token isn't registered on either system. New
     variant returned by `detect_version` when the Lens is wired.
 

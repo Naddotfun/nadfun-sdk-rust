@@ -31,11 +31,7 @@ use alloy::{
     sol_types::SolEvent,
 };
 use anyhow::{Context, Result};
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 /// Unified high-level SDK client. Handles v1 + v2 trading, token creation,
 /// quote routing, and creator reward claims from a single instance.
@@ -52,9 +48,6 @@ pub struct Core {
     provider: Arc<DynProvider>,
     wallet_address: Address,
     network: Network,
-    // Per-token version cache. Populated by `detect_version` so subsequent
-    // dispatch calls don't re-hit the chain.
-    version_cache: Arc<RwLock<HashMap<Address, SdkVersion>>>,
 }
 
 /// v1 contract bindings — bonding-curve router, DEX (Capricorn CL) router,
@@ -117,7 +110,6 @@ impl Core {
             provider,
             wallet_address,
             network,
-            version_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -125,8 +117,8 @@ impl Core {
     // v1 + v2: dispatch primitive
     // ========================================================================
 
-    /// Classify a token as v1 / v2 / not-registered. Result is cached
-    /// in-process so repeated calls don't re-hit the chain.
+    /// Classify a token as v1 / v2 / not-registered. Stateless — each
+    /// call hits the chain.
     ///
     /// Uses the on-chain `TokenVersionLens` when deployed on this
     /// network (one RPC call covers both v1 and v2 registries +
@@ -135,35 +127,27 @@ impl Core {
     /// probe — in that fallback mode, any token that isn't registered
     /// on v2 is reported as `V1` (the SDK can't distinguish a real v1
     /// token from a random ERC-20 without the Lens).
+    ///
+    /// Callers that issue many lookups for the same token should cache
+    /// the result themselves — the SDK is intentionally stateless.
     pub async fn detect_version(&self, token: Address) -> Result<SdkVersion> {
-        if let Ok(cache) = self.version_cache.read() {
-            if let Some(v) = cache.get(&token) {
-                return Ok(*v);
-            }
-        }
-
-        let v = match self.v2.token_version_lens.as_ref() {
-            Some(lens) => lens.get_version(token).await?,
+        match self.v2.token_version_lens.as_ref() {
+            Some(lens) => lens.get_version(token).await,
             None => {
                 // Fallback: only the v2 registry is consulted, so we
                 // can't tell "real v1 token" from "arbitrary ERC-20".
                 let pair = self.v2.token_registry.get_pair(token).await?;
                 if pair == Address::ZERO {
-                    SdkVersion::V1
+                    Ok(SdkVersion::V1)
                 } else {
-                    SdkVersion::V2
+                    Ok(SdkVersion::V2)
                 }
             }
-        };
-
-        if let Ok(mut cache) = self.version_cache.write() {
-            cache.insert(token, v);
         }
-        Ok(v)
     }
 
     /// Batch version detection — one RPC call for the whole list when
-    /// the `TokenVersionLens` is wired, or N cached `detect_version`
+    /// the `TokenVersionLens` is wired, or N sequential `detect_version`
     /// calls otherwise. Order matches the input.
     pub async fn detect_versions(&self, tokens: Vec<Address>) -> Result<Vec<SdkVersion>> {
         if tokens.is_empty() {
@@ -171,18 +155,10 @@ impl Core {
         }
 
         if let Some(lens) = self.v2.token_version_lens.as_ref() {
-            // Single batched call. Populate the cache with the results
-            // so subsequent per-token lookups stay cheap.
-            let versions = lens.get_versions(tokens.clone()).await?;
-            if let Ok(mut cache) = self.version_cache.write() {
-                for (t, v) in tokens.iter().zip(versions.iter()) {
-                    cache.insert(*t, *v);
-                }
-            }
-            return Ok(versions);
+            return lens.get_versions(tokens).await;
         }
 
-        // Fallback path — sequential per-token probes (with cache).
+        // Fallback path — sequential per-token probes.
         let mut out = Vec::with_capacity(tokens.len());
         for t in tokens {
             out.push(self.detect_version(t).await?);
