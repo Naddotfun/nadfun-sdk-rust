@@ -318,6 +318,18 @@ impl Core {
         params: CreateTokenParams,
         api_client: &ApiClient,
     ) -> Result<TokenCreationResult> {
+        // Mirror the v2 guard: the salt server mines CREATE2 against the
+        // v1 contract addresses of `api_client.network()`, so a mismatch
+        // with the network this Core submits to would predict the wrong
+        // token address. Fail fast.
+        if api_client.network() != self.network {
+            return Err(anyhow::anyhow!(
+                "create_token: ApiClient is bound to {:?} but Core is on {:?}",
+                api_client.network(),
+                self.network,
+            ));
+        }
+
         let (metadata_uri, image_uri, salt, token_address_str, is_nsfw) =
             api_client.prepare_token_creation(&params).await?;
         let token_address: Address = token_address_str.parse()?;
@@ -410,6 +422,21 @@ impl Core {
                  v2 contract addresses differ per network — construct ApiClient with the same network",
                 api.network(),
                 self.network,
+            ));
+        }
+
+        // The on-chain v2 create has no `creator` parameter — `msg.sender`
+        // becomes the creator. If `params.creator_address` differs from
+        // the wallet that signs the tx, the salt server mines a CREATE2
+        // address for a different creator than the curve will deploy, and
+        // we'd only catch it during receipt verification (after funds are
+        // committed).
+        if params.creator_address != self.wallet_address {
+            return Err(anyhow::anyhow!(
+                "create_token_v2: params.creator_address ({}) must match Core's \
+                 signing wallet ({}); the v2 router uses msg.sender as the creator",
+                params.creator_address,
+                self.wallet_address,
             ));
         }
 
