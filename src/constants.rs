@@ -478,6 +478,23 @@ pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
     }
 }
 
+/// Get the `TokenVersionLens` view-contract address for the given network.
+///
+/// The Lens reads both v1 and v2 token registries in a single on-chain
+/// call to classify a token as `V1` / `V2` / `None`. `Core::detect_version`
+/// uses it when available and falls back to direct `TokenRegistryV2::getPair`
+/// otherwise.
+///
+/// Returns `None` until the Lens is deployed on the network.
+// TODO(0.4.0): fill in mainnet + testnet addresses once TokenVersionLens
+// is deployed by the contracts team.
+pub fn get_token_version_lens(network: Network) -> Option<&'static str> {
+    match network {
+        Network::Mainnet => None,
+        Network::Testnet => None,
+    }
+}
+
 // Re-export commonly used constants for convenience.
 pub use addresses::*;
 pub use fees::DEFAULT_FEE_TIER;

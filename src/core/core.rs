@@ -17,7 +17,7 @@ use crate::{
     constants::*,
     contracts::{
         BondingCurveRouter, BondingCurveV2, CreatorClient, DexRouter, Lens, NadFunFactory,
-        NadFunRouter, TokenRegistryV2,
+        NadFunRouter, TokenRegistryV2, TokenVersionLens,
     },
     core::v1::gas::{estimate_gas, GasEstimationParams},
     types::{v2::events::IBondingCurveV2Events, *},
@@ -66,12 +66,16 @@ struct V1Contracts {
 }
 
 /// v2 contract bindings — NadFunRouter + factory + bonding curve +
-/// per-token registry.
+/// per-token registry. `token_version_lens` is `Some(_)` once the Lens is
+/// deployed on the network (see `get_token_version_lens`); when absent,
+/// version detection falls back to a direct `TokenRegistryV2::getPair`
+/// probe.
 struct V2Contracts {
     router: NadFunRouter<DynProvider>,
     factory: NadFunFactory<DynProvider>,
     bonding_curve: BondingCurveV2<DynProvider>,
     token_registry: TokenRegistryV2<DynProvider>,
+    token_version_lens: Option<TokenVersionLens<DynProvider>>,
 }
 
 impl Core {
@@ -121,9 +125,16 @@ impl Core {
     // v1 + v2: dispatch primitive
     // ========================================================================
 
-    /// Detect whether `token` is a v2 token (registered in
-    /// `TokenRegistryV2`) or a v1 token. Result is cached in-process so
-    /// repeated calls don't re-hit the chain.
+    /// Classify a token as v1 / v2 / not-registered. Result is cached
+    /// in-process so repeated calls don't re-hit the chain.
+    ///
+    /// Uses the on-chain `TokenVersionLens` when deployed on this
+    /// network (one RPC call covers both v1 and v2 registries +
+    /// returns `None` for unknown tokens). When the Lens isn't
+    /// available yet, falls back to a direct `TokenRegistryV2::getPair`
+    /// probe — in that fallback mode, any token that isn't registered
+    /// on v2 is reported as `V1` (the SDK can't distinguish a real v1
+    /// token from a random ERC-20 without the Lens).
     pub async fn detect_version(&self, token: Address) -> Result<SdkVersion> {
         if let Ok(cache) = self.version_cache.read() {
             if let Some(v) = cache.get(&token) {
@@ -131,17 +142,52 @@ impl Core {
             }
         }
 
-        let pair = self.v2.token_registry.get_pair(token).await?;
-        let v = if pair == Address::ZERO {
-            SdkVersion::V1
-        } else {
-            SdkVersion::V2
+        let v = match self.v2.token_version_lens.as_ref() {
+            Some(lens) => lens.get_version(token).await?,
+            None => {
+                // Fallback: only the v2 registry is consulted, so we
+                // can't tell "real v1 token" from "arbitrary ERC-20".
+                let pair = self.v2.token_registry.get_pair(token).await?;
+                if pair == Address::ZERO {
+                    SdkVersion::V1
+                } else {
+                    SdkVersion::V2
+                }
+            }
         };
 
         if let Ok(mut cache) = self.version_cache.write() {
             cache.insert(token, v);
         }
         Ok(v)
+    }
+
+    /// Batch version detection — one RPC call for the whole list when
+    /// the `TokenVersionLens` is wired, or N cached `detect_version`
+    /// calls otherwise. Order matches the input.
+    pub async fn detect_versions(&self, tokens: Vec<Address>) -> Result<Vec<SdkVersion>> {
+        if tokens.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if let Some(lens) = self.v2.token_version_lens.as_ref() {
+            // Single batched call. Populate the cache with the results
+            // so subsequent per-token lookups stay cheap.
+            let versions = lens.get_versions(tokens.clone()).await?;
+            if let Ok(mut cache) = self.version_cache.write() {
+                for (t, v) in tokens.iter().zip(versions.iter()) {
+                    cache.insert(*t, *v);
+                }
+            }
+            return Ok(versions);
+        }
+
+        // Fallback path — sequential per-token probes (with cache).
+        let mut out = Vec::with_capacity(tokens.len());
+        for t in tokens {
+            out.push(self.detect_version(t).await?);
+        }
+        Ok(out)
     }
 
     // ========================================================================
@@ -747,6 +793,14 @@ impl Core {
         &self.v2.token_registry
     }
 
+    /// `TokenVersionLens` binding when deployed on this `Core`'s
+    /// network. `None` until the Lens is deployed; use
+    /// [`Self::detect_version`] / [`Self::detect_versions`] for
+    /// callers that should transparently fall back.
+    pub fn token_version_lens(&self) -> Option<&TokenVersionLens<DynProvider>> {
+        self.v2.token_version_lens.as_ref()
+    }
+
     pub fn provider(&self) -> &Arc<DynProvider> {
         &self.provider
     }
@@ -806,11 +860,26 @@ fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V
         .parse()
         .with_context(|| format!("invalid TokenRegistryV2 address {reg_s:?} for {network:?}"))?;
 
+    // TokenVersionLens is optional — wires up only on networks where the
+    // Lens has been deployed (see `get_token_version_lens`). Until then,
+    // `detect_version` falls back to a direct `TokenRegistryV2::getPair`
+    // probe.
+    let token_version_lens = match get_token_version_lens(network) {
+        Some(lens_s) => {
+            let lens_addr: Address = lens_s.parse().with_context(|| {
+                format!("invalid TokenVersionLens address {lens_s:?} for {network:?}")
+            })?;
+            Some(TokenVersionLens::new(lens_addr, provider.clone()))
+        }
+        None => None,
+    };
+
     Ok(V2Contracts {
         router: NadFunRouter::new(router_addr, provider.clone()),
         factory: NadFunFactory::new(factory_addr, provider.clone()),
         bonding_curve: BondingCurveV2::new(bc_addr, provider.clone()),
         token_registry: TokenRegistryV2::new(reg_addr, provider.clone()),
+        token_version_lens,
     })
 }
 

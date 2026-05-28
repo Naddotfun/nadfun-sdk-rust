@@ -69,6 +69,9 @@ async fn auto_buy(
             })
             .await
         }
+        SdkVersion::None => {
+            anyhow::bail!("token {token} is not registered on either v1 or v2 — refusing to trade");
+        }
     }
 }
 

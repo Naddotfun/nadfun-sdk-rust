@@ -36,9 +36,14 @@ process-global `set_network` lock is gone — every entry point binds to a
     `token_registry_v2()` — return `&_` directly. v2 is always wired
     (`Core::new` fails loudly during construction if a future network
     ships without it), so no dead-branch guard is needed.
-  - `Core::detect_version(token)` — on-chain `TokenRegistryV2::getPair`
-    probe with in-process cache. Use this to dispatch user code at v1 /
-    v2 boundaries.
+  - `Core::detect_version(token)` / `Core::detect_versions(tokens)` —
+    on-chain version classification via `TokenVersionLens` when deployed
+    (one RPC call covers both v1 + v2 registries; explicit `None` for
+    unknown tokens) or `TokenRegistryV2::getPair` fallback. Result is
+    cached in-process. Use this to dispatch user code at v1 / v2
+    boundaries.
+  - `SdkVersion::None` — token isn't registered on either system. New
+    variant returned by `detect_version` when the Lens is wired.
 
 - **`SdkVersion`** enum — `V1` / `V2` discriminator used by
   `SaltParams.version`, `ApiTokenInfo.version`, and user-side dispatch.
