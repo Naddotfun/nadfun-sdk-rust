@@ -15,11 +15,7 @@ fn v2_event_type_signatures_are_distinct() {
     let mut seen = std::collections::HashSet::new();
     for et in &all {
         let sig = et.signature();
-        assert!(
-            seen.insert(sig),
-            "duplicate signature for {:?}",
-            et
-        );
+        assert!(seen.insert(sig), "duplicate signature for {:?}", et);
     }
     assert_eq!(all.len(), 6);
 }

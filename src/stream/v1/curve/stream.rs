@@ -1,4 +1,4 @@
-use crate::constants::get_bonding_curve;
+use crate::constants::{get_bonding_curve, Network};
 use crate::types::{decode_bonding_curve_event, BondingCurveEvent, EventType};
 
 use alloy::{
@@ -10,16 +10,20 @@ use anyhow::Result;
 use futures_util::{Stream, StreamExt};
 use std::{collections::HashSet, pin::Pin, sync::Arc};
 
-/// Bonding curve event stream with simplified implementation
+/// Bonding curve event stream with simplified implementation.
+///
+/// Bound to a `Network` so the v1 bonding-curve address is resolved without
+/// touching any global state.
 pub struct CurveStream {
     provider: Arc<DynProvider>,
     event_types: Option<Vec<EventType>>,
     token_filter: Option<HashSet<Address>>,
+    network: Network,
 }
 
 impl CurveStream {
-    /// Create a WebSocket-based event stream
-    pub async fn new(rpc_url: String) -> Result<CurveStream> {
+    /// Create a WebSocket-based event stream for `network`.
+    pub async fn new(rpc_url: String, network: Network) -> Result<CurveStream> {
         let ws = WsConnect::new(rpc_url);
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
         let dyn_provider = Arc::new(DynProvider::new(provider));
@@ -28,7 +32,13 @@ impl CurveStream {
             provider: dyn_provider,
             event_types: None,
             token_filter: None,
+            network,
         })
+    }
+
+    /// Network this stream is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Subscribe to specific event types (network-level filtering)
@@ -47,7 +57,7 @@ impl CurveStream {
     pub async fn subscribe(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<BondingCurveEvent>> + Send>>> {
-        let bonding_curve_address: Address = get_bonding_curve()
+        let bonding_curve_address: Address = get_bonding_curve(self.network)
             .parse()
             .expect("Invalid bonding curve address");
         let event_types = self.event_types.clone().unwrap_or_else(|| {

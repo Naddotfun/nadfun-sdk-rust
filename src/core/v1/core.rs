@@ -31,17 +31,14 @@ impl Core {
     /// * `private_key` - Private key string (with or without 0x prefix)
     /// * `network` - Network to use (Mainnet or Testnet)
     pub async fn new(rpc_url: String, private_key: String, network: Network) -> Result<Core> {
-        // Set the global network configuration
-        crate::constants::set_network(network);
-
         let signer: PrivateKeySigner = private_key.parse()?;
         let wallet_address = signer.address();
 
-        // Use current network contract addresses (automatically uses the network we just set)
-        let lens_address: Address = get_lens_address().parse()?;
-        let bonding_curve_router_address: Address = get_bonding_curve_router().parse()?;
-        let dex_router_address: Address = get_dex_router().parse()?;
-        let bonding_curve_address: Address = get_bonding_curve().parse()?;
+        // Resolve contract addresses for the requested network. No global state.
+        let lens_address: Address = get_lens_address(network).parse()?;
+        let bonding_curve_router_address: Address = get_bonding_curve_router(network).parse()?;
+        let dex_router_address: Address = get_dex_router(network).parse()?;
+        let bonding_curve_address: Address = get_bonding_curve(network).parse()?;
 
         let wallet = EthereumWallet::from(signer);
         let url = rpc_url.parse()?;
@@ -367,7 +364,7 @@ impl Core {
     /// }
     /// ```
     pub async fn claim_creator_reward(&self, params: CreatorClaimParams) -> Result<B256> {
-        let treasury_address: Address = get_creator_treasury().parse()?;
+        let treasury_address: Address = get_creator_treasury(self.network).parse()?;
         let creator = CreatorClient::new(treasury_address, self.provider.clone());
         creator.claim(params).await
     }
@@ -390,7 +387,7 @@ impl Core {
         &self,
         params: CreatorBatchClaimParams,
     ) -> Result<B256> {
-        let treasury_address: Address = get_creator_treasury().parse()?;
+        let treasury_address: Address = get_creator_treasury(self.network).parse()?;
         let creator = CreatorClient::new(treasury_address, self.provider.clone());
         creator.claim_batch(params).await
     }

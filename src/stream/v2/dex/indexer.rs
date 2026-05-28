@@ -1,24 +1,32 @@
 use super::events::{decode_nadfun_swap_event, nadfun_swap_signature, NadFunSwapEvent};
-use alloy::{
-    primitives::Address,
-    providers::Provider,
-    rpc::types::Filter,
-};
+use crate::constants::Network;
+use alloy::{primitives::Address, providers::Provider, rpc::types::Filter};
 use anyhow::Result;
 use std::sync::Arc;
 
 /// Historical NadFunPair swap indexer.
 ///
+/// Bound to a `Network` for downstream callers that need the context.
 /// Pairs with [`crate::stream::v2::dex::NadFunSwapStream`] for backfilling
 /// pool history before tailing real-time events.
 pub struct NadFunSwapIndexer<P> {
     provider: Arc<P>,
     pairs: Vec<Address>,
+    network: Network,
 }
 
 impl<P: Provider + Clone> NadFunSwapIndexer<P> {
-    pub fn new(provider: Arc<P>, pairs: Vec<Address>) -> Self {
-        Self { provider, pairs }
+    pub fn new(provider: Arc<P>, pairs: Vec<Address>, network: Network) -> Self {
+        Self {
+            provider,
+            pairs,
+            network,
+        }
+    }
+
+    /// Network this indexer is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Fetch swap events for `from_block..=to_block`. Returned in
@@ -39,9 +47,7 @@ impl<P: Provider + Clone> NadFunSwapIndexer<P> {
             .into_iter()
             .filter_map(|log| decode_nadfun_swap_event(log).ok())
             .collect();
-        events.sort_by(|a, b| {
-            (a.block_number, a.log_index).cmp(&(b.block_number, b.log_index))
-        });
+        events.sort_by(|a, b| (a.block_number, a.log_index).cmp(&(b.block_number, b.log_index)));
         Ok(events)
     }
 

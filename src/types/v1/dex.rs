@@ -99,19 +99,24 @@ impl SwapEvent {
 pub struct PoolMetadata {
     /// Cache of pool address -> whether WMON is token0
     wmon_is_token0_cache: HashMap<Address, bool>,
-}
-
-impl Default for PoolMetadata {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Network this metadata helper is bound to — determines which WMON
+    /// address `is_wmon_token0` compares against.
+    network: crate::constants::Network,
 }
 
 impl PoolMetadata {
-    pub fn new() -> Self {
+    /// Create a pool-metadata helper bound to `network`. WMON lookups use
+    /// the v1 WMON address for that network.
+    pub fn new(network: crate::constants::Network) -> Self {
         Self {
             wmon_is_token0_cache: HashMap::new(),
+            network,
         }
+    }
+
+    /// Network this helper is bound to.
+    pub fn network(&self) -> crate::constants::Network {
+        self.network
     }
 
     /// Check if WMON is token0 in the given pool
@@ -128,7 +133,7 @@ impl PoolMetadata {
         // Query the pool contract
         let pool = ICapricornCLPool::new(pool_address, provider);
         let token0 = pool.token0().call().await?;
-        let wmon_address: Address = crate::constants::WMON.parse()?;
+        let wmon_address: Address = crate::constants::get_wmon(self.network).parse()?;
 
         let is_wmon_token0 = token0 == wmon_address;
 

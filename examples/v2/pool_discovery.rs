@@ -4,7 +4,7 @@
 use alloy::primitives::Address;
 use alloy::providers::{DynProvider, ProviderBuilder};
 use anyhow::Result;
-use nadfun_sdk::{constants, set_network, stream::v2::discover_pools_unified};
+use nadfun_sdk::{constants, stream::v2::discover_pools_unified};
 use std::sync::Arc;
 
 #[path = "../common/mod.rs"]
@@ -15,7 +15,7 @@ use common::Config;
 async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
-    set_network(config.network);
+    let network = config.network;
 
     let provider = ProviderBuilder::new().connect_http(config.rpc_url.parse()?);
     let provider = Arc::new(DynProvider::new(provider));
@@ -29,13 +29,20 @@ async fn main() -> Result<()> {
         anyhow::bail!("--tokens or TOKENS env required");
     }
 
-    let factory_v2: Option<Address> = constants::get_nadfun_factory_v2()
-        .and_then(|s| s.parse().ok());
+    let factory_v2: Option<Address> =
+        constants::get_nadfun_factory_v2(network).and_then(|s| s.parse().ok());
 
-    let pools = discover_pools_unified(provider, tokens.clone(), factory_v2).await?;
-    println!("found {} pool(s) across {} token(s)", pools.len(), tokens.len());
+    let pools = discover_pools_unified(provider, tokens.clone(), factory_v2, network).await?;
+    println!(
+        "found {} pool(s) across {} token(s)",
+        pools.len(),
+        tokens.len()
+    );
     for p in pools {
-        println!("  token={} pool={} surface={:?}", p.token, p.pool, p.surface);
+        println!(
+            "  token={} pool={} surface={:?}",
+            p.token, p.pool, p.surface
+        );
     }
     Ok(())
 }

@@ -50,6 +50,9 @@ async fn main() -> Result<()> {
     println!("tx: {}", tx_hash);
 
     let receipt = core.get_receipt(tx_hash).await?;
-    println!("status: {}, block: {:?}", receipt.status, receipt.block_number);
+    println!(
+        "status: {}, block: {:?}",
+        receipt.status, receipt.block_number
+    );
     Ok(())
 }

@@ -1,5 +1,6 @@
 use super::events::{decode_nadfun_swap_event, nadfun_swap_signature, NadFunSwapEvent};
 
+use crate::constants::Network;
 use alloy::{
     primitives::Address,
     providers::{DynProvider, Provider, ProviderBuilder, WsConnect},
@@ -14,21 +15,34 @@ use std::{collections::HashSet, pin::Pin, sync::Arc};
 /// Subscribes to swap logs across an explicit set of pair addresses. Use
 /// [`crate::contracts::NadFunFactory::get_pair`] or
 /// [`crate::CoreV2::pool_address`] to resolve pair addresses for tokens
-/// of interest before constructing the stream.
+/// of interest before constructing the stream. Bound to a `Network` for
+/// downstream callers that need the context.
 pub struct NadFunSwapStream {
     provider: Arc<DynProvider>,
     pairs: Vec<Address>,
+    network: Network,
 }
 
 impl NadFunSwapStream {
-    /// Connect over WebSocket and bind to a set of pair addresses.
-    pub async fn new(ws_url: String, pairs: Vec<Address>) -> Result<NadFunSwapStream> {
+    /// Connect over WebSocket and bind to a set of pair addresses on
+    /// `network`.
+    pub async fn new(
+        ws_url: String,
+        pairs: Vec<Address>,
+        network: Network,
+    ) -> Result<NadFunSwapStream> {
         let ws = WsConnect::new(ws_url);
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
         Ok(NadFunSwapStream {
             provider: Arc::new(DynProvider::new(provider)),
             pairs,
+            network,
         })
+    }
+
+    /// Network this stream is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Open the subscription. Yields decoded swap events for the bound pair

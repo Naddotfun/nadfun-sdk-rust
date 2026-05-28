@@ -411,11 +411,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
     /// runs `eth_estimateGas` (with the caller's `from` address so balance /
     /// allowance checks succeed) instead of broadcasting. Caller should apply
     /// their own buffer (15-25% is typical) on top of the returned value.
-    pub async fn estimate_gas(
-        &self,
-        params: V2GasEstimationParams,
-        from: Address,
-    ) -> Result<u64> {
+    pub async fn estimate_gas(&self, params: V2GasEstimationParams, from: Address) -> Result<u64> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let map_vaults = |vs: Vec<V2VaultAllocation>| {
             vs.into_iter()

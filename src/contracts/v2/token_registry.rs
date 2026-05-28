@@ -5,11 +5,7 @@
 //! pool discovery and as the on-chain v1-vs-v2 version probe — v2 tokens are
 //! registered here, v1 tokens are not.
 
-use alloy::{
-    primitives::Address,
-    providers::Provider,
-    sol,
-};
+use alloy::{primitives::Address, providers::Provider, sol};
 use anyhow::Result;
 use std::sync::Arc;
 

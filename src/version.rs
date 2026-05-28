@@ -18,9 +18,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Token version a Nad.fun token belongs to.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum SdkVersion {
     /// Original v1 contracts (bonding curve + Capricorn CL DEX).

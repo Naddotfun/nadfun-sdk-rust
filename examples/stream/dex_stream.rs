@@ -54,25 +54,26 @@ async fn main() -> Result<()> {
     }
 
     // Determine scenario based on arguments
+    let network = config.network;
     match (&pools_filter, &tokens_filter, &single_token) {
         (Some(pools), _, _) => {
             println!(
                 "🎯 SCENARIO 1: Monitoring specific pool addresses: {} pools",
                 pools.len()
             );
-            run_specific_pools_scenario(&config.ws_url, pools.clone()).await?;
+            run_specific_pools_scenario(&config.ws_url, pools.clone(), network).await?;
         }
         (None, Some(tokens), _) => {
             println!(
                 "🔍 SCENARIO 2: Auto-discovering pools for {} tokens",
                 tokens.len()
             );
-            run_token_discovery_scenario(&config.ws_url, tokens.clone()).await?;
+            run_token_discovery_scenario(&config.ws_url, tokens.clone(), network).await?;
         }
         (None, None, Some(token)) => {
             if let Ok(token_address) = token.parse() {
                 println!("🏷️ SCENARIO 3: Single token pool discovery");
-                run_single_token_scenario(&config.ws_url, token_address).await?;
+                run_single_token_scenario(&config.ws_url, token_address, network).await?;
             } else {
                 println!("❌ Invalid token address provided");
                 return Ok(());
@@ -94,6 +95,7 @@ async fn main() -> Result<()> {
 async fn run_specific_pools_scenario(
     ws_url: &str,
     pool_addresses: Vec<alloy::primitives::Address>,
+    network: nadfun_sdk::Network,
 ) -> Result<()> {
     println!("📡 Creating DexStream for specific pools...");
 
@@ -101,7 +103,7 @@ async fn run_specific_pools_scenario(
         println!("   {}. Pool: {}", i + 1, pool);
     }
 
-    let swap_stream = DexStream::new(ws_url.to_string(), pool_addresses).await?;
+    let swap_stream = DexStream::new(ws_url.to_string(), pool_addresses, network).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -125,6 +127,7 @@ async fn run_specific_pools_scenario(
 async fn run_token_discovery_scenario(
     ws_url: &str,
     token_addresses: Vec<alloy::primitives::Address>,
+    network: nadfun_sdk::Network,
 ) -> Result<()> {
     println!("📡 Auto-discovering pools for tokens...");
 
@@ -133,7 +136,7 @@ async fn run_token_discovery_scenario(
     }
 
     let swap_stream =
-        DexStream::discover_pools_for_tokens(ws_url.to_string(), token_addresses).await?;
+        DexStream::discover_pools_for_tokens(ws_url.to_string(), token_addresses, network).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 
@@ -157,11 +160,13 @@ async fn run_token_discovery_scenario(
 async fn run_single_token_scenario(
     ws_url: &str,
     token_address: alloy::primitives::Address,
+    network: nadfun_sdk::Network,
 ) -> Result<()> {
     println!("📡 Discovering pool for single token...");
     println!("   Token: {}", token_address);
 
-    let swap_stream = DexStream::discover_pool_for_token(ws_url.to_string(), token_address).await?;
+    let swap_stream =
+        DexStream::discover_pool_for_token(ws_url.to_string(), token_address, network).await?;
     let stream = swap_stream.subscribe().await?;
     pin_mut!(stream);
 

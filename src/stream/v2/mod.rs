@@ -9,11 +9,9 @@ pub mod dex;
 pub use curve::{CurveIndexerV2, CurveStreamV2};
 pub use dex::{decode_nadfun_swap_event, NadFunSwapEvent, NadFunSwapIndexer, NadFunSwapStream};
 
+use crate::constants::Network;
 use crate::contracts::{NadFunFactory, PoolDiscovery as CapricornPoolDiscovery};
-use alloy::{
-    primitives::Address,
-    providers::{DynProvider, Provider},
-};
+use alloy::{primitives::Address, providers::DynProvider};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -47,12 +45,13 @@ pub async fn discover_pools_unified(
     provider: Arc<DynProvider>,
     tokens: Vec<Address>,
     factory_v2_address: Option<Address>,
+    network: Network,
 ) -> Result<Vec<PoolLocation>> {
     let mut out: Vec<PoolLocation> = Vec::new();
 
     // v1 (Capricorn CL) pool discovery — per-token lookup so we preserve
     // the (token, pool) correspondence and skip tokens without a v1 pool.
-    let cap = CapricornPoolDiscovery::new(provider.clone())?;
+    let cap = CapricornPoolDiscovery::new(provider.clone(), network)?;
     for token in &tokens {
         if let Some(pool) = cap.get_pool_for_token(*token).await? {
             out.push(PoolLocation {
@@ -66,7 +65,7 @@ pub async fn discover_pools_unified(
     // v2 (NadFun) pool discovery — query factory.getPair per token.
     if let Some(addr) = factory_v2_address {
         let factory = NadFunFactory::new(addr, provider.clone());
-        let wmon = crate::constants::get_wmon().parse::<Address>()?;
+        let wmon = crate::constants::get_wmon(network).parse::<Address>()?;
         for token in tokens {
             // NadFunFactory.getPair takes (tokenA, tokenB); the v2 default
             // quote is WMON. ERC-20-quote tokens have multiple pairs — only

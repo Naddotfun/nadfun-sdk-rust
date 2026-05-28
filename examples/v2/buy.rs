@@ -9,9 +9,7 @@
 
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
-use nadfun_sdk::{
-    CoreV2, GasPricing, SlippageUtils, V2BuyWithNativeParams, V2GasEstimationParams,
-};
+use nadfun_sdk::{CoreV2, GasPricing, SlippageUtils, V2BuyWithNativeParams, V2GasEstimationParams};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -61,7 +59,10 @@ async fn main() -> Result<()> {
         .await
         .unwrap_or(400_000);
     let gas_with_buffer = gas_estimate * 120 / 100;
-    println!("estimated gas: {} (with 20% buffer: {})", gas_estimate, gas_with_buffer);
+    println!(
+        "estimated gas: {} (with 20% buffer: {})",
+        gas_estimate, gas_with_buffer
+    );
 
     let mut params = params;
     params.gas_limit = Some(gas_with_buffer);
@@ -70,7 +71,10 @@ async fn main() -> Result<()> {
     println!("tx: {}", tx_hash);
 
     let receipt = core.get_receipt(tx_hash).await?;
-    println!("status: {}, block: {:?}", receipt.status, receipt.block_number);
+    println!(
+        "status: {}, block: {:?}",
+        receipt.status, receipt.block_number
+    );
 
     Ok(())
 }

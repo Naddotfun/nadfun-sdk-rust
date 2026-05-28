@@ -167,8 +167,8 @@ async fn main() -> Result<()> {
 
     // Step 3: Create API client (with optional API key for higher rate limits)
     // Without API key, the SDK still works but with lower rate limits
-    let api = ApiClient::new();
-    // Or with API key: let api = ApiClient::new().with_api_key("your-api-key".to_string());
+    let api = ApiClient::new(config.network);
+    // Or with API key: let api = ApiClient::new(config.network).with_api_key("your-api-key".to_string());
 
     // Step 4: Execute complete token creation flow (all steps handled automatically)
     println!("\n📋 Creating token with initial buy...");
