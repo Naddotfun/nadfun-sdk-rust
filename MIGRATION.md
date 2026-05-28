@@ -179,9 +179,32 @@ contract names).
 
 ## 7. v2: choosing the right trade method by `quote_token`
 
-v2 introduces multi-quote-token support. The router has separate
-entrypoints for native MON flows vs ERC-20 flows; SDK doesn't auto-route
-between them — you pick the method based on the token's `quote_token`:
+v2 introduces multi-quote-token support. **Price-quote** methods are
+quote-token-agnostic — the router does the routing internally and you
+call a single method regardless of the underlying currency. **Trade
+execution** methods are not: native MON flows and ERC-20 flows have
+separate router entrypoints, so you pick the SDK method based on the
+token's `quote_token`.
+
+### Quote-token-agnostic (no branching needed)
+
+The router handles BC vs DEX + quote-token bookkeeping internally:
+
+| Purpose                  | Method (works for any `quote_token`)        |
+|--------------------------|---------------------------------------------|
+| Price quote (exact-in)   | `core.get_amount_out_v2(token, amount_in, is_buy)`  |
+| Price quote (exact-out)  | `core.get_amount_in_v2(token, amount_out, is_buy)`  |
+| Force BC quote           | `core.get_bonding_curve_amount_out_v2(...)` |
+| Force DEX quote          | `core.get_dex_amount_out_v2(...)`           |
+| Pool address             | `core.pool_address_v2(token)`               |
+| Graduation status        | `core.is_graduated_v2(token)`               |
+| Wrapped native           | `core.wrapped_native_v2()`                  |
+| Version detect (v1/v2/None) | `core.detect_version(token)`             |
+
+### Trade execution — pick by `quote_token`
+
+These hit different router entrypoints and **do** depend on the token's
+`quote_token`:
 
 | `quote_token` | Buy                          | Sell                                      |
 |---------------|------------------------------|-------------------------------------------|
