@@ -70,29 +70,32 @@ async fn main() -> Result<()> {
 }
 ```
 
-## Choosing v1 vs v2
+## v1 vs v2 on one `Core`
 
-Nad.fun ships two generations of contracts. The SDK exposes them as
-**separate, equivalent entry points**:
+Nad.fun ships two generations of contracts. Starting in 0.4.0 a single
+`Core` instance wires both:
 
-| | v1 | v2 |
+| | v1 (legacy) | v2 (current) |
 |---|---|---|
-| Client type | [`Core`](#quick-start) | [`CoreV2`](#corev2-quick-start) |
+| Method names | `buy` / `sell` / `get_amount_out` / `create_token` | `buy_v2` / `sell_v2` / `quote_v2` / `create_token_v2` |
 | Routers | `BondingCurveRouter` + `DexRouter` (Capricorn CL) | unified `NadFunRouter` |
 | Quote tokens | MON only | MON + arbitrary ERC-20 |
-| Exact-output | yes | yes (stricter slippage semantics) |
 | Vaults | n/a | Burn / LP / CreatorFee / Gift |
 | Streaming | `CurveStream` / `DexStream` | `CurveStreamV2` / `NadFunSwapStream` |
-| Creator rewards | `CreatorClient` (Merkle claim) | (vault claim — next minor) |
 
-The SDK **does not** auto-dispatch. Pick `Core` for v1 tokens and `CoreV2`
-for v2 tokens. For mixed-token scenarios (wallet UIs, AI agents, generic
-explorers), use `ApiClient::get_token(token).version` to learn the token's
-`SdkVersion` and route to the correct client — see
-[`examples/unified_dispatch.rs`](examples/unified_dispatch.rs) for a
-15-line helper.
+Dispatch a v1 vs v2 path with the on-chain probe:
 
-### CoreV2 Quick Start
+```rust
+match core.detect_version(token).await? {
+    SdkVersion::V1 => { /* core.buy(...) */ }
+    SdkVersion::V2 => { /* core.buy_v2(...) */ }
+}
+```
+
+For UI / agent scenarios where the token comes from outside,
+`api.get_token(token).version` is the equivalent API-side answer.
+
+### v2 Quick Start
 
 ```rust
 use nadfun_sdk::*;
@@ -100,22 +103,23 @@ use alloy::primitives::{utils::parse_ether, Address, U256};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let core = CoreV2::new(rpc_url, private_key, Network::Mainnet).await?;
+    let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
     let token: Address = "0x...".parse()?;
     let mon_amount = parse_ether("0.1")?;
 
     // Auto-routed quote: bonding curve pre-graduation, NadFunPair post.
-    let expected = core.quote(token, mon_amount, true).await?;
+    let expected = core.quote_v2(token, mon_amount, true).await?;
     let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
-    let tx = core.buy_with_native(V2BuyWithNativeParams {
+    let tx = core.buy_with_native_v2(V2BuyWithNativeParams {
         token,
         amount_out_min: min_out,
         deadline: U256::from(9_999_999_999u64),
+        value: mon_amount,
         gas_limit: None,
         gas_price: None,
         nonce: None,
-    }, mon_amount).await?;
+    }).await?;
     println!("tx: {tx}");
     Ok(())
 }
@@ -135,14 +139,14 @@ The SDK uses optional API key authentication for higher rate limits:
 use nadfun_sdk::ApiClient;
 
 // Option 1: Without API key (lower rate limit, but works)
-let api = ApiClient::new();
+let api = ApiClient::new(Network::Mainnet);
 
 // Option 2: With API key (higher rate limit)
-let api = ApiClient::new().with_api_key("nadfun_xxxxx".to_string());
+let api = ApiClient::new(Network::Mainnet).with_api_key("nadfun_xxxxx".to_string());
 
 // Option 3: From environment variable (recommended)
 // Set NAD_API_KEY in .env or shell
-let api = ApiClient::from_env();
+let api = ApiClient::from_env(Network::Mainnet);
 ```
 
 #### Environment Variable Setup
@@ -230,7 +234,7 @@ async fn main() -> Result<()> {
         Network::Mainnet,
     ).await?;
 
-    let api = ApiClient::from_env(); // Reads NAD_API_KEY from env
+    let api = ApiClient::from_env(Network::Mainnet); // Reads NAD_API_KEY from env
 
     // 2. Calculate token output for initial buy
     let initial_buy = parse_ether("1.5")?; // 1.5 MON
@@ -294,7 +298,7 @@ use nadfun_sdk::{ApiClient, Core, Network};
 
 // Initialize
 let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
-let api = ApiClient::new();
+let api = ApiClient::new(Network::Mainnet);
 
 // Get created tokens with reward info
 let response = api.get_created_tokens(core.wallet_address(), 1, 10).await?;
