@@ -28,8 +28,10 @@ process-global `set_network` lock is gone — every entry point binds to a
     `create_token_v2(V2CreateTokenParams, &ApiClient)` (end-to-end). The
     high-level path now verifies the on-chain `Create` event matches the
     predicted token address.
-  - Quotes: `quote_v2`, `quote_in_v2`, `quote_bonding_curve_v2(_in)`,
-    `quote_dex_v2(_in)`.
+  - Quotes (price): `get_amount_out_v2`, `get_amount_in_v2`,
+    `get_bonding_curve_amount_out_v2(_in)`, `get_dex_amount_out_v2(_in)`.
+    Renamed from `quote_*` so the word "quote" is reserved for "quote
+    token" (the trade's pricing currency, e.g. WMON / LvMON / USDT).
   - Pool / state: `is_graduated_v2`, `pool_address_v2`, `wrapped_native_v2`.
   - Gas: `estimate_gas_v2(V2GasEstimationParams)`.
   - Escape hatches: `router_v2()`, `factory_v2()`, `bonding_curve_v2()`,

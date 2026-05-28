@@ -33,10 +33,10 @@ let core = Core::new(rpc, key, Network::Mainnet).await?;
 | `c.create(params)`                        | `c.create_v2(params)`                          |
 | `c.create_with_native(params)`            | `c.create_with_native_v2(params)`              |
 | `c.create_token(params, &api)`            | `c.create_token_v2(params, &api)`              |
-| `c.quote(t, a, is_buy)`                   | `c.quote_v2(t, a, is_buy)`                     |
-| `c.quote_in(...)`                         | `c.quote_in_v2(...)`                           |
-| `c.quote_bonding_curve(...)`              | `c.quote_bonding_curve_v2(...)`                |
-| `c.quote_dex(...)`                        | `c.quote_dex_v2(...)`                          |
+| `c.quote(t, a, is_buy)`                   | `c.get_amount_out_v2(t, a, is_buy)`                     |
+| `c.quote_in(...)`                         | `c.get_amount_in_v2(...)`                           |
+| `c.quote_bonding_curve(...)`              | `c.get_bonding_curve_amount_out_v2(...)`                |
+| `c.quote_dex(...)`                        | `c.get_dex_amount_out_v2(...)`                          |
 | `c.is_graduated(t)`                       | `c.is_graduated_v2(t)`                         |
 | `c.pool_address(t)`                       | `c.pool_address_v2(t)`                         |
 | `c.wrapped_native()`                      | `c.wrapped_native_v2()`                        |
@@ -176,3 +176,42 @@ use nadfun_sdk::contracts::v1::bonding_curve::IBondingCurve;
 
 Closed Codex P1 #7 (glob-export collision between v1 and v2 internal
 contract names).
+
+## 7. v2: choosing the right trade method by `quote_token`
+
+v2 introduces multi-quote-token support. The router has separate
+entrypoints for native MON flows vs ERC-20 flows; SDK doesn't auto-route
+between them — you pick the method based on the token's `quote_token`:
+
+| `quote_token` | Buy                          | Sell                                      |
+|---------------|------------------------------|-------------------------------------------|
+| **WMON**      | `buy_with_native_v2`         | `sell_to_native_v2` (router unwraps)      |
+| **LvMON**     | `buy_with_native_v2`         | `sell_v2` (LvMON can't unwrap — ERC-20 path) |
+| **Other ERC-20** (USDT, …) | `buy_v2`        | `sell_v2`                                 |
+
+Note the LvMON asymmetry: buying with native MON wraps into LvMON via
+the LvMON minter on the way in, but selling back doesn't have a reverse
+unwrap path — you receive raw LvMON tokens and must use the ERC-20
+`sell_v2` form. WMON has a symmetric wrap/unwrap so both legs use the
+native-flavored helpers.
+
+`exact_out_*` and `*_with_permit` variants follow the same matrix
+(`exact_out_buy_with_native_v2` for WMON/LvMON buy, `exact_out_buy_v2`
+for other ERC-20s, etc.). Look up `quote_token` via
+`api.get_token(token).quote_token` or the per-token registry if you're
+dispatching from a generic address.
+
+## 8. Rename: `quote_*` → `get_*amount_*` on v2
+
+To reserve the word "quote" for "quote token" (the trade's pricing
+currency), the v2 price-quote methods were renamed to match the v1
+`get_amount_out` / `get_amount_in` family:
+
+| 0.4.0-rc                          | 0.4.0                                       |
+|-----------------------------------|---------------------------------------------|
+| `c.quote_v2(t, a, is_buy)`        | `c.get_amount_out_v2(t, a, is_buy)`         |
+| `c.quote_in_v2(...)`              | `c.get_amount_in_v2(...)`                   |
+| `c.quote_bonding_curve_v2(...)`   | `c.get_bonding_curve_amount_out_v2(...)`    |
+| `c.quote_bonding_curve_in_v2(...)`| `c.get_bonding_curve_amount_in_v2(...)`     |
+| `c.quote_dex_v2(...)`             | `c.get_dex_amount_out_v2(...)`              |
+| `c.quote_dex_in_v2(...)`          | `c.get_dex_amount_in_v2(...)`               |

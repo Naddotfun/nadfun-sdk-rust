@@ -27,7 +27,7 @@
 //!         core.buy(buy_params, router).await?;
 //!     }
 //!     SdkVersion::V2 => {
-//!         let expected = core.quote_v2(token, amount_in, true).await?;
+//!         let expected = core.get_amount_out_v2(token, amount_in, true).await?;
 //!         core.buy_v2(v2_buy_params).await?;
 //!     }
 //! }

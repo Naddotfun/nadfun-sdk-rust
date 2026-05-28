@@ -77,7 +77,7 @@ Nad.fun ships two generations of contracts. Starting in 0.4.0 a single
 
 | | v1 (legacy) | v2 (current) |
 |---|---|---|
-| Method names | `buy` / `sell` / `get_amount_out` / `create_token` | `buy_v2` / `sell_v2` / `quote_v2` / `create_token_v2` |
+| Method names | `buy` / `sell` / `get_amount_out` / `create_token` | `buy_v2` / `sell_v2` / `get_amount_out_v2` / `create_token_v2` |
 | Routers | `BondingCurveRouter` + `DexRouter` (Capricorn CL) | unified `NadFunRouter` |
 | Quote tokens | MON only | MON + arbitrary ERC-20 |
 | Vaults | n/a | Burn / LP / CreatorFee / Gift |
@@ -108,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
     let mon_amount = parse_ether("0.1")?;
 
     // Auto-routed quote: bonding curve pre-graduation, NadFunPair post.
-    let expected = core.quote_v2(token, mon_amount, true).await?;
+    let expected = core.get_amount_out_v2(token, mon_amount, true).await?;
     let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
     let tx = core.buy_with_native_v2(V2BuyWithNativeParams {

@@ -85,8 +85,8 @@ fn decode_version(raw: u8, token: Address) -> Result<SdkVersion> {
         VERSION_NONE => Ok(SdkVersion::None),
         VERSION_V1 => Ok(SdkVersion::V1),
         VERSION_V2 => Ok(SdkVersion::V2),
-        other => Err(anyhow::anyhow!(
-            "TokenVersionLens returned unknown version {other} for token {token}; \
+        _ => Err(anyhow::anyhow!(
+            "TokenVersionLens returned unknown version {raw} for token {token}; \
              SDK only knows None=0 / V1=1 / V2=2 — upgrade nadfun_sdk"
         )),
     }
