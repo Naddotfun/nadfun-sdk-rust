@@ -66,11 +66,13 @@ pub async fn discover_pools_unified(
 
     // v2 (NadFun) pool discovery — query TokenRegistryV2::getPair, which
     // returns the canonical pair for a v2 token regardless of quote token.
+    // Propagate RPC / contract errors (`?`) so callers see partial failures
+    // — only treat an actual `Address::ZERO` as "no pool". Codex round 2 P2.
     if let Some(reg_s) = get_token_registry_v2(network) {
         let reg_addr: Address = reg_s.parse()?;
         let registry = TokenRegistryV2::new(reg_addr, provider.clone());
         for token in tokens {
-            let pool = registry.get_pair(token).await.unwrap_or(Address::ZERO);
+            let pool = registry.get_pair(token).await?;
             if pool != Address::ZERO {
                 out.push(PoolLocation {
                     token,

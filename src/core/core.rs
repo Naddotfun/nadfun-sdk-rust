@@ -34,6 +34,7 @@ use anyhow::{Context, Result};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 /// Unified high-level SDK client. Handles v1 + v2 trading, token creation,
@@ -396,6 +397,22 @@ impl Core {
         api: &ApiClient,
     ) -> Result<V2TokenCreationResult> {
         let v2 = self.v2()?;
+
+        // The salt server computes CREATE2 against the v2 BondingCurve +
+        // Token implementation of `api.network()`. If that disagrees with
+        // the network this Core submits to, the predicted token address
+        // is wrong and the create reverts (or worse, deploys to a wrong
+        // address). Fail fast here instead of letting the on-chain step
+        // catch it after funds have been committed.
+        if api.network() != self.network {
+            return Err(anyhow::anyhow!(
+                "create_token_v2: ApiClient is bound to {:?} but Core is on {:?}; \
+                 v2 contract addresses differ per network — construct ApiClient with the same network",
+                api.network(),
+                self.network,
+            ));
+        }
+
         let prepared = api
             .prepare_token_creation_v2(&V2PrepareCreationParams {
                 name: params.name.clone(),
@@ -456,15 +473,17 @@ impl Core {
             }
         };
 
-        // Verify the on-chain receipt's Create event matches the
-        // predicted token address. Defends against salt-server / contract
-        // drift where the API and the live curve disagree on CREATE2
-        // inputs (Codex P1 #3).
-        let receipt = self
-            .provider
-            .get_transaction_receipt(tx_hash)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("create_token_v2: receipt not found for {tx_hash}"))?;
+        // Wait for the transaction to land, then verify the on-chain
+        // Create event matches the predicted token address. Defends
+        // against salt-server / contract drift where the API and the live
+        // curve disagree on CREATE2 inputs (Codex P1 #3).
+        //
+        // `provider.get_transaction_receipt` returns `None` until the tx
+        // is mined; polling here turned the previous immediate call into
+        // a "receipt not found" error on healthy RPCs.
+        let receipt = wait_for_receipt(&self.provider, tx_hash, Duration::from_secs(120))
+            .await
+            .with_context(|| format!("create_token_v2: waiting for receipt of {tx_hash}"))?;
         if !receipt.status() {
             return Err(anyhow::anyhow!(
                 "create_token_v2: transaction reverted ({tx_hash})"
@@ -765,4 +784,33 @@ fn build_v2_bindings(provider: &Arc<DynProvider>, network: Network) -> Result<Op
         bonding_curve: BondingCurveV2::new(bc_addr, provider.clone()),
         token_registry: TokenRegistryV2::new(reg_addr, provider.clone()),
     }))
+}
+
+/// Poll for a transaction receipt until `tx_hash` lands or `max_wait`
+/// elapses. Returns the receipt or an error on timeout / RPC failure.
+///
+/// `provider.get_transaction_receipt` returns `Ok(None)` while the tx is
+/// still pending; without polling, that becomes a confusing "receipt not
+/// found" right after a successful broadcast.
+async fn wait_for_receipt(
+    provider: &Arc<DynProvider>,
+    tx_hash: B256,
+    max_wait: Duration,
+) -> Result<alloy::rpc::types::TransactionReceipt> {
+    let poll_interval = Duration::from_millis(500);
+    let deadline = tokio::time::Instant::now() + max_wait;
+    loop {
+        match provider.get_transaction_receipt(tx_hash).await? {
+            Some(receipt) => return Ok(receipt),
+            None => {
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(anyhow::anyhow!(
+                        "timed out after {:?} waiting for receipt {tx_hash}",
+                        max_wait,
+                    ));
+                }
+                tokio::time::sleep(poll_interval).await;
+            }
+        }
+    }
 }
