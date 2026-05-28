@@ -73,21 +73,20 @@ fn v2_dex_type_enum() {
 
 #[test]
 fn v2_create_payment_native_and_erc20() {
-    let native = V2CreatePayment::Native {
-        value: U256::from(1_500_000_000_000_000_000u128),
-    };
+    let native = V2CreatePayment::Native;
     let erc20 = V2CreatePayment::Erc20 {
         quote_token: SAMPLE_QUOTE,
     };
     // Both variants are constructible — the actual routing happens inside
-    // CoreV2::create_token (step 8) based on the variant.
+    // Core::create_token_v2 based on the variant. For Native, msg.value is
+    // derived from V2CreateTokenParams.buy_quote_amount (Codex P1 #4).
     match native {
-        V2CreatePayment::Native { .. } => {}
+        V2CreatePayment::Native => {}
         V2CreatePayment::Erc20 { .. } => panic!("native should be Native"),
     }
     match erc20 {
         V2CreatePayment::Erc20 { .. } => {}
-        V2CreatePayment::Native { .. } => panic!("erc20 should be Erc20"),
+        V2CreatePayment::Native => panic!("erc20 should be Erc20"),
     }
 }
 
@@ -110,9 +109,7 @@ fn v2_create_token_params_carries_all_fields() {
         }],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: U256::from(1u64),
-        payment: V2CreatePayment::Native {
-            value: U256::from(1u64),
-        },
+        payment: V2CreatePayment::Native,
         deadline: U256::from(1_900_000_000u64),
         gas_limit: None,
         gas_price: None,

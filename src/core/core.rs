@@ -409,7 +409,7 @@ impl Core {
             .await?;
 
         let tx_hash = match params.payment {
-            V2CreatePayment::Native { value } => {
+            V2CreatePayment::Native => {
                 let on_chain = V2CreateWithNativeParams {
                     name: params.name.clone(),
                     symbol: params.symbol.clone(),
@@ -419,7 +419,9 @@ impl Core {
                     salt: prepared.salt,
                     dex_type: params.dex_type,
                     buy_quote_amount: params.buy_quote_amount,
-                    native_value: value,
+                    // msg.value is always equal to buy_quote_amount for
+                    // native payments — no separate knob (Codex P1 #4).
+                    native_value: params.buy_quote_amount,
                     deadline: params.deadline,
                     gas_limit: params.gas_limit,
                     gas_price: params.gas_price.clone(),

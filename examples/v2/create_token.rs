@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
         ],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: initial_buy,
-        payment: V2CreatePayment::Native { value: initial_buy },
+        payment: V2CreatePayment::Native,
         deadline: U256::from(9_999_999_999_u64),
         gas_limit: None,
         gas_price: Some(GasPricing::Legacy),

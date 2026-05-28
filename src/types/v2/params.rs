@@ -192,15 +192,19 @@ pub type V2ExactOutSellToNativeParams = V2ExactOutSellParams;
 // ============================================================================
 
 /// How the creator funds the initial buy on a v2 token creation.
-#[derive(Debug, Clone)]
+///
+/// The native amount sent as `msg.value` is always drawn from
+/// [`V2CreateTokenParams::buy_quote_amount`] — there is no second
+/// "value" knob on this enum. Closes Codex P1 #4: the previous
+/// `Native { value }` shape made it easy to set `buy_quote_amount`
+/// and `value` to different numbers and silently underfund the initial
+/// buy.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum V2CreatePayment {
-    /// Pay with the native chain currency (MON). `value` is sent as `msg.value`
-    /// and covers the initial buy plus any deploy fee. Routes to
+    /// Pay with the native chain currency (MON). `msg.value` equals
+    /// `params.buy_quote_amount`. Routes to
     /// `NadFunRouter::createWithNative`.
-    Native {
-        /// Native amount to send as `msg.value`.
-        value: U256,
-    },
+    Native,
     /// Pay with an ERC-20 quote token (e.g. WMON, USDT, ...). The caller must
     /// have approved the router for at least `buy_quote_amount` worth of
     /// `quote_token` beforehand. Routes to `NadFunRouter::create`.
