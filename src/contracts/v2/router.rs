@@ -135,11 +135,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         Ok(*tx.tx_hash())
     }
 
-    pub async fn buy_with_native(
-        &self,
-        params: V2BuyWithNativeParams,
-        value: U256,
-    ) -> Result<B256> {
+    pub async fn buy_with_native(&self, params: V2BuyWithNativeParams) -> Result<B256> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::BuyWithNativeParams {
             token: params.token,
@@ -147,7 +143,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             deadline: params.deadline,
         };
 
-        let mut tx_builder = contract.buyWithNative(router_params).value(value);
+        let mut tx_builder = contract.buyWithNative(router_params).value(params.value);
         apply_tx_options!(tx_builder, params);
         let tx = tx_builder.send().await?;
         Ok(*tx.tx_hash())
@@ -467,7 +463,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
                 };
                 contract.buy(rp).from(from).estimate_gas().await?
             }
-            V2GasEstimationParams::BuyWithNative { params, value } => {
+            V2GasEstimationParams::BuyWithNative(params) => {
                 let rp = INadFunRouter::BuyWithNativeParams {
                     token: params.token,
                     amountOutMin: params.amount_out_min,
@@ -476,7 +472,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
                 contract
                     .buyWithNative(rp)
                     .from(from)
-                    .value(value)
+                    .value(params.value)
                     .estimate_gas()
                     .await?
             }

@@ -41,11 +41,13 @@ fn v2_params_construct_and_field_access() {
         token: SAMPLE_TOKEN,
         amount_out_min: U256::from(1u64),
         deadline: U256::from(1_900_000_000u64),
+        value: U256::from(100u64),
         gas_limit: None,
         gas_price: None,
         nonce: None,
     };
     assert_eq!(native.token, SAMPLE_TOKEN);
+    assert_eq!(native.value, U256::from(100u64));
 
     let permit = V2BuyWithPermitParams {
         token: SAMPLE_TOKEN,
@@ -120,17 +122,15 @@ fn v2_create_token_params_carries_all_fields() {
 #[test]
 fn v2_gas_estimation_params_enum_constructs_each_variant() {
     let _ = V2GasEstimationParams::Buy(sample_buy_params());
-    let _ = V2GasEstimationParams::BuyWithNative {
-        params: V2BuyWithNativeParams {
-            token: SAMPLE_TOKEN,
-            amount_out_min: U256::from(1u64),
-            deadline: U256::from(1_900_000_000u64),
-            gas_limit: None,
-            gas_price: None,
-            nonce: None,
-        },
+    let _ = V2GasEstimationParams::BuyWithNative(V2BuyWithNativeParams {
+        token: SAMPLE_TOKEN,
+        amount_out_min: U256::from(1u64),
+        deadline: U256::from(1_900_000_000u64),
         value: U256::from(1u64),
-    };
+        gas_limit: None,
+        gas_price: None,
+        nonce: None,
+    });
     let _ = V2GasEstimationParams::Sell(V2SellParams {
         token: SAMPLE_TOKEN,
         amount_in: U256::from(1u64),
@@ -161,17 +161,15 @@ async fn _core_v2_methods_compile(c: &Core) {
     let amount = U256::from(1u64);
     let _: Result<B256, _> = c.buy_v2(sample_buy_params()).await;
     let _: Result<B256, _> = c
-        .buy_with_native_v2(
-            V2BuyWithNativeParams {
-                token,
-                amount_out_min: amount,
-                deadline: amount,
-                gas_limit: None,
-                gas_price: None,
-                nonce: None,
-            },
-            amount,
-        )
+        .buy_with_native_v2(V2BuyWithNativeParams {
+            token,
+            amount_out_min: amount,
+            deadline: amount,
+            value: amount,
+            gas_limit: None,
+            gas_price: None,
+            nonce: None,
+        })
         .await;
     let _: Result<B256, _> = c
         .buy_with_permit_v2(V2BuyWithPermitParams {
@@ -241,6 +239,8 @@ fn v2_prepare_creation_types_compile() {
         salt: B256::ZERO,
         token_address: Address::ZERO,
         is_nsfw: false,
+        name: String::new(),
+        symbol: String::new(),
     };
     let _res = V2TokenCreationResult {
         token_address: Address::ZERO,

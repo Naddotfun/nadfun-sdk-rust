@@ -45,6 +45,7 @@ async fn main() -> Result<()> {
         token,
         amount_out_min: min_out,
         deadline,
+        value: mon_amount,
         gas_limit: None,
         gas_price: Some(GasPricing::Legacy),
         nonce: None,
@@ -52,10 +53,7 @@ async fn main() -> Result<()> {
 
     // Estimate gas with the same params we'll send.
     let gas_estimate = core
-        .estimate_gas_v2(V2GasEstimationParams::BuyWithNative {
-            params: params.clone(),
-            value: mon_amount,
-        })
+        .estimate_gas_v2(V2GasEstimationParams::BuyWithNative(params.clone()))
         .await
         .unwrap_or(400_000);
     let gas_with_buffer = gas_estimate * 120 / 100;
@@ -67,7 +65,7 @@ async fn main() -> Result<()> {
     let mut params = params;
     params.gas_limit = Some(gas_with_buffer);
 
-    let tx_hash = core.buy_with_native_v2(params, mon_amount).await?;
+    let tx_hash = core.buy_with_native_v2(params).await?;
     println!("tx: {}", tx_hash);
 
     let receipt = core.get_receipt(tx_hash).await?;

@@ -465,6 +465,11 @@ impl ApiClient {
             salt: B256::from(salt_bytes),
             token_address,
             is_nsfw: upload_result.is_nsfw,
+            // Server-normalized name/symbol — used by the salt miner, so
+            // the on-chain create must match these exact strings to land
+            // at the predicted address. Codex P2 #15.
+            name: metadata_result.metadata.name,
+            symbol: metadata_result.metadata.symbol,
         })
     }
 

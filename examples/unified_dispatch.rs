@@ -58,17 +58,15 @@ async fn auto_buy(
             let _ = to; // v2 buy_with_native infers recipient from msg.sender
             let expected = core.quote_v2(token, value, true).await?;
             let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-            core.buy_with_native_v2(
-                V2BuyWithNativeParams {
-                    token,
-                    amount_out_min: min_out,
-                    deadline,
-                    gas_limit: None,
-                    gas_price: Some(GasPricing::Legacy),
-                    nonce: None,
-                },
+            core.buy_with_native_v2(V2BuyWithNativeParams {
+                token,
+                amount_out_min: min_out,
+                deadline,
                 value,
-            )
+                gas_limit: None,
+                gas_price: Some(GasPricing::Legacy),
+                nonce: None,
+            })
             .await
         }
     }

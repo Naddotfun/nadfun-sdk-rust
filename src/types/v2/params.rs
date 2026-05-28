@@ -33,6 +33,13 @@ pub struct V2PreparedCreation {
     pub salt: B256,
     pub token_address: Address,
     pub is_nsfw: bool,
+    /// Server-normalized token name. The salt server may trim or sanitize
+    /// the user-supplied name before computing the CREATE2 salt — the
+    /// on-chain create call must use this exact string to land at the
+    /// predicted token_address. Codex P2 #15.
+    pub name: String,
+    /// Server-normalized token symbol (same rationale as `name`).
+    pub symbol: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +110,11 @@ pub struct V2BuyWithNativeParams {
     pub token: Address,
     pub amount_out_min: U256,
     pub deadline: U256,
+    /// Native MON sent with the call (`msg.value`). Must equal the
+    /// exact-in amount the caller wants to spend. Folded into the struct
+    /// in 0.4.0 — previously a separate positional arg, which made it
+    /// easy to mismatch (Codex P2 #10).
+    pub value: U256,
     pub gas_limit: Option<u64>,
     pub gas_price: Option<GasPricing>,
     pub nonce: Option<u64>,
@@ -288,20 +300,17 @@ pub struct V2TokenCreationResult {
 // ============================================================================
 
 /// All v2 operations the SDK can estimate gas for, packaged in a single enum
-/// so `CoreV2::estimate_gas` has a uniform entry point.
+/// so `Core::estimate_gas_v2` has a uniform entry point.
 ///
 /// Mirrors the trade/create method matrix on `NadFunRouter`. Each variant
-/// carries the same parameter struct the equivalent trade method takes.
+/// carries the same parameter struct the equivalent trade method takes —
+/// including `value` for native-funded variants (Codex P2 #10).
 #[derive(Debug, Clone)]
 pub enum V2GasEstimationParams {
     Create(V2CreateParams),
     CreateWithNative(V2CreateWithNativeParams),
     Buy(V2BuyParams),
-    BuyWithNative {
-        params: V2BuyWithNativeParams,
-        /// Native amount sent as `msg.value`.
-        value: U256,
-    },
+    BuyWithNative(V2BuyWithNativeParams),
     BuyWithPermit(V2BuyWithPermitParams),
     Sell(V2SellParams),
     SellToNative(V2SellToNativeParams),

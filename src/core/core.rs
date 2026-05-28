@@ -409,11 +409,17 @@ impl Core {
             })
             .await?;
 
+        // Use server-normalized name/symbol from the salt response — the
+        // CREATE2 hash was computed against these, so the on-chain call
+        // must use them too (Codex P2 #15).
+        let on_chain_name = prepared.name.clone();
+        let on_chain_symbol = prepared.symbol.clone();
+
         let tx_hash = match params.payment {
             V2CreatePayment::Native => {
                 let on_chain = V2CreateWithNativeParams {
-                    name: params.name.clone(),
-                    symbol: params.symbol.clone(),
+                    name: on_chain_name,
+                    symbol: on_chain_symbol,
                     token_uri: prepared.metadata_uri.clone(),
                     creator_fee_rate: params.creator_fee_rate,
                     vaults: params.vaults.clone(),
@@ -432,8 +438,8 @@ impl Core {
             }
             V2CreatePayment::Erc20 { quote_token } => {
                 let on_chain = V2CreateParams {
-                    name: params.name.clone(),
-                    symbol: params.symbol.clone(),
+                    name: on_chain_name,
+                    symbol: on_chain_symbol,
                     token_uri: prepared.metadata_uri.clone(),
                     quote_token,
                     creator_fee_rate: params.creator_fee_rate,
@@ -514,12 +520,8 @@ impl Core {
         self.v2()?.router.buy(params).await
     }
 
-    pub async fn buy_with_native_v2(
-        &self,
-        params: V2BuyWithNativeParams,
-        value: U256,
-    ) -> Result<B256> {
-        self.v2()?.router.buy_with_native(params, value).await
+    pub async fn buy_with_native_v2(&self, params: V2BuyWithNativeParams) -> Result<B256> {
+        self.v2()?.router.buy_with_native(params).await
     }
 
     pub async fn buy_with_permit_v2(&self, params: V2BuyWithPermitParams) -> Result<B256> {
@@ -669,9 +671,17 @@ impl Core {
     }
 
     /// Estimate gas for any v2 trade or create op. Uses
-    /// `self.wallet_address` as the `from` so allowance/balance checks
-    /// succeed.
+    /// `self.wallet_address` as the `from` so allowance / balance checks
+    /// succeed. Errors when `self.wallet_address` is `Address::ZERO`
+    /// (Codex P2 #9) — a read-only `Core` built via
+    /// `Core::with_provider(_, Address::ZERO, _)` cannot estimate gas.
     pub async fn estimate_gas_v2(&self, params: V2GasEstimationParams) -> Result<u64> {
+        if self.wallet_address == Address::ZERO {
+            return Err(anyhow::anyhow!(
+                "estimate_gas_v2: wallet_address is Address::ZERO; \
+                 construct Core with a real signer to estimate gas"
+            ));
+        }
         self.v2()?
             .router
             .estimate_gas(params, self.wallet_address)

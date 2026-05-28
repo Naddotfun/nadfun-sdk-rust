@@ -60,6 +60,20 @@ pub async fn estimate_gas<P: Provider>(
     router: &Router,
     params: GasEstimationParams,
 ) -> Result<u64> {
+    // Reject Address::ZERO as the from-derived `to` field — providers will
+    // happily return numbers that skip allowance / balance checks, which
+    // is misleading. Codex P2 #9.
+    let to_field = match &params {
+        GasEstimationParams::Buy { to, .. }
+        | GasEstimationParams::Sell { to, .. }
+        | GasEstimationParams::SellPermit { to, .. } => *to,
+    };
+    if to_field == Address::ZERO {
+        return Err(anyhow::anyhow!(
+            "estimate_gas: `to` (used as from-address) must not be Address::ZERO"
+        ));
+    }
+
     match params {
         GasEstimationParams::Buy {
             token,

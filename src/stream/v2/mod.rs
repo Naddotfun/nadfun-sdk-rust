@@ -9,8 +9,8 @@ pub mod dex;
 pub use curve::{CurveIndexerV2, CurveStreamV2};
 pub use dex::{decode_nadfun_swap_event, NadFunSwapEvent, NadFunSwapIndexer, NadFunSwapStream};
 
-use crate::constants::Network;
-use crate::contracts::{NadFunFactory, PoolDiscovery as CapricornPoolDiscovery};
+use crate::constants::{get_token_registry_v2, Network};
+use crate::contracts::{PoolDiscovery as CapricornPoolDiscovery, TokenRegistryV2};
 use alloy::{primitives::Address, providers::DynProvider};
 use anyhow::Result;
 use std::sync::Arc;
@@ -36,15 +36,17 @@ pub struct PoolLocation {
 /// (NadFun) surfaces.
 ///
 /// For each token the function attempts a v1 Capricorn CL pool lookup
-/// (against the configured `DEX_FACTORY` / WMON pair, fee tier 1%) AND a v2
-/// NadFunFactory pair lookup. Any address that returns `Address::ZERO` is
-/// treated as "no pool on that surface" and skipped.
+/// (against the configured `DEX_FACTORY` / WMON pair, fee tier 1%) AND a
+/// v2 `TokenRegistryV2::getPair(token)` lookup which returns the canonical
+/// pair regardless of the token's quote currency (WMON, USDT, …). Any
+/// address that returns `Address::ZERO` is treated as "no pool on that
+/// surface" and skipped (Codex P2 #11 — previously this restricted v2 to
+/// WMON-quoted pairs only).
 ///
 /// Returns the flat list of discovered pools. Order is not guaranteed.
 pub async fn discover_pools_unified(
     provider: Arc<DynProvider>,
     tokens: Vec<Address>,
-    factory_v2_address: Option<Address>,
     network: Network,
 ) -> Result<Vec<PoolLocation>> {
     let mut out: Vec<PoolLocation> = Vec::new();
@@ -62,16 +64,13 @@ pub async fn discover_pools_unified(
         }
     }
 
-    // v2 (NadFun) pool discovery — query factory.getPair per token.
-    if let Some(addr) = factory_v2_address {
-        let factory = NadFunFactory::new(addr, provider.clone());
-        let wmon = crate::constants::get_wmon(network).parse::<Address>()?;
+    // v2 (NadFun) pool discovery — query TokenRegistryV2::getPair, which
+    // returns the canonical pair for a v2 token regardless of quote token.
+    if let Some(reg_s) = get_token_registry_v2(network) {
+        let reg_addr: Address = reg_s.parse()?;
+        let registry = TokenRegistryV2::new(reg_addr, provider.clone());
         for token in tokens {
-            // NadFunFactory.getPair takes (tokenA, tokenB); the v2 default
-            // quote is WMON. ERC-20-quote tokens have multiple pairs — only
-            // the WMON-quoted one is surfaced here. Power users can query
-            // TokenRegistryV2::get_pair(token) for the canonical pair.
-            let pool = factory.get_pair(token, wmon).await.unwrap_or(Address::ZERO);
+            let pool = registry.get_pair(token).await.unwrap_or(Address::ZERO);
             if pool != Address::ZERO {
                 out.push(PoolLocation {
                     token,

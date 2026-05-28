@@ -4,7 +4,7 @@
 use alloy::primitives::Address;
 use alloy::providers::{DynProvider, ProviderBuilder};
 use anyhow::Result;
-use nadfun_sdk::{constants, stream::v2::discover_pools_unified};
+use nadfun_sdk::stream::v2::discover_pools_unified;
 use std::sync::Arc;
 
 #[path = "../common/mod.rs"]
@@ -29,10 +29,7 @@ async fn main() -> Result<()> {
         anyhow::bail!("--tokens or TOKENS env required");
     }
 
-    let factory_v2: Option<Address> =
-        constants::get_nadfun_factory_v2(network).and_then(|s| s.parse().ok());
-
-    let pools = discover_pools_unified(provider, tokens.clone(), factory_v2, network).await?;
+    let pools = discover_pools_unified(provider, tokens.clone(), network).await?;
     println!(
         "found {} pool(s) across {} token(s)",
         pools.len(),
