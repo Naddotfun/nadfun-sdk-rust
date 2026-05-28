@@ -132,6 +132,13 @@ pub mod addresses {
 
             /// GiftVault — time-locked gift distribution with auto-expiry buyback.
             pub const GIFT_VAULT: &str = "0xa46A28558D77B1bF9dd98A451f78c43bE2545605";
+
+            /// `TokenVersionLens` — stateless view contract that classifies a
+            /// token as v1 / v2 / none by simultaneously probing the v1 and v2
+            /// token registries in one on-chain call. Wraps the legacy v1
+            /// `TokenRegistry` at `0x3Be9198208c198e2a4dab9A575764C8468DC83c6`
+            /// and `TOKEN_REGISTRY` above. Deployed 2026-05-28.
+            pub const TOKEN_VERSION_LENS: &str = "0x6139848625B395C4e2C347ED6C083dE2077Fb07b";
         }
 
         // Legacy flat access (`addresses::mainnet::BONDING_CURVE`) — v1 names only.
@@ -227,6 +234,11 @@ pub mod addresses {
             /// Liquid-staked MON used by `ILvMonMinter` flows on v2 (set
             /// alongside the deployment that ships LvMON support).
             pub const LV_MON: &str = "0xBe3fa50514D9617ce645a02B34F595541AF02b6b";
+
+            /// `TokenVersionLens` — stateless view contract that classifies a
+            /// token as v1 / v2 / none by simultaneously probing the v1 and v2
+            /// token registries in one on-chain call. Deployed 2026-05-28.
+            pub const TOKEN_VERSION_LENS: &str = "0xF91fcE42a25D51874C084240dA6bB89680e45D33";
         }
 
         // Legacy flat access (`addresses::testnet::BONDING_CURVE`) — v1 names only.
@@ -482,16 +494,12 @@ pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
 ///
 /// The Lens reads both v1 and v2 token registries in a single on-chain
 /// call to classify a token as `V1` / `V2` / `None`. `Core::detect_version`
-/// uses it when available and falls back to direct `TokenRegistryV2::getPair`
-/// otherwise.
-///
-/// Returns `None` until the Lens is deployed on the network.
-// TODO(0.4.0): fill in mainnet + testnet addresses once TokenVersionLens
-// is deployed by the contracts team.
+/// uses it on every supported network — both mainnet and testnet have it
+/// deployed as of 2026-05-28.
 pub fn get_token_version_lens(network: Network) -> Option<&'static str> {
     match network {
-        Network::Mainnet => None,
-        Network::Testnet => None,
+        Network::Mainnet => Some(addresses::mainnet::v2::TOKEN_VERSION_LENS),
+        Network::Testnet => Some(addresses::testnet::v2::TOKEN_VERSION_LENS),
     }
 }
 
