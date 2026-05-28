@@ -331,6 +331,7 @@ impl ApiClient {
     /// the JSON metadata document on the metadata server. Returns the IPFS
     /// image URI, the metadata URI, the (potentially-normalized) name/symbol
     /// the server stored, and the NSFW flag.
+    #[allow(clippy::too_many_arguments)]
     async fn upload_image_and_metadata(
         &self,
         name: &str,

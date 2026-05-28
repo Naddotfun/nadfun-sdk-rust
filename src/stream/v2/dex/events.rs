@@ -5,6 +5,9 @@
 //! amount1Out`), distinct from v1's Capricorn CL `Swap` which uses signed
 //! `amount0, amount1` + tick info.
 
+// alloy `sol!` expansion exceeds clippy's default too_many_arguments threshold.
+#![allow(clippy::too_many_arguments)]
+
 use alloy::{
     primitives::{Address, B256, U256},
     rpc::types::Log,

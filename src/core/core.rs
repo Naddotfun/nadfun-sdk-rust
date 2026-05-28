@@ -388,8 +388,8 @@ impl Core {
 
     /// High-level v2 end-to-end token creation: off-chain (image + metadata
     /// + salt mining) then on-chain create. Dispatches to
-    /// `NadFunRouter::create` for `V2CreatePayment::Erc20` or
-    /// `createWithNative` for `V2CreatePayment::Native`.
+    ///   - `NadFunRouter::create` for `V2CreatePayment::Erc20`, or
+    ///   - `createWithNative` for `V2CreatePayment::Native`.
     pub async fn create_token_v2(
         &self,
         params: V2CreateTokenParams,

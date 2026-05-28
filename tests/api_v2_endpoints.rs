@@ -209,7 +209,7 @@ async fn prepare_token_creation_v2_full_offchain_flow() {
     // PNG magic bytes — image upload step detects content type from magic.
     let png_bytes: Vec<u8> = {
         let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        bytes.extend(std::iter::repeat(0).take(64));
+        bytes.extend(std::iter::repeat_n(0, 64));
         bytes
     };
 
