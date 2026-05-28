@@ -74,6 +74,10 @@ pub fn nadfun_swap_signature() -> B256 {
 
 /// Decode a log into a [`NadFunSwapEvent`]. Errors if topic0 doesn't match
 /// `NadFunPair::Swap`.
+///
+/// Uses `SolEvent::decode_log(&log.inner)` so indexed `sender` / `to`
+/// addresses (which live in topics, not data) are populated correctly.
+/// Closes Codex P1 #1.
 pub fn decode_nadfun_swap_event(log: Log) -> Result<NadFunSwapEvent> {
     let topic0 = log
         .topic0()
@@ -88,7 +92,7 @@ pub fn decode_nadfun_swap_event(log: Log) -> Result<NadFunSwapEvent> {
     let transaction_index = log.transaction_index.unwrap_or_default();
     let log_index = log.log_index.unwrap_or_default();
 
-    let e = INadFunPairEvents::Swap::decode_log_data(log.data())?;
+    let e = INadFunPairEvents::Swap::decode_log(&log.inner)?.data;
     Ok(NadFunSwapEvent {
         sender: e.sender,
         to: e.to,

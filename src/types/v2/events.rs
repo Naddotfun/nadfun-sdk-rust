@@ -206,6 +206,11 @@ impl V2BondingCurveEvent {
 
 /// Decode an arbitrary log into a typed v2 BondingCurve event. Returns an
 /// error if the log doesn't match any of the v2 event signatures.
+///
+/// Uses `SolEvent::decode_log(&log.inner)` so indexed fields (which live in
+/// the topics, not the data slot) are populated correctly. The previous
+/// `decode_log_data(log.data())` form silently zeroed every indexed field
+/// (`creator`, `token`, `buyer`, `seller`, `pair`, …) — see Codex P1 #1.
 pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
     let topic0 = log
         .topic0()
@@ -215,17 +220,18 @@ pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
     let transaction_hash = log.transaction_hash.unwrap_or_default();
     let transaction_index = log.transaction_index.unwrap_or_default();
     let log_index = log.log_index.unwrap_or_default();
+    let inner = &log.inner;
 
     if topic0 == IBondingCurveV2Events::Create::SIGNATURE_HASH {
-        let e = IBondingCurveV2Events::Create::decode_log_data(log.data())?;
+        let e = IBondingCurveV2Events::Create::decode_log(inner)?.data;
         Ok(V2BondingCurveEvent::Create(V2CreateEvent {
             creator: e.creator,
             token: e.token,
             pair: e.pair,
             quote_token: e.quoteToken,
-            name: e.name.clone(),
-            symbol: e.symbol.clone(),
-            token_uri: e.tokenURI.clone(),
+            name: e.name,
+            symbol: e.symbol,
+            token_uri: e.tokenURI,
             virtual_quote_reserve: e.virtualQuoteReserve,
             virtual_token_reserve: e.virtualTokenReserve,
             min_token_reserve: e.minTokenReserve,
@@ -235,7 +241,7 @@ pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
             log_index,
         }))
     } else if topic0 == IBondingCurveV2Events::Buy::SIGNATURE_HASH {
-        let e = IBondingCurveV2Events::Buy::decode_log_data(log.data())?;
+        let e = IBondingCurveV2Events::Buy::decode_log(inner)?.data;
         Ok(V2BondingCurveEvent::Buy(V2BuyEvent {
             token: e.token,
             buyer: e.buyer,
@@ -247,7 +253,7 @@ pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
             log_index,
         }))
     } else if topic0 == IBondingCurveV2Events::Sell::SIGNATURE_HASH {
-        let e = IBondingCurveV2Events::Sell::decode_log_data(log.data())?;
+        let e = IBondingCurveV2Events::Sell::decode_log(inner)?.data;
         Ok(V2BondingCurveEvent::Sell(V2SellEvent {
             token: e.token,
             seller: e.seller,
@@ -259,7 +265,7 @@ pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
             log_index,
         }))
     } else if topic0 == IBondingCurveV2Events::Sync::SIGNATURE_HASH {
-        let e = IBondingCurveV2Events::Sync::decode_log_data(log.data())?;
+        let e = IBondingCurveV2Events::Sync::decode_log(inner)?.data;
         Ok(V2BondingCurveEvent::Sync(V2SyncEvent {
             token: e.token,
             real_quote_reserve: e.realQuoteReserve,
@@ -272,7 +278,7 @@ pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
             log_index,
         }))
     } else if topic0 == IBondingCurveV2Events::Graduate::SIGNATURE_HASH {
-        let e = IBondingCurveV2Events::Graduate::decode_log_data(log.data())?;
+        let e = IBondingCurveV2Events::Graduate::decode_log(inner)?.data;
         Ok(V2BondingCurveEvent::Graduate(V2GraduateEvent {
             token: e.token,
             pair: e.pair,
@@ -282,7 +288,7 @@ pub fn decode_v2_bonding_curve_event(log: Log) -> Result<V2BondingCurveEvent> {
             log_index,
         }))
     } else if topic0 == IBondingCurveV2Events::SnipingPenalty::SIGNATURE_HASH {
-        let e = IBondingCurveV2Events::SnipingPenalty::decode_log_data(log.data())?;
+        let e = IBondingCurveV2Events::SnipingPenalty::decode_log(inner)?.data;
         Ok(V2BondingCurveEvent::SnipingPenalty(V2SnipingPenaltyEvent {
             token: e.token,
             buyer: e.buyer,
