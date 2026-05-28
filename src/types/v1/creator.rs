@@ -99,9 +99,10 @@ pub struct ApiTokenInfo {
     /// v2-only.
     #[serde(default)]
     pub is_cto: bool,
-    /// `"V1"` or `"V2"`. Defaults to V1 if the field is missing on the wire
-    /// (legacy v1 API responses that pre-date the discriminator).
-    #[serde(default)]
+    /// `"V1"` or `"V2"`. Defaults to V1 if the field is missing OR explicitly
+    /// `null` on the wire — legacy v1 API responses pre-date the discriminator
+    /// and the v2 server can serialize an omitted enum as `null` (Codex P1 #6).
+    #[serde(default, deserialize_with = "deserialize_sdk_version_null_default")]
     pub version: crate::version::SdkVersion,
 }
 
@@ -121,6 +122,18 @@ where
     D: serde::Deserializer<'de>,
 {
     Ok(Option::<String>::deserialize(de)?.unwrap_or_default())
+}
+
+/// Tolerate `null` -> `SdkVersion::default()` (= V1). `#[serde(default)]`
+/// alone only handles the missing-field case, not explicit JSON `null`,
+/// which the API can emit for legacy v1 responses (Codex P1 #6).
+fn deserialize_sdk_version_null_default<'de, D>(
+    de: D,
+) -> Result<crate::version::SdkVersion, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<crate::version::SdkVersion>::deserialize(de)?.unwrap_or_default())
 }
 
 /// API market information
@@ -157,4 +170,50 @@ pub struct CreatedToken {
 pub struct CreatedTokenResponse {
     pub tokens: Vec<CreatedToken>,
     pub total_count: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::version::SdkVersion;
+
+    /// Codex P1 #6: explicit `null` on `version` must deserialize to the
+    /// default (V1), not error.
+    #[test]
+    fn api_token_info_handles_null_version() {
+        let raw = r#"{
+            "token_id": "0x0000000000000000000000000000000000000001",
+            "name": "x", "symbol": "x",
+            "image_uri": "",
+            "is_graduated": false,
+            "version": null
+        }"#;
+        let info: ApiTokenInfo = serde_json::from_str(raw).expect("null version should default");
+        assert_eq!(info.version, SdkVersion::V1);
+    }
+
+    #[test]
+    fn api_token_info_handles_missing_version() {
+        let raw = r#"{
+            "token_id": "0x0000000000000000000000000000000000000001",
+            "name": "x", "symbol": "x",
+            "image_uri": "",
+            "is_graduated": false
+        }"#;
+        let info: ApiTokenInfo = serde_json::from_str(raw).expect("missing version should default");
+        assert_eq!(info.version, SdkVersion::V1);
+    }
+
+    #[test]
+    fn api_token_info_explicit_v2_version() {
+        let raw = r#"{
+            "token_id": "0x0000000000000000000000000000000000000001",
+            "name": "x", "symbol": "x",
+            "image_uri": "",
+            "is_graduated": false,
+            "version": "V2"
+        }"#;
+        let info: ApiTokenInfo = serde_json::from_str(raw).expect("V2 version");
+        assert_eq!(info.version, SdkVersion::V2);
+    }
 }
