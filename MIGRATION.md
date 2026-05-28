@@ -49,9 +49,13 @@ supported `Network` ships with a v2 deployment, so `Core::new` either
 wires v2 or fails loudly during construction — there's no dead branch
 for these accessors to guard against.
 
-Use `Core::detect_version(token)` (with in-process cache) or
+Use `Core::detect_version(token)` (with in-process cache + on-chain
+`TokenVersionLens` lookup when deployed) or
 `api.get_token(token).version` to pick v1 vs v2 paths from a token
-address you don't know up front.
+address you don't know up front. When the Lens is wired,
+`SdkVersion::None` distinguishes "arbitrary ERC-20" from "real v1
+token" — be sure to handle the new variant in your `match`. For
+batch lookups use `Core::detect_versions(tokens)`.
 
 ## 2. Drop `set_network` — pass `Network` to every constructor
 
