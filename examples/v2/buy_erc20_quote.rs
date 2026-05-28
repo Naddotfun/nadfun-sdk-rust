@@ -6,7 +6,7 @@
 
 use alloy::primitives::{Address, U256};
 use anyhow::Result;
-use nadfun_sdk::{CoreV2, GasPricing, SlippageUtils, V2BuyParams};
+use nadfun_sdk::{Core, GasPricing, SlippageUtils, V2BuyParams};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -24,12 +24,12 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("--token required"))?
         .parse()?;
 
-    let core = CoreV2::new(config.rpc_url, private_key, config.network).await?;
+    let core = Core::new(config.rpc_url, private_key, config.network).await?;
 
     // 10 quote-token units (assumes 18 decimals; adjust for USDT 6).
     let amount_in: U256 = U256::from(10u64) * U256::from(10).pow(U256::from(18u64));
 
-    let expected = core.quote(token, amount_in, true).await?;
+    let expected = core.quote_v2(token, amount_in, true).await?;
     println!("expected token out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("zero quote — token may not be tradeable with this quote");
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
     let tx_hash = core
-        .buy(V2BuyParams {
+        .buy_v2(V2BuyParams {
             token,
             amount_in,
             amount_out_min: min_out,

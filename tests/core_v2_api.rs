@@ -1,14 +1,14 @@
-//! Compile-time and runtime checks that the CoreV2 public surface exposes the
-//! types and methods promised by the v2 SDK design.
+//! Compile-time and runtime checks that the unified `Core`'s v2 surface
+//! exposes the types and methods promised by the v2 SDK design.
 //!
 //! Live RPC interactions are out of scope here — those are covered by the
 //! examples that run against a real testnet RPC. This file just guarantees
-//! the public surface is reachable and that V2NotConfigured paths fire
+//! the public surface is reachable and that v2-not-configured paths fire
 //! correctly when v2 isn't deployed for the active network.
 
 use alloy::primitives::{Address, B256, U256};
 use nadfun_sdk::{
-    CoreV2, GasPricing, Network, V2BuyParams, V2BuyWithNativeParams, V2BuyWithPermitParams,
+    Core, GasPricing, Network, V2BuyParams, V2BuyWithNativeParams, V2BuyWithPermitParams,
     V2CreateParams, V2CreatePayment, V2CreateTokenParams, V2CreateWithNativeParams, V2DexType,
     V2ExactOutBuyParams, V2ExactOutBuyWithNativeParams, V2ExactOutSellParams,
     V2ExactOutSellToNativeParams, V2GasEstimationParams, V2PermitParams, V2PrepareCreationParams,
@@ -156,16 +156,17 @@ fn v2_gas_estimation_params_enum_constructs_each_variant() {
     });
 }
 
-/// Compile-time guarantee that every CoreV2 method exists with the expected
-/// shape. Calls are only ever reached at runtime if the constructor succeeds,
-/// which it won't without a real RPC — but the compile is the assertion.
+/// Compile-time guarantee that every v2-surface method on `Core` exists
+/// with the expected shape. Calls are only ever reached at runtime if the
+/// constructor succeeds, which it won't without a real RPC — but the
+/// compile is the assertion.
 #[allow(unreachable_code, dead_code, unused_variables)]
-async fn _core_v2_methods_compile(c: &CoreV2) {
+async fn _core_v2_methods_compile(c: &Core) {
     let token = Address::ZERO;
     let amount = U256::from(1u64);
-    let _: Result<B256, _> = c.buy(sample_buy_params()).await;
+    let _: Result<B256, _> = c.buy_v2(sample_buy_params()).await;
     let _: Result<B256, _> = c
-        .buy_with_native(
+        .buy_with_native_v2(
             V2BuyWithNativeParams {
                 token,
                 amount_out_min: amount,
@@ -178,7 +179,7 @@ async fn _core_v2_methods_compile(c: &CoreV2) {
         )
         .await;
     let _: Result<B256, _> = c
-        .buy_with_permit(V2BuyWithPermitParams {
+        .buy_with_permit_v2(V2BuyWithPermitParams {
             token,
             amount_in: amount,
             amount_out_min: amount,
@@ -194,7 +195,7 @@ async fn _core_v2_methods_compile(c: &CoreV2) {
         })
         .await;
     let _: Result<B256, _> = c
-        .sell(V2SellParams {
+        .sell_v2(V2SellParams {
             token,
             amount_in: amount,
             amount_out_min: amount,
@@ -204,23 +205,24 @@ async fn _core_v2_methods_compile(c: &CoreV2) {
             nonce: None,
         })
         .await;
-    let _: Result<U256, _> = c.quote(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_in(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_bonding_curve(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_bonding_curve_in(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_dex(token, amount, true).await;
-    let _: Result<U256, _> = c.quote_dex_in(token, amount, true).await;
-    let _: Result<bool, _> = c.is_graduated(token).await;
-    let _: Result<Address, _> = c.pool_address(token).await;
-    let _: Result<Address, _> = c.wrapped_native().await;
+    let _: Result<U256, _> = c.quote_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.quote_in_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.quote_bonding_curve_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.quote_bonding_curve_in_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.quote_dex_v2(token, amount, true).await;
+    let _: Result<U256, _> = c.quote_dex_in_v2(token, amount, true).await;
+    let _: Result<bool, _> = c.is_graduated_v2(token).await;
+    let _: Result<Address, _> = c.pool_address_v2(token).await;
+    let _: Result<Address, _> = c.wrapped_native_v2().await;
     let _: Result<u64, _> = c
-        .estimate_gas(V2GasEstimationParams::Buy(sample_buy_params()))
+        .estimate_gas_v2(V2GasEstimationParams::Buy(sample_buy_params()))
         .await;
-    // escape hatches
-    let _r = c.router();
-    let _f = c.factory();
-    let _bc = c.bonding_curve();
-    let _tr = c.token_registry();
+    // escape hatches — v2 ones return Result so the caller knows when v2
+    // isn't deployed.
+    let _r = c.router_v2();
+    let _f = c.factory_v2();
+    let _bc = c.bonding_curve_v2();
+    let _tr = c.token_registry_v2();
     let _p = c.provider();
     let _w: Address = c.wallet_address();
     let _n: Network = c.network();

@@ -1,78 +1,45 @@
-//! Core trading functionality for the Nad.fun ecosystem
-//!
-//! This module provides comprehensive trading capabilities including:
+//! Unified `Core` trading interface for the Nad.fun ecosystem.
 //!
 //! ## Main Components
 //!
-//! - **[`Core`]**: High-level trading interface for buying and selling tokens
-//!   - Automatic routing between bonding curves and DEX pools
-//!   - Built-in slippage protection and deadline management
-//!   - Support for both market and limit-style operations
-//!   - Gas optimization through smart contract routing
+//! - **[`Core`]**: Single high-level trading client. Handles v1 (bonding
+//!   curve + Capricorn CL DEX) and v2 (NadFunRouter + per-token registry +
+//!   vaults) from one instance.
+//!   - Auto-routing between bonding curve and DEX on v1 via `Lens`.
+//!   - Explicit `*_v2` methods for v2-only operations (different params
+//!     shape, can't auto-dispatch).
+//!   - `Core::detect_version(token)` for picking v1 vs v2 at call sites.
+//! - **[`SlippageUtils`]**: Slippage math (basis-points based, no floating
+//!   point).
+//! - **[`GasEstimationParams`]** / **[`estimate_gas`]**: v1 gas estimation
+//!   surface, exposed for advanced callers that need fine-grained control.
 //!
-//! - **[`SlippageUtils`]**: Mathematical utilities for slippage calculations
-//!   - Precise calculations using basis points to avoid floating-point errors
-//!   - Support for both minimum output and maximum input calculations
-//!   - Configurable slippage percentages with validation
-//!
-//! ## Trading Flow
-//!
-//! 1. **Quote Generation**: Get expected output amounts for a given input
-//! 2. **Slippage Protection**: Calculate minimum acceptable outputs
-//! 3. **Route Selection**: Automatically choose bonding curve or DEX routing
-//! 4. **Transaction Execution**: Submit optimized transactions with proper gas limits
-//! 5. **Result Verification**: Confirm successful execution and extract results
-//!
-//! ## Usage Example
+//! ## Quick start
 //!
 //! ```rust,ignore
-//! use nadfun_sdk::{Core, SlippageUtils, Router, Operation, get_default_gas_limit, Network};
-//! use alloy::primitives::{Address, utils::parse_ether};
+//! use nadfun_sdk::{Core, Network, SdkVersion};
 //!
-//! // Initialize trading interface - this sets the network globally
 //! let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
-//! // Now all SDK functions use Mainnet addresses automatically
 //!
-//! // Get quote for buying tokens
-//! let token: Address = "0x...".parse()?;
-//! let mon_amount = parse_ether("0.1")?; // 0.1 MON
-//! let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
-//!
-//! // Apply slippage protection (5%)
-//! let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
-//!
-//! // Execute trade with parameters
-//! let buy_params = BuyParams {
-//!     token,
-//!     amount_in: mon_amount,
-//!     amount_out_min: min_tokens,
-//!     to: wallet_address,
-//!     deadline: U256::from(deadline),
-//!     gas_limit: Some(get_default_gas_limit(&router, Operation::Buy)),
-//!     gas_price: None,
-//!     nonce: None,
-//! };
-//!
-//! let result = core.buy(buy_params, router).await?;
+//! match core.detect_version(token).await? {
+//!     SdkVersion::V1 => {
+//!         let (router, expected) = core.get_amount_out(token, amount_in, true).await?;
+//!         core.buy(buy_params, router).await?;
+//!     }
+//!     SdkVersion::V2 => {
+//!         let expected = core.quote_v2(token, amount_in, true).await?;
+//!         core.buy_v2(v2_buy_params).await?;
+//!     }
+//! }
 //! ```
-//!
-//! ## Advanced Features
-//!
-//! - **Multi-router Support**: Automatic selection between bonding curve and DEX routers
-//! - **Gas Estimation**: Built-in gas estimation with safety margins
-//! - **Deadline Management**: Automatic deadline calculation for time-sensitive trades
-//! - **Error Handling**: Comprehensive error types for different failure scenarios
 
-/// v1 trading (Core, lens-routed buy/sell, slippage utils, gas estimation)
+#[allow(clippy::module_inception)]
+pub mod core;
 pub mod v1;
 
-/// v2 trading (CoreV2, NadFunRouter, exact-out, multi-quote, permit)
-pub mod v2;
-
-// Re-export main types for convenience — v1 surface unchanged.
 pub use crate::types::Router;
+pub use core::Core;
 pub use v1::{
-    estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas, Core,
+    estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas,
     GasEstimationParams, SlippageUtils,
 };
-pub use v2::CoreV2;

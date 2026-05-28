@@ -3,7 +3,7 @@
 use alloy::primitives::Address;
 use anyhow::Result;
 use futures_util::{pin_mut, StreamExt};
-use nadfun_sdk::{stream::v2::NadFunSwapStream, CoreV2};
+use nadfun_sdk::{stream::v2::NadFunSwapStream, Core};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -19,9 +19,9 @@ async fn main() -> Result<()> {
     let dummy_key =
         "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
 
-    // Resolve pair addresses for the requested tokens via CoreV2's
+    // Resolve pair addresses for the requested tokens via Core's v2
     // TokenRegistry handle. Falls back to direct factory lookup if needed.
-    let core = CoreV2::new(config.rpc_url, dummy_key, config.network).await?;
+    let core = Core::new(config.rpc_url, dummy_key, config.network).await?;
     let tokens: Vec<Address> = config
         .tokens
         .iter()
@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
 
     let mut pairs = Vec::new();
     for token in &tokens {
-        let pool = core.pool_address(*token).await?;
+        let pool = core.pool_address_v2(*token).await?;
         if pool != Address::ZERO {
             pairs.push(pool);
             println!("token {} -> pair {}", token, pool);

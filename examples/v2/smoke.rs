@@ -14,7 +14,7 @@ use nadfun_sdk::{
         get_nadfun_pair_impl_v2, get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2,
         get_token_registry_v2,
     },
-    CoreV2, Network,
+    Core, Network,
 };
 use std::sync::Arc;
 
@@ -62,41 +62,42 @@ async fn main() -> Result<()> {
         provider.get_block_number().await?
     );
 
-    // Read-only CoreV2 — wallet_address is ignored for view calls.
-    let core = CoreV2::with_provider(provider.clone(), Address::ZERO, config.network)?;
+    // Read-only Core — wallet_address is ignored for view calls.
+    let core = Core::with_provider(provider.clone(), Address::ZERO, config.network)?;
+    let registry = core.token_registry_v2()?;
 
-    match core.wrapped_native().await {
+    match core.wrapped_native_v2().await {
         Ok(w) => println!("  router.wrappedNative   {}", w),
         Err(e) => println!("  router.wrappedNative   ERR: {}", e),
     }
 
-    match core.factory().all_pairs_length().await {
+    match core.factory_v2()?.all_pairs_length().await {
         Ok(n) => println!("  factory.allPairs       {} pair(s)", n),
         Err(e) => println!("  factory.allPairs       ERR: {}", e),
     }
 
-    match core.factory().implementation().await {
+    match core.factory_v2()?.implementation().await {
         Ok(i) => println!("  factory.impl           {}", i),
         Err(e) => println!("  factory.impl           ERR: {}", e),
     }
 
-    match core.factory().fee_collector().await {
+    match core.factory_v2()?.fee_collector().await {
         Ok(c) => println!("  factory.feeCollector   {}", c),
         Err(e) => println!("  factory.feeCollector   ERR: {}", e),
     }
 
-    match core.bonding_curve().is_halted().await {
+    match core.bonding_curve_v2()?.is_halted().await {
         Ok(h) => println!("  bondingCurve.isHalted  {}", h),
         Err(e) => println!("  bondingCurve.isHalted  ERR: {}", e),
     }
 
-    match core.bonding_curve().version().await {
+    match core.bonding_curve_v2()?.version().await {
         Ok(v) => println!("  bondingCurve.VERSION   {}", v),
         Err(e) => println!("  bondingCurve.VERSION   ERR: {}", e),
     }
 
     // Should be false but call must succeed regardless.
-    match core.token_registry().is_registered(Address::ZERO).await {
+    match registry.is_registered(Address::ZERO).await {
         Ok(r) => println!("  registry.isReg(0x0)    {}", r),
         Err(e) => println!("  registry.isReg(0x0)    ERR: {}", e),
     }
@@ -111,16 +112,8 @@ async fn main() -> Result<()> {
     if !probe.is_empty() {
         println!("\n=== Per-token registry probe ===");
         for token in probe {
-            let reg = core
-                .token_registry()
-                .is_registered(token)
-                .await
-                .unwrap_or(false);
-            let pair = core
-                .token_registry()
-                .get_pair(token)
-                .await
-                .unwrap_or(Address::ZERO);
+            let reg = registry.is_registered(token).await.unwrap_or(false);
+            let pair = registry.get_pair(token).await.unwrap_or(Address::ZERO);
             println!("  {} registered={} pair={}", token, reg, pair);
         }
     }

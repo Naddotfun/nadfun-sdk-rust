@@ -1,8 +1,8 @@
-//! v2 sell tokens for native MON via CoreV2.
+//! v2 sell tokens for native MON via the unified `Core` (`*_v2` surface).
 
 use alloy::primitives::{Address, U256};
 use anyhow::Result;
-use nadfun_sdk::{CoreV2, GasPricing, SlippageUtils, V2SellToNativeParams};
+use nadfun_sdk::{Core, GasPricing, SlippageUtils, V2SellToNativeParams};
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -20,13 +20,13 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("--token required"))?
         .parse()?;
 
-    let core = CoreV2::new(config.rpc_url, private_key, config.network).await?;
+    let core = Core::new(config.rpc_url, private_key, config.network).await?;
     println!("wallet: {}", core.wallet_address());
 
     // Sell 100 tokens (assumes 18 decimals).
     let amount_in: U256 = U256::from(100u64) * U256::from(10).pow(U256::from(18u64));
 
-    let expected = core.quote(token, amount_in, false).await?;
+    let expected = core.quote_v2(token, amount_in, false).await?;
     println!("expected MON out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("zero quote — token not sellable on v2 surface");
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     // beforehand (e.g. via TokenHelper). Use `sell_to_native_with_permit` for
     // a gasless approval flow.
     let tx_hash = core
-        .sell_to_native(V2SellToNativeParams {
+        .sell_to_native_v2(V2SellToNativeParams {
             token,
             amount_in,
             amount_out_min: min_out,
