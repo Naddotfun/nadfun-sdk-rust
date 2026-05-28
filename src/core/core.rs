@@ -20,7 +20,7 @@ use crate::{
         NadFunRouter, TokenRegistryV2,
     },
     core::v1::gas::{estimate_gas, GasEstimationParams},
-    types::*,
+    types::{v2::events::IBondingCurveV2Events, *},
     version::SdkVersion,
 };
 use alloy::{
@@ -28,6 +28,7 @@ use alloy::{
     primitives::{Address, B256, U256},
     providers::{DynProvider, Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
+    sol_types::SolEvent,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -448,6 +449,52 @@ impl Core {
                 v2.router.create(on_chain).await?
             }
         };
+
+        // Verify the on-chain receipt's Create event matches the
+        // predicted token address. Defends against salt-server / contract
+        // drift where the API and the live curve disagree on CREATE2
+        // inputs (Codex P1 #3).
+        let receipt = self
+            .provider
+            .get_transaction_receipt(tx_hash)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("create_token_v2: receipt not found for {tx_hash}"))?;
+        if !receipt.status() {
+            return Err(anyhow::anyhow!(
+                "create_token_v2: transaction reverted ({tx_hash})"
+            ));
+        }
+
+        let create_sig = IBondingCurveV2Events::Create::SIGNATURE_HASH;
+        let create_log_opt = receipt
+            .logs()
+            .iter()
+            .find(|l| l.topic0() == Some(&create_sig));
+
+        if let Some(rpc_log) = create_log_opt {
+            let decoded = IBondingCurveV2Events::Create::decode_log(&rpc_log.inner)
+                .with_context(|| "create_token_v2: failed to decode on-chain Create event")?;
+            let on_chain_token = decoded.data.token;
+            if on_chain_token != prepared.token_address {
+                return Err(anyhow::anyhow!(
+                    "create_token_v2: predicted token {} does not match on-chain {} (tx {})",
+                    prepared.token_address,
+                    on_chain_token,
+                    tx_hash
+                ));
+            }
+        } else {
+            // No Create log in the receipt — fall back to a TokenRegistry
+            // probe, which proves the token was at least registered.
+            let pair = v2.token_registry.get_pair(prepared.token_address).await?;
+            if pair == Address::ZERO {
+                return Err(anyhow::anyhow!(
+                    "create_token_v2: predicted token {} not registered on-chain after tx {}",
+                    prepared.token_address,
+                    tx_hash
+                ));
+            }
+        }
 
         Ok(V2TokenCreationResult {
             token_address: prepared.token_address,
