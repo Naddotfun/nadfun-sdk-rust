@@ -19,9 +19,9 @@
 //! let salt = api.post_salt(params).await?;
 //! ```
 
-use crate::constants::get_api_server_url;
+use crate::constants::{get_api_server_url, Network};
 use crate::types::{
-    ApiErrorResponse, ApiTokenInfo, CreatedToken, CreatedTokenResponse, CreateTokenParams,
+    ApiErrorResponse, ApiTokenInfo, CreateTokenParams, CreatedToken, CreatedTokenResponse,
     CreatorBatchClaimParams, CreatorClaimParams, MetadataParams, PostMetadataData, PostSaltData,
     SaltParams, UploadImageData, V2PrepareCreationParams, V2PreparedCreation, VaultState,
 };
@@ -35,51 +35,58 @@ use std::str::FromStr;
 pub const ALLOWED_IMAGE_TYPES: [&str; 4] =
     ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
 
-/// API client with optional authentication
+/// API client with optional authentication.
 ///
-/// Supports two modes:
-/// - No auth: Works with lower rate limit (backward compatible)
-/// - API key: For higher rate limits
+/// Bound to a `Network` at construction — every request resolves against
+/// that network's API URL. Two clients can coexist for mainnet + testnet in
+/// the same process without interfering with each other.
 pub struct ApiClient {
     http_client: Client,
     api_url: String,
     api_key: Option<String>,
+    network: Network,
 }
 
 impl ApiClient {
-    /// Create a new API client without authentication
+    /// Create a new API client for `network` without authentication.
     ///
-    /// This works with lower rate limits but is backward compatible.
+    /// Lower rate limits but no API key required. Add a key later with
+    /// [`Self::with_api_key`] if you need higher limits.
     ///
     /// # Example
     /// ```rust,ignore
-    /// let client = ApiClient::new();
+    /// let client = ApiClient::new(Network::Mainnet);
     /// ```
-    pub fn new() -> Self {
+    pub fn new(network: Network) -> Self {
         Self {
             http_client: Client::new(),
-            api_url: get_api_server_url().to_string(),
+            api_url: get_api_server_url(network).to_string(),
             api_key: None,
+            network,
         }
     }
 
-    /// Create a new API client with API key from environment variable
-    ///
-    /// Reads API key from `NAD_API_KEY` environment variable.
-    /// If not set, falls back to no authentication (lower rate limit).
+    /// Create a new API client for `network` with the API key from
+    /// `NAD_API_KEY`. Falls back to no-auth if the variable is unset.
     ///
     /// # Example
     /// ```rust,ignore
     /// // .env file or shell: export NAD_API_KEY=nadfun_xxxxx
-    /// let client = ApiClient::from_env();
+    /// let client = ApiClient::from_env(Network::Mainnet);
     /// ```
-    pub fn from_env() -> Self {
+    pub fn from_env(network: Network) -> Self {
         let api_key = std::env::var("NAD_API_KEY").ok();
         Self {
             http_client: Client::new(),
-            api_url: get_api_server_url().to_string(),
+            api_url: get_api_server_url(network).to_string(),
             api_key,
+            network,
         }
+    }
+
+    /// The network this client is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Set API key for higher rate limits
@@ -153,8 +160,10 @@ impl ApiClient {
 }
 
 impl Default for ApiClient {
+    /// Default to a mainnet client. Prefer [`ApiClient::new`] with an
+    /// explicit `Network` for clarity.
     fn default() -> Self {
-        Self::new()
+        Self::new(Network::Mainnet)
     }
 }
 
@@ -478,11 +487,7 @@ impl ApiClient {
             anyhow::bail!("get_token({:?}) failed with {}: {}", token, status, body);
         }
         serde_json::from_str(&body).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to parse get_token response: {}. Body: {}",
-                e,
-                body
-            )
+            anyhow::anyhow!("Failed to parse get_token response: {}. Body: {}", e, body)
         })
     }
 

@@ -4,7 +4,7 @@
 //! parsing) without hitting the live `api.nadapp.net` endpoint.
 
 use alloy::primitives::Address;
-use nadfun_sdk::{ApiClient, SaltParams, SdkVersion, VaultType};
+use nadfun_sdk::{ApiClient, Network, SaltParams, SdkVersion, VaultType};
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -13,7 +13,9 @@ const SAMPLE_TOKEN_RAW: &str = "0xabcdef0123456789abcdef0123456789abcdef01";
 const SAMPLE_CREATOR_RAW: &str = "0x1234567890abcdef1234567890abcdef12345678";
 
 fn client_for(server: &MockServer) -> ApiClient {
-    ApiClient::new().with_api_url(server.uri())
+    // Network choice is irrelevant — the test sets the base URL explicitly
+    // via `with_api_url` before every request.
+    ApiClient::new(Network::Mainnet).with_api_url(server.uri())
 }
 
 /// Render an `Address` the same way `ApiClient` does for URL composition
@@ -69,7 +71,10 @@ async fn get_token_parses_v2_response() {
     assert_eq!(info.name, "TestToken");
     assert_eq!(info.version, SdkVersion::V2);
     assert!(info.creator.is_some());
-    assert_eq!(info.creator.as_ref().unwrap().account_id, SAMPLE_CREATOR_RAW);
+    assert_eq!(
+        info.creator.as_ref().unwrap().account_id,
+        SAMPLE_CREATOR_RAW
+    );
     // Null-tolerated string fields default to empty.
     assert_eq!(info.twitter, "");
     assert_eq!(info.telegram, "");
@@ -98,7 +103,10 @@ async fn get_token_defaults_to_v1_when_version_missing() {
         .await;
 
     let api = client_for(&server);
-    let info = api.get_token(SAMPLE_TOKEN_RAW.parse().unwrap()).await.unwrap();
+    let info = api
+        .get_token(SAMPLE_TOKEN_RAW.parse().unwrap())
+        .await
+        .unwrap();
     assert_eq!(info.version, SdkVersion::V1);
     assert!(info.is_graduated);
     assert!(info.creator.is_none());
@@ -169,7 +177,11 @@ async fn salt_params_v1_omits_version_field() {
         version: None,
     };
     let body = serde_json::to_value(&p).unwrap();
-    assert!(body.get("version").is_none(), "version must be absent on v1 wire: {}", body);
+    assert!(
+        body.get("version").is_none(),
+        "version must be absent on v1 wire: {}",
+        body
+    );
 }
 
 /// `SaltParams` with `version: Some(V2)` serializes `"version": "V2"`.

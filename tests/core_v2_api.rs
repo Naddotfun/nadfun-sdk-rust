@@ -8,12 +8,12 @@
 
 use alloy::primitives::{Address, B256, U256};
 use nadfun_sdk::{
-    set_network, CoreV2, GasPricing, Network, V2BuyParams, V2BuyWithNativeParams,
-    V2BuyWithPermitParams, V2CreateParams, V2CreatePayment, V2CreateTokenParams,
-    V2CreateWithNativeParams, V2DexType, V2ExactOutBuyParams, V2ExactOutBuyWithNativeParams,
-    V2ExactOutSellParams, V2ExactOutSellToNativeParams, V2GasEstimationParams, V2PermitParams,
-    V2PrepareCreationParams, V2PreparedCreation, V2SellParams, V2SellToNativeParams,
-    V2SellToNativeWithPermitParams, V2SellWithPermitParams, V2TokenCreationResult, V2VaultAllocation,
+    CoreV2, GasPricing, Network, V2BuyParams, V2BuyWithNativeParams, V2BuyWithPermitParams,
+    V2CreateParams, V2CreatePayment, V2CreateTokenParams, V2CreateWithNativeParams, V2DexType,
+    V2ExactOutBuyParams, V2ExactOutBuyWithNativeParams, V2ExactOutSellParams,
+    V2ExactOutSellToNativeParams, V2GasEstimationParams, V2PermitParams, V2PrepareCreationParams,
+    V2PreparedCreation, V2SellParams, V2SellToNativeParams, V2SellToNativeWithPermitParams,
+    V2SellWithPermitParams, V2TokenCreationResult, V2VaultAllocation,
 };
 
 const SAMPLE_TOKEN: Address = Address::ZERO;
@@ -110,7 +110,9 @@ fn v2_create_token_params_carries_all_fields() {
         }],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: U256::from(1u64),
-        payment: V2CreatePayment::Native { value: U256::from(1u64) },
+        payment: V2CreatePayment::Native {
+            value: U256::from(1u64),
+        },
         deadline: U256::from(1_900_000_000u64),
         gas_limit: None,
         gas_price: None,
@@ -211,7 +213,9 @@ async fn _core_v2_methods_compile(c: &CoreV2) {
     let _: Result<bool, _> = c.is_graduated(token).await;
     let _: Result<Address, _> = c.pool_address(token).await;
     let _: Result<Address, _> = c.wrapped_native().await;
-    let _: Result<u64, _> = c.estimate_gas(V2GasEstimationParams::Buy(sample_buy_params())).await;
+    let _: Result<u64, _> = c
+        .estimate_gas(V2GasEstimationParams::Buy(sample_buy_params()))
+        .await;
     // escape hatches
     let _r = c.router();
     let _f = c.factory();
@@ -261,6 +265,7 @@ fn v2_prepare_creation_types_compile() {
 fn with_provider_error_type_is_anyhow() {
     // type-only check
     fn _accepts_any_anyhow_err(_e: anyhow::Error) {}
-    // ensure set_network is reachable
-    set_network(Network::Testnet);
+    // Smoke-test that `Network` variants are reachable from the public
+    // surface (previously this checked the now-removed `set_network`).
+    let _ = Network::Testnet;
 }

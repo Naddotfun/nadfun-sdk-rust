@@ -78,17 +78,18 @@ mod tests {
 
     #[test]
     fn test_event_type_signatures() {
+        use crate::types::v1::bonding_curve::IBondingCurve;
         assert_eq!(
             EventType::Create.signature(),
-            bonding_curve::IBondingCurve::CurveCreate::SIGNATURE_HASH
+            IBondingCurve::CurveCreate::SIGNATURE_HASH
         );
         assert_eq!(
             EventType::Buy.signature(),
-            bonding_curve::IBondingCurve::CurveBuy::SIGNATURE_HASH
+            IBondingCurve::CurveBuy::SIGNATURE_HASH
         );
         assert_eq!(
             EventType::Sell.signature(),
-            bonding_curve::IBondingCurve::CurveSell::SIGNATURE_HASH
+            IBondingCurve::CurveSell::SIGNATURE_HASH
         );
     }
 

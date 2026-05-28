@@ -11,10 +11,10 @@ use nadfun_sdk::{
     constants::{
         get_burn_vault_v2, get_creator_fee_vault_v2, get_fee_to_v2, get_gift_vault_v2,
         get_lp_vault_v2, get_lv_mon_v2, get_nad_swap_adapter_v2, get_nadfun_factory_v2,
-        get_nadfun_pair_impl_v2, get_nadfun_router_v2, get_protocol_manager_v2,
-        get_token_impl_v2, get_token_registry_v2,
+        get_nadfun_pair_impl_v2, get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2,
+        get_token_registry_v2,
     },
-    set_network, CoreV2, Network,
+    CoreV2, Network,
 };
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ use common::Config;
 async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
-    set_network(config.network);
+    let net: Network = config.network;
 
     println!("\n=== Static address inventory ===");
     macro_rules! list {
@@ -38,26 +38,29 @@ async fn main() -> Result<()> {
         }};
     }
     list! {
-        "nadfun_router"        => get_nadfun_router_v2(),
-        "nadfun_factory"       => get_nadfun_factory_v2(),
-        "nadfun_pair_impl"     => get_nadfun_pair_impl_v2(),
-        "nad_swap_adapter"     => get_nad_swap_adapter_v2(),
-        "token_registry"       => get_token_registry_v2(),
-        "token_impl"           => get_token_impl_v2(),
-        "protocol_manager"     => get_protocol_manager_v2(),
-        "burn_vault"           => get_burn_vault_v2(),
-        "lp_vault"             => get_lp_vault_v2(),
-        "creator_fee_vault"    => get_creator_fee_vault_v2(),
-        "gift_vault"           => get_gift_vault_v2(),
-        "fee_to"               => get_fee_to_v2(),
-        "lv_mon"               => get_lv_mon_v2(),
+        "nadfun_router"        => get_nadfun_router_v2(net),
+        "nadfun_factory"       => get_nadfun_factory_v2(net),
+        "nadfun_pair_impl"     => get_nadfun_pair_impl_v2(net),
+        "nad_swap_adapter"     => get_nad_swap_adapter_v2(net),
+        "token_registry"       => get_token_registry_v2(net),
+        "token_impl"           => get_token_impl_v2(net),
+        "protocol_manager"     => get_protocol_manager_v2(net),
+        "burn_vault"           => get_burn_vault_v2(net),
+        "lp_vault"             => get_lp_vault_v2(net),
+        "creator_fee_vault"    => get_creator_fee_vault_v2(net),
+        "gift_vault"           => get_gift_vault_v2(net),
+        "fee_to"               => get_fee_to_v2(net),
+        "lv_mon"               => get_lv_mon_v2(net),
     };
 
     println!("\n=== Live RPC view-method probe ===");
     let provider = Arc::new(DynProvider::new(
         ProviderBuilder::new().connect_http(config.rpc_url.parse()?),
     ));
-    println!("  block_number           {}", provider.get_block_number().await?);
+    println!(
+        "  block_number           {}",
+        provider.get_block_number().await?
+    );
 
     // Read-only CoreV2 — wallet_address is ignored for view calls.
     let core = CoreV2::with_provider(provider.clone(), Address::ZERO, config.network)?;

@@ -9,30 +9,35 @@ sol! {
     "abi/ICapricornCLFactory.json"
 }
 
-// Re-export constants from the central constants module
-use crate::constants::get_dex_factory;
-pub use crate::constants::{DEFAULT_FEE_TIER, WMON};
+pub use crate::constants::DEFAULT_FEE_TIER;
+use crate::constants::{get_dex_factory, get_wmon, Network};
 
-/// Pool discovery helper for finding DEX pools
+/// Pool discovery helper for finding DEX pools.
+///
+/// Stores the target `Network` so all v1 lookups (DEX factory + WMON) resolve
+/// to the right deployment without consulting any global state.
 pub struct PoolDiscovery<P> {
     provider: Arc<P>,
     factory_address: Address,
+    network: Network,
 }
 
 impl<P: Provider + Clone> PoolDiscovery<P> {
-    /// Create a new pool discovery instance
-    pub fn new(provider: Arc<P>) -> Result<Self> {
-        let factory_address = get_dex_factory().parse()?;
+    /// Create a new pool discovery instance for `network`.
+    pub fn new(provider: Arc<P>, network: Network) -> Result<Self> {
+        let factory_address = get_dex_factory(network).parse()?;
         Ok(Self {
             provider,
             factory_address,
+            network,
         })
     }
 
-    /// Get pool address for a specific token paired with WMON
-    /// Uses the default fee tier (1%)
+    /// Get pool address for a specific token paired with WMON.
+    /// Uses the default fee tier (1%).
     pub async fn get_pool_for_token(&self, token: Address) -> Result<Option<Address>> {
-        self.get_pool(token, WMON.parse()?, DEFAULT_FEE_TIER).await
+        let wmon: Address = get_wmon(self.network).parse()?;
+        self.get_pool(token, wmon, DEFAULT_FEE_TIER).await
     }
 
     /// Get pool address for a specific token pair and fee tier
@@ -60,9 +65,9 @@ impl<P: Provider + Clone> PoolDiscovery<P> {
         }
     }
 
-    /// Get multiple pool addresses for multiple tokens paired with WMON
+    /// Get multiple pool addresses for multiple tokens paired with WMON.
     pub async fn get_pools_for_tokens(&self, tokens: Vec<Address>) -> Result<Vec<Address>> {
-        let wmon_address = WMON.parse()?;
+        let wmon_address: Address = get_wmon(self.network).parse()?;
         let mut pools = Vec::new();
 
         for token in tokens {
@@ -73,13 +78,20 @@ impl<P: Provider + Clone> PoolDiscovery<P> {
 
         Ok(pools)
     }
+
+    /// Network this discovery instance targets.
+    pub fn network(&self) -> Network {
+        self.network
+    }
 }
 
 /// Convenience function to get pool addresses for tokens paired with WMON
+/// on the given network.
 pub async fn get_pool_addresses_for_tokens(
     provider: Arc<impl Provider + Clone>,
     tokens: Vec<Address>,
+    network: Network,
 ) -> Result<Vec<Address>> {
-    let discovery = PoolDiscovery::new(provider)?;
+    let discovery = PoolDiscovery::new(provider, network)?;
     discovery.get_pools_for_tokens(tokens).await
 }

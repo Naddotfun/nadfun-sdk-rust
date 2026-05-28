@@ -19,8 +19,6 @@ async fn main() -> Result<()> {
     let dummy_key =
         "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
 
-    nadfun_sdk::set_network(config.network);
-
     // Resolve pair addresses for the requested tokens via CoreV2's
     // TokenRegistry handle. Falls back to direct factory lookup if needed.
     let core = CoreV2::new(config.rpc_url, dummy_key, config.network).await?;
@@ -47,7 +45,7 @@ async fn main() -> Result<()> {
         anyhow::bail!("no v2 pairs found for the requested tokens");
     }
 
-    let stream = NadFunSwapStream::new(config.ws_url, pairs).await?;
+    let stream = NadFunSwapStream::new(config.ws_url, pairs, config.network).await?;
     println!("listening for NadFunPair swaps…");
     let s = stream.subscribe().await?;
     pin_mut!(s);

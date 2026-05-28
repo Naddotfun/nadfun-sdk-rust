@@ -47,12 +47,10 @@ async fn main() -> Result<()> {
     println!("Network: {:?}", core.network());
 
     // 1. Get created tokens and their reward info from API
-    let api = ApiClient::new();
+    let api = ApiClient::new(network);
     // Or with API key for higher rate limits:
-    // let api = ApiClient::new().with_api_key("your-api-key".to_string());
-    let response = api
-        .get_created_tokens(core.wallet_address(), 1, 10)
-        .await?;
+    // let api = ApiClient::new(network).with_api_key("your-api-key".to_string());
+    let response = api.get_created_tokens(core.wallet_address(), 1, 10).await?;
 
     println!("\nFound {} tokens", response.total_count);
 

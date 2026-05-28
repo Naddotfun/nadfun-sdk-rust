@@ -3,6 +3,7 @@
 //! This module provides historical indexing for DEX (Capricorn CL) Swap events.
 //! All types are defined in the types::uniswap module.
 
+use crate::constants::Network;
 use crate::types::{decode_swap_event, ICapricornCLPool, SwapEvent};
 use alloy::{
     primitives::Address,
@@ -13,30 +14,36 @@ use alloy::{
 use anyhow::Result;
 use std::sync::Arc;
 
-/// Historical indexer for DEX Swap events
-/// Efficiently processes past swap events for analysis
+/// Historical indexer for DEX Swap events.
+///
+/// Bound to a `Network` for downstream lookups that need network context
+/// (currently advisory — pool discovery uses it during construction).
 pub struct DexIndexer {
     provider: Arc<DynProvider>,
     pool_addresses: Vec<Address>,
+    network: Network,
 }
 
 impl DexIndexer {
-    /// Create a new DEX swap indexer for specific pool addresses using HTTP provider
-    pub fn new(rpc_url: String, pool_addresses: Vec<Address>) -> Result<Self> {
+    /// Create a new DEX swap indexer for specific pool addresses using an
+    /// HTTP provider, bound to `network`.
+    pub fn new(rpc_url: String, pool_addresses: Vec<Address>, network: Network) -> Result<Self> {
         let provider = ProviderBuilder::new().connect_http(rpc_url.parse()?);
         let dyn_provider = Arc::new(DynProvider::new(provider));
 
         Ok(Self {
             provider: dyn_provider,
             pool_addresses,
+            network,
         })
     }
 
-    /// Create indexer by discovering pools for token addresses
-    /// Uses Nad.fun standard 10_000 fee tier (1%)
+    /// Create indexer by discovering pools for token addresses on `network`.
+    /// Uses Nad.fun standard 10_000 fee tier (1%).
     pub async fn discover_pools_for_tokens(
         rpc_url: String,
         token_addresses: Vec<Address>,
+        network: Network,
     ) -> Result<Self> {
         use crate::contracts::get_pool_addresses_for_tokens;
 
@@ -44,17 +51,27 @@ impl DexIndexer {
         let dyn_provider = Arc::new(DynProvider::new(provider));
 
         let pool_addresses =
-            get_pool_addresses_for_tokens(dyn_provider.clone(), token_addresses).await?;
+            get_pool_addresses_for_tokens(dyn_provider.clone(), token_addresses, network).await?;
 
         Ok(Self {
             provider: dyn_provider,
             pool_addresses,
+            network,
         })
     }
 
-    /// Create indexer by discovering pool for a single token
-    pub async fn discover_pool_for_token(rpc_url: String, token_address: Address) -> Result<Self> {
-        Self::discover_pools_for_tokens(rpc_url, vec![token_address]).await
+    /// Create indexer by discovering pool for a single token on `network`.
+    pub async fn discover_pool_for_token(
+        rpc_url: String,
+        token_address: Address,
+        network: Network,
+    ) -> Result<Self> {
+        Self::discover_pools_for_tokens(rpc_url, vec![token_address], network).await
+    }
+
+    /// Network this indexer is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Fetch swap events for a specific block range

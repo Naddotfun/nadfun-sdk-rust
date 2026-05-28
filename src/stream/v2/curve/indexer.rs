@@ -1,4 +1,4 @@
-use crate::constants::get_bonding_curve_v2;
+use crate::constants::{get_bonding_curve_v2, Network};
 use crate::types::{decode_v2_bonding_curve_event, V2BondingCurveEvent, V2EventType};
 use alloy::{
     primitives::{Address, B256},
@@ -10,21 +10,29 @@ use std::{collections::HashSet, sync::Arc};
 
 /// Historical event indexer for the v2 BondingCurve contract.
 ///
-/// Pairs with [`crate::stream::v2::curve::CurveStreamV2`] for backfilling
-/// state before tailing real-time events.
+/// Bound to a `Network` so the v2 BondingCurve address is resolved without
+/// touching any global state. Pairs with
+/// [`crate::stream::v2::curve::CurveStreamV2`] for backfilling state before
+/// tailing real-time events.
 pub struct CurveIndexerV2<P> {
     provider: Arc<P>,
+    network: Network,
 }
 
 impl<P: Provider + Clone> CurveIndexerV2<P> {
-    pub fn new(provider: Arc<P>) -> Self {
-        Self { provider }
+    pub fn new(provider: Arc<P>, network: Network) -> Self {
+        Self { provider, network }
+    }
+
+    /// Network this indexer is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     fn bonding_curve_address(&self) -> Result<Address> {
-        Ok(get_bonding_curve_v2()
+        Ok(get_bonding_curve_v2(self.network)
             .ok_or_else(|| {
-                anyhow::anyhow!("BondingCurveV2 is not configured for the current network")
+                anyhow::anyhow!("BondingCurveV2 is not configured for {:?}", self.network)
             })?
             .parse()?)
     }

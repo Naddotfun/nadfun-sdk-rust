@@ -1,4 +1,4 @@
-use crate::constants::get_bonding_curve;
+use crate::constants::{get_bonding_curve, Network};
 use crate::types::{decode_bonding_curve_event, BondingCurveEvent, EventType};
 use alloy::{
     primitives::{Address, B256},
@@ -8,18 +8,27 @@ use alloy::{
 use anyhow::Result;
 use std::{collections::HashSet, sync::Arc};
 
-/// Event indexer for fetching historical events in batches
+/// Event indexer for fetching historical events in batches.
+///
+/// Bound to a `Network` so the v1 bonding-curve address is resolved without
+/// touching any global state.
 pub struct CurveIndexer<P> {
     provider: Arc<P>,
+    network: Network,
 }
 
 impl<P: Provider + Clone> CurveIndexer<P> {
-    pub fn new(provider: Arc<P>) -> Self {
-        Self { provider }
+    pub fn new(provider: Arc<P>, network: Network) -> Self {
+        Self { provider, network }
+    }
+
+    /// Network this indexer is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     fn bonding_curve_address(&self) -> Address {
-        get_bonding_curve()
+        get_bonding_curve(self.network)
             .parse()
             .expect("Invalid bonding curve address")
     }

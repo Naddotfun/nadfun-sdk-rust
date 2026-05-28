@@ -85,14 +85,9 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("--token required"))?
         .parse()?;
 
-    let v1 = Core::new(
-        config.rpc_url.clone(),
-        private_key.clone(),
-        config.network,
-    )
-    .await?;
+    let v1 = Core::new(config.rpc_url.clone(), private_key.clone(), config.network).await?;
     let v2 = CoreV2::new(config.rpc_url, private_key, config.network).await?;
-    let api = ApiClient::from_env();
+    let api = ApiClient::from_env(config.network);
     let wallet = v1.wallet_address();
 
     let value = parse_ether("0.01")?;
@@ -104,9 +99,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Note: `Core::new` and `CoreV2::new` both set the process-global network
-/// internally via `set_network`. When holding both, ensure they use the
-/// same network — mixing networks in one process is unsupported.
+/// Note: starting in 0.4.0 `Core` and `CoreV2` each store their own
+/// `Network` — they can run against different networks in the same
+/// process without interfering with each other.
 #[cfg(test)]
 mod _shape_check {
     use super::*;

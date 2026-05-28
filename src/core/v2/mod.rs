@@ -12,7 +12,7 @@ use crate::{
     api::ApiClient,
     constants::{
         get_bonding_curve_v2, get_nadfun_factory_v2, get_nadfun_router_v2, get_token_registry_v2,
-        set_network, Network,
+        Network,
     },
     contracts::{BondingCurveV2, NadFunFactory, NadFunRouter, TokenRegistryV2},
     types::*,
@@ -40,12 +40,9 @@ pub struct CoreV2 {
 impl CoreV2 {
     /// Construct a `CoreV2` from RPC URL + private key + network.
     ///
-    /// Sets the global network configuration (`set_network`) and resolves
-    /// all v2 contract addresses for that network. Returns an error if the
-    /// network does not have v2 configured (see [`get_nadfun_router_v2`]).
+    /// Resolves all v2 contract addresses for `network`. Returns an error if
+    /// the network does not have v2 configured (see [`get_nadfun_router_v2`]).
     pub async fn new(rpc_url: String, private_key: String, network: Network) -> Result<Self> {
-        set_network(network);
-
         let signer: PrivateKeySigner = private_key.parse()?;
         let wallet_address = signer.address();
         let wallet = EthereumWallet::from(signer);
@@ -67,28 +64,13 @@ impl CoreV2 {
         wallet_address: Address,
         network: Network,
     ) -> Result<Self> {
-        set_network(network);
-
-        let router_address = parse_v2_addr(
-            get_nadfun_router_v2(),
-            network,
-            "NadFunRouter",
-        )?;
-        let factory_address = parse_v2_addr(
-            get_nadfun_factory_v2(),
-            network,
-            "NadFunFactory",
-        )?;
-        let bonding_curve_address = parse_v2_addr(
-            get_bonding_curve_v2(),
-            network,
-            "BondingCurveV2",
-        )?;
-        let token_registry_address = parse_v2_addr(
-            get_token_registry_v2(),
-            network,
-            "TokenRegistryV2",
-        )?;
+        let router_address = parse_v2_addr(get_nadfun_router_v2(network), network, "NadFunRouter")?;
+        let factory_address =
+            parse_v2_addr(get_nadfun_factory_v2(network), network, "NadFunFactory")?;
+        let bonding_curve_address =
+            parse_v2_addr(get_bonding_curve_v2(network), network, "BondingCurveV2")?;
+        let token_registry_address =
+            parse_v2_addr(get_token_registry_v2(network), network, "TokenRegistryV2")?;
 
         let router = NadFunRouter::new(router_address, provider.clone());
         let factory = NadFunFactory::new(factory_address, provider.clone());
@@ -277,12 +259,7 @@ impl CoreV2 {
     }
 
     /// Inverse quote — how much input you need to receive `amount_out`.
-    pub async fn quote_in(
-        &self,
-        token: Address,
-        amount_out: U256,
-        is_buy: bool,
-    ) -> Result<U256> {
+    pub async fn quote_in(&self, token: Address, amount_out: U256, is_buy: bool) -> Result<U256> {
         self.router.get_amount_in(token, amount_out, is_buy).await
     }
 
@@ -311,13 +288,10 @@ impl CoreV2 {
     }
 
     /// Quote forced through the DEX (errors if not yet graduated).
-    pub async fn quote_dex(
-        &self,
-        token: Address,
-        amount_in: U256,
-        is_buy: bool,
-    ) -> Result<U256> {
-        self.router.get_dex_amount_out(token, amount_in, is_buy).await
+    pub async fn quote_dex(&self, token: Address, amount_in: U256, is_buy: bool) -> Result<U256> {
+        self.router
+            .get_dex_amount_out(token, amount_in, is_buy)
+            .await
     }
 
     /// Inverse DEX quote.
@@ -327,7 +301,9 @@ impl CoreV2 {
         amount_out: U256,
         is_buy: bool,
     ) -> Result<U256> {
-        self.router.get_dex_amount_in(token, amount_out, is_buy).await
+        self.router
+            .get_dex_amount_in(token, amount_out, is_buy)
+            .await
     }
 
     // === Token / pool queries ===
@@ -354,9 +330,7 @@ impl CoreV2 {
     /// Estimate gas for any v2 trade or creation operation. Uses `self.wallet_address`
     /// as the `from` address so allowance / balance checks succeed.
     pub async fn estimate_gas(&self, params: V2GasEstimationParams) -> Result<u64> {
-        self.router
-            .estimate_gas(params, self.wallet_address)
-            .await
+        self.router.estimate_gas(params, self.wallet_address).await
     }
 
     // === Receipts ===

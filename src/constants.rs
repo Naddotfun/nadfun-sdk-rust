@@ -18,21 +18,22 @@
 //!
 //! ## Usage
 //!
+//! Pass a `Network` to each helper — no process-global state. Each SDK entry
+//! point (`Core`, `ApiClient`, `CurveStream`, ...) stores its own `Network`
+//! and threads it into these helpers internally.
+//!
 //! ```rust,ignore
-//! use nadfun_sdk::constants::{Network, set_network, get_bonding_curve, get_wmon, get_nadfun_router_v2, DEFAULT_FEE_TIER};
+//! use nadfun_sdk::constants::{Network, get_bonding_curve, get_wmon, get_nadfun_router_v2, DEFAULT_FEE_TIER};
 //!
-//! // Set network once at the start
-//! set_network(Network::Mainnet);
+//! // v1 helpers
+//! let bonding_curve_addr = get_bonding_curve(Network::Mainnet).parse::<Address>()?;
+//! let wmon_addr = get_wmon(Network::Mainnet).parse::<Address>()?;
 //!
-//! // v1 helpers return mainnet v1 addresses
-//! let bonding_curve_addr = get_bonding_curve().parse::<Address>()?;
-//! let wmon_addr = get_wmon().parse::<Address>()?;
-//!
-//! // v2 helpers return mainnet v2 addresses (also available on testnet)
-//! let nadfun_router_v2 = get_nadfun_router_v2().expect("v2 deployed").parse::<Address>()?;
+//! // v2 helpers
+//! let nadfun_router_v2 = get_nadfun_router_v2(Network::Mainnet)
+//!     .expect("v2 deployed")
+//!     .parse::<Address>()?;
 //! ```
-
-use std::sync::RwLock;
 
 /// Network type for selecting contract addresses
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -42,31 +43,6 @@ pub enum Network {
     Mainnet,
     /// Testnet network
     Testnet,
-}
-
-/// Global network configuration
-static CURRENT_NETWORK: RwLock<Network> = RwLock::new(Network::Mainnet);
-
-/// Set the current network for the SDK
-///
-/// This affects all subsequent calls to get_* functions.
-/// Call this once at the start of your application.
-///
-/// # Example
-/// ```rust,ignore
-/// use nadfun_sdk::constants::{Network, set_network};
-///
-/// set_network(Network::Mainnet);
-/// ```
-pub fn set_network(network: Network) {
-    if let Ok(mut current) = CURRENT_NETWORK.write() {
-        *current = network;
-    }
-}
-
-/// Get the current network setting
-pub fn get_current_network() -> Network {
-    CURRENT_NETWORK.read().map(|n| *n).unwrap_or_default()
 }
 
 /// Core contract addresses in the Nad.fun ecosystem
@@ -256,9 +232,6 @@ pub mod addresses {
         // Legacy flat access (`addresses::testnet::BONDING_CURVE`) — v1 names only.
         pub use v1::*;
     }
-
-    // Legacy exports for backward compatibility (defaults to mainnet v1)
-    pub use mainnet::*;
 }
 
 /// Trading constants and fee configurations
@@ -274,76 +247,77 @@ pub mod fees {
 }
 
 // ============================================================================
-// v1 helpers — unchanged behavior, internally redirected to `v1::` submodule.
+// v1 helpers — every helper takes the target `Network` explicitly. Each SDK
+// entry point stores its own `Network` and threads it through.
 // ============================================================================
 
-/// Get DEX Factory address for the current network
-pub fn get_dex_factory() -> &'static str {
-    match get_current_network() {
+/// Get DEX Factory address for the given network.
+pub fn get_dex_factory(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::DEX_FACTORY,
         Network::Testnet => addresses::testnet::v1::DEX_FACTORY,
     }
 }
 
-/// Get WMON address for the current network
-pub fn get_wmon() -> &'static str {
-    match get_current_network() {
+/// Get WMON address for the given network.
+pub fn get_wmon(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::WMON,
         Network::Testnet => addresses::testnet::v1::WMON,
     }
 }
 
-/// Get bonding curve address for the current network (v1)
-pub fn get_bonding_curve() -> &'static str {
-    match get_current_network() {
+/// Get bonding curve address for the given network (v1).
+pub fn get_bonding_curve(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::BONDING_CURVE,
         Network::Testnet => addresses::testnet::v1::BONDING_CURVE,
     }
 }
 
-/// Get bonding curve router address for the current network
-pub fn get_bonding_curve_router() -> &'static str {
-    match get_current_network() {
+/// Get bonding curve router address for the given network.
+pub fn get_bonding_curve_router(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::BONDING_CURVE_ROUTER,
         Network::Testnet => addresses::testnet::v1::BONDING_CURVE_ROUTER,
     }
 }
 
-/// Get DEX router address for the current network
-pub fn get_dex_router() -> &'static str {
-    match get_current_network() {
+/// Get DEX router address for the given network.
+pub fn get_dex_router(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::DEX_ROUTER,
         Network::Testnet => addresses::testnet::v1::DEX_ROUTER,
     }
 }
 
-/// Get LENS address for the current network
-pub fn get_lens_address() -> &'static str {
-    match get_current_network() {
+/// Get LENS address for the given network.
+pub fn get_lens_address(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::LENS_ADDRESS,
         Network::Testnet => addresses::testnet::v1::LENS_ADDRESS,
     }
 }
 
-/// Get API server URL for the current network
-pub fn get_api_server_url() -> &'static str {
-    match get_current_network() {
+/// Get API server URL for the given network.
+pub fn get_api_server_url(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::API_SERVER_URL,
         Network::Testnet => addresses::testnet::v1::API_SERVER_URL,
     }
 }
 
-/// Get CreatorTreasury address for the current network
-pub fn get_creator_treasury() -> &'static str {
-    match get_current_network() {
+/// Get CreatorTreasury address for the given network.
+pub fn get_creator_treasury(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::CREATOR_TREASURY,
         Network::Testnet => addresses::testnet::v1::CREATOR_TREASURY,
     }
 }
 
-/// Get CreatorManager address for the current network
-pub fn get_creator_manager() -> &'static str {
-    match get_current_network() {
+/// Get CreatorManager address for the given network.
+pub fn get_creator_manager(network: Network) -> &'static str {
+    match network {
         Network::Mainnet => addresses::mainnet::v1::CREATOR_MANAGER,
         Network::Testnet => addresses::testnet::v1::CREATOR_MANAGER,
     }
@@ -351,158 +325,159 @@ pub fn get_creator_manager() -> &'static str {
 
 // ============================================================================
 // v2 helpers — return `Some(&'static str)` when v2 is configured for the
-// current network, `None` otherwise. v2 is now deployed on both mainnet and
-// testnet, so all helpers return `Some` for either network.
+// given network, `None` otherwise. v2 is now deployed on both mainnet and
+// testnet, so all helpers (except those gated by deployment, e.g. LvMON,
+// FeeTo) return `Some` for either network.
 // ============================================================================
 
-/// Get NadFun v2 unified router address for the current network.
-pub fn get_nadfun_router_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 unified router address for the given network.
+pub fn get_nadfun_router_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::NAD_FUN_ROUTER),
         Network::Testnet => Some(addresses::testnet::v2::NAD_FUN_ROUTER),
     }
 }
 
-/// Get NadFun v2 pair factory address for the current network.
-pub fn get_nadfun_factory_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 pair factory address for the given network.
+pub fn get_nadfun_factory_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::NAD_FUN_FACTORY),
         Network::Testnet => Some(addresses::testnet::v2::NAD_FUN_FACTORY),
     }
 }
 
-/// Get NadFun v2 pair implementation address for the current network.
-pub fn get_nadfun_pair_impl_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 pair implementation address for the given network.
+pub fn get_nadfun_pair_impl_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::NAD_FUN_PAIR_IMPL),
         Network::Testnet => Some(addresses::testnet::v2::NAD_FUN_PAIR_IMPL),
     }
 }
 
-/// Get NadFun v2 swap adapter (IDexAdapter) address for the current network.
-pub fn get_nad_swap_adapter_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 swap adapter (IDexAdapter) address for the given network.
+pub fn get_nad_swap_adapter_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::NAD_SWAP_ADAPTER),
         Network::Testnet => Some(addresses::testnet::v2::NAD_SWAP_ADAPTER),
     }
 }
 
-/// Get NadFun v2 token registry address for the current network.
-pub fn get_token_registry_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 token registry address for the given network.
+pub fn get_token_registry_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::TOKEN_REGISTRY),
         Network::Testnet => Some(addresses::testnet::v2::TOKEN_REGISTRY),
     }
 }
 
-/// Get NadFun v2 token implementation address for the current network.
-pub fn get_token_impl_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 token implementation address for the given network.
+pub fn get_token_impl_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::TOKEN_IMPL),
         Network::Testnet => Some(addresses::testnet::v2::TOKEN_IMPL),
     }
 }
 
-/// Get NadFun v2 protocol manager address for the current network.
-pub fn get_protocol_manager_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 protocol manager address for the given network.
+pub fn get_protocol_manager_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::PROTOCOL_MANAGER),
         Network::Testnet => Some(addresses::testnet::v2::PROTOCOL_MANAGER),
     }
 }
 
-/// Get NadFun v2 bonding curve address for the current network.
-pub fn get_bonding_curve_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 bonding curve address for the given network.
+pub fn get_bonding_curve_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::BONDING_CURVE),
         Network::Testnet => Some(addresses::testnet::v2::BONDING_CURVE),
     }
 }
 
-/// Get NadFun v2 fee collector address for the current network.
-pub fn get_fee_collector_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 fee collector address for the given network.
+pub fn get_fee_collector_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::FEE_COLLECTOR),
         Network::Testnet => Some(addresses::testnet::v2::FEE_COLLECTOR),
     }
 }
 
-/// Get NadFun v2 creator fee processor address for the current network.
-pub fn get_creator_fee_processor_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 creator fee processor address for the given network.
+pub fn get_creator_fee_processor_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::CREATOR_FEE_PROCESSOR),
         Network::Testnet => Some(addresses::testnet::v2::CREATOR_FEE_PROCESSOR),
     }
 }
 
-/// Get NadFun v2 LP manager address for the current network.
-pub fn get_lp_manager_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 LP manager address for the given network.
+pub fn get_lp_manager_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::LP_MANAGER),
         Network::Testnet => Some(addresses::testnet::v2::LP_MANAGER),
     }
 }
 
-/// Get NadFun v2 vault registry address for the current network.
-pub fn get_vault_registry_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 vault registry address for the given network.
+pub fn get_vault_registry_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::VAULT_REGISTRY),
         Network::Testnet => Some(addresses::testnet::v2::VAULT_REGISTRY),
     }
 }
 
-/// Get NadFun v2 burn vault address for the current network.
-pub fn get_burn_vault_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 burn vault address for the given network.
+pub fn get_burn_vault_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::BURN_VAULT),
         Network::Testnet => Some(addresses::testnet::v2::BURN_VAULT),
     }
 }
 
-/// Get NadFun v2 LP vault address for the current network.
-pub fn get_lp_vault_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 LP vault address for the given network.
+pub fn get_lp_vault_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::LP_VAULT),
         Network::Testnet => Some(addresses::testnet::v2::LP_VAULT),
     }
 }
 
-/// Get NadFun v2 creator fee vault address for the current network.
-pub fn get_creator_fee_vault_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 creator fee vault address for the given network.
+pub fn get_creator_fee_vault_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::CREATOR_FEE_VAULT),
         Network::Testnet => Some(addresses::testnet::v2::CREATOR_FEE_VAULT),
     }
 }
 
-/// Get NadFun v2 gift vault address for the current network.
-pub fn get_gift_vault_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get NadFun v2 gift vault address for the given network.
+pub fn get_gift_vault_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => Some(addresses::mainnet::v2::GIFT_VAULT),
         Network::Testnet => Some(addresses::testnet::v2::GIFT_VAULT),
     }
 }
 
-/// Get the v2 liquid-staked MON (LvMON) address for the current network.
+/// Get the v2 liquid-staked MON (LvMON) address for the given network.
 ///
 /// Used by `ILvMonMinter` flows on v2 when the router needs to wrap/unwrap
 /// against the liquid-staking version of MON instead of plain WMON. Returns
 /// `None` on networks where LvMON isn't deployed yet (currently Mainnet).
-pub fn get_lv_mon_v2() -> Option<&'static str> {
-    match get_current_network() {
+pub fn get_lv_mon_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => None,
         Network::Testnet => Some(addresses::testnet::v2::LV_MON),
     }
 }
 
-/// Get the v2 protocol fee recipient (`feeTo`) address for the current network.
-pub fn get_fee_to_v2() -> Option<&'static str> {
-    match get_current_network() {
+/// Get the v2 protocol fee recipient (`feeTo`) address for the given network.
+pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
+    match network {
         Network::Mainnet => None,
         Network::Testnet => Some(addresses::testnet::v2::FEE_TO),
     }
 }
 
-// Re-export commonly used constants for convenience
+// Re-export commonly used constants for convenience.
 pub use addresses::*;
 pub use fees::DEFAULT_FEE_TIER;

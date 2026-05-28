@@ -23,14 +23,14 @@ async fn main() -> Result<()> {
 
     // Resolve vault addresses from constants (allows the example to run
     // against testnet or mainnet without re-typing addresses).
-    let burn_vault: Address = nadfun_sdk::constants::get_burn_vault_v2()
+    let burn_vault: Address = nadfun_sdk::constants::get_burn_vault_v2(config.network)
         .ok_or_else(|| anyhow::anyhow!("BurnVault not configured for this network"))?
         .parse()?;
-    let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2()
+    let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2(config.network)
         .ok_or_else(|| anyhow::anyhow!("LPVault not configured for this network"))?
         .parse()?;
 
-    let api = ApiClient::from_env();
+    let api = ApiClient::from_env(config.network);
 
     let initial_buy = parse_ether("1.5")?; // 1.5 MON for the creator's initial buy
 
@@ -64,9 +64,7 @@ async fn main() -> Result<()> {
         ],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: initial_buy,
-        payment: V2CreatePayment::Native {
-            value: initial_buy,
-        },
+        payment: V2CreatePayment::Native { value: initial_buy },
         deadline: U256::from(9_999_999_999_u64),
         gas_limit: None,
         gas_price: Some(GasPricing::Legacy),
@@ -82,7 +80,10 @@ async fn main() -> Result<()> {
     println!("NSFW:         {}", result.is_nsfw);
 
     let receipt = core.get_receipt(result.transaction_hash).await?;
-    println!("status: {}, block: {:?}", receipt.status, receipt.block_number);
+    println!(
+        "status: {}, block: {:?}",
+        receipt.status, receipt.block_number
+    );
 
     Ok(())
 }

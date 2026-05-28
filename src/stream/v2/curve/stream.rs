@@ -1,4 +1,4 @@
-use crate::constants::get_bonding_curve_v2;
+use crate::constants::{get_bonding_curve_v2, Network};
 use crate::types::{decode_v2_bonding_curve_event, V2BondingCurveEvent, V2EventType};
 
 use alloy::{
@@ -12,26 +12,33 @@ use std::{collections::HashSet, pin::Pin, sync::Arc};
 
 /// v2 BondingCurve event stream.
 ///
-/// Subscribes to logs emitted by the v2 BondingCurve contract for the
-/// currently-active network. Use [`Self::subscribe_events`] for
+/// Bound to a `Network` so the v2 BondingCurve address is resolved without
+/// touching any global state. Use [`Self::subscribe_events`] for
 /// network-level filtering and [`Self::filter_tokens`] for client-side
 /// per-token filtering.
 pub struct CurveStreamV2 {
     provider: Arc<DynProvider>,
     event_types: Option<Vec<V2EventType>>,
     token_filter: Option<HashSet<Address>>,
+    network: Network,
 }
 
 impl CurveStreamV2 {
-    /// Connect over WebSocket and prepare a stream.
-    pub async fn new(ws_url: String) -> Result<CurveStreamV2> {
+    /// Connect over WebSocket and prepare a stream for `network`.
+    pub async fn new(ws_url: String, network: Network) -> Result<CurveStreamV2> {
         let ws = WsConnect::new(ws_url);
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
         Ok(CurveStreamV2 {
             provider: Arc::new(DynProvider::new(provider)),
             event_types: None,
             token_filter: None,
+            network,
         })
+    }
+
+    /// Network this stream is bound to.
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Network-level event-type filter — translates to `topics[0]` filtering
@@ -52,9 +59,9 @@ impl CurveStreamV2 {
     pub async fn subscribe(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<V2BondingCurveEvent>> + Send>>> {
-        let bonding_curve_address: Address = get_bonding_curve_v2()
+        let bonding_curve_address: Address = get_bonding_curve_v2(self.network)
             .ok_or_else(|| {
-                anyhow::anyhow!("BondingCurveV2 is not configured for the current network")
+                anyhow::anyhow!("BondingCurveV2 is not configured for {:?}", self.network)
             })?
             .parse()?;
         let event_types = self.event_types.clone().unwrap_or_else(V2EventType::all);

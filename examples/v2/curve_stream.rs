@@ -15,9 +15,7 @@ async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
 
-    nadfun_sdk::set_network(config.network);
-
-    let mut stream = CurveStreamV2::new(config.ws_url.clone()).await?;
+    let mut stream = CurveStreamV2::new(config.ws_url.clone(), config.network).await?;
 
     // Allow event-type filtering via EVENTS env var (Buy,Sell,Sync,...).
     if let Ok(events_env) = std::env::var("EVENTS") {

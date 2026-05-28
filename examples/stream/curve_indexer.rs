@@ -31,14 +31,11 @@ async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
 
-    // Set network before creating indexer
-    nadfun_sdk::constants::set_network(config.network);
-
     println!("📈 Historical Event Fetching");
 
     // 1. Create HTTP provider and indexer
     let provider = Arc::new(ProviderBuilder::new().connect_http(config.rpc_url.parse()?));
-    let indexer = CurveIndexer::new(provider.clone());
+    let indexer = CurveIndexer::new(provider.clone(), config.network);
 
     // 2. Fetch events from specific block range (wider range to find events)
     let current_block = provider.get_block_number().await?; // Get recent blocks
