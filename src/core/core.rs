@@ -39,15 +39,16 @@ use std::{
 
 /// Unified high-level SDK client. Handles v1 + v2 trading, token creation,
 /// quote routing, and creator reward claims from a single instance.
+///
+/// Internally splits contract bindings into per-version structs
+/// ([`V1Contracts`], [`V2Contracts`]) so the v1 / v2 surface is visibly
+/// separated in the type. Both are always wired — every supported
+/// `Network` ships with both deployments. If a future network skips one,
+/// `Core::new` will fail loudly during address resolution instead of
+/// carrying a dead branch.
 pub struct Core {
-    // v1
-    bonding_curve_router: BondingCurveRouter<DynProvider>,
-    dex_router: DexRouter<DynProvider>,
-    lens: Lens<DynProvider>,
-    // v2 — None when v2 isn't deployed on this network (the v2-only methods
-    // will return a clear error in that case).
-    v2: Option<V2Bindings>,
-    // shared
+    v1: V1Contracts,
+    v2: V2Contracts,
     provider: Arc<DynProvider>,
     wallet_address: Address,
     network: Network,
@@ -56,9 +57,17 @@ pub struct Core {
     version_cache: Arc<RwLock<HashMap<Address, SdkVersion>>>,
 }
 
-/// v2 contract bindings — bundled together so the optional v2 surface is a
-/// single `Option<_>` on `Core` instead of four parallel options.
-struct V2Bindings {
+/// v1 contract bindings — bonding-curve router, DEX (Capricorn CL) router,
+/// and the Lens used for auto-routing quotes.
+struct V1Contracts {
+    bonding_curve_router: BondingCurveRouter<DynProvider>,
+    dex_router: DexRouter<DynProvider>,
+    lens: Lens<DynProvider>,
+}
+
+/// v2 contract bindings — NadFunRouter + factory + bonding curve +
+/// per-token registry.
+struct V2Contracts {
     router: NadFunRouter<DynProvider>,
     factory: NadFunFactory<DynProvider>,
     bonding_curve: BondingCurveV2<DynProvider>,
@@ -68,9 +77,9 @@ struct V2Bindings {
 impl Core {
     /// Create a new `Core` from RPC URL + private key + network.
     ///
-    /// Wires both v1 and v2 contract bindings for `network`. If v2 isn't
-    /// deployed on this network, v2-only methods return a clear error and
-    /// `detect_version` always returns `SdkVersion::V1`.
+    /// Wires both v1 and v2 contract bindings for `network`. Errors if the
+    /// network does not have v2 configured (currently impossible — both
+    /// `Network::Mainnet` and `Network::Testnet` ship with v2).
     pub async fn new(rpc_url: String, private_key: String, network: Network) -> Result<Self> {
         let signer: PrivateKeySigner = private_key.parse()?;
         let wallet_address = signer.address();
@@ -95,44 +104,17 @@ impl Core {
         wallet_address: Address,
         network: Network,
     ) -> Result<Self> {
-        let lens_address: Address = get_lens_address(network).parse()?;
-        let bonding_curve_router_address: Address = get_bonding_curve_router(network).parse()?;
-        let dex_router_address: Address = get_dex_router(network).parse()?;
-        let bonding_curve_address: Address = get_bonding_curve(network).parse()?;
-
-        let bonding_curve_router = BondingCurveRouter::new(
-            bonding_curve_router_address,
-            bonding_curve_address,
-            provider.clone(),
-        );
-        let dex_router = DexRouter::new(dex_router_address, provider.clone());
-        let lens = Lens::new(lens_address, provider.clone());
-
-        let v2 = build_v2_bindings(&provider, network)?;
+        let v1 = build_v1_contracts(&provider, network)?;
+        let v2 = build_v2_contracts(&provider, network)?;
 
         Ok(Self {
-            bonding_curve_router,
-            dex_router,
-            lens,
+            v1,
             v2,
             provider,
             wallet_address,
             network,
             version_cache: Arc::new(RwLock::new(HashMap::new())),
         })
-    }
-
-    /// Internal helper — returns the v2 bindings or a clear error if v2 is
-    /// not configured on this network.
-    fn v2(&self) -> Result<&V2Bindings> {
-        self.v2.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("NadFun contract v2 is not deployed on {:?}", self.network)
-        })
-    }
-
-    /// Whether v2 contracts are wired for this `Core`'s network.
-    pub fn v2_available(&self) -> bool {
-        self.v2.is_some()
     }
 
     // ========================================================================
@@ -142,9 +124,6 @@ impl Core {
     /// Detect whether `token` is a v2 token (registered in
     /// `TokenRegistryV2`) or a v1 token. Result is cached in-process so
     /// repeated calls don't re-hit the chain.
-    ///
-    /// Always returns `SdkVersion::V1` when v2 isn't configured on this
-    /// network.
     pub async fn detect_version(&self, token: Address) -> Result<SdkVersion> {
         if let Ok(cache) = self.version_cache.read() {
             if let Some(v) = cache.get(&token) {
@@ -152,16 +131,11 @@ impl Core {
             }
         }
 
-        let v = match self.v2.as_ref() {
-            Some(v2) => {
-                let pair = v2.token_registry.get_pair(token).await?;
-                if pair == Address::ZERO {
-                    SdkVersion::V1
-                } else {
-                    SdkVersion::V2
-                }
-            }
-            None => SdkVersion::V1,
+        let pair = self.v2.token_registry.get_pair(token).await?;
+        let v = if pair == Address::ZERO {
+            SdkVersion::V1
+        } else {
+            SdkVersion::V2
         };
 
         if let Ok(mut cache) = self.version_cache.write() {
@@ -182,12 +156,15 @@ impl Core {
         amount_in: U256,
         is_buy: bool,
     ) -> Result<(Router, U256)> {
-        let (router_address, amount_out) =
-            self.lens.get_amount_out(token, amount_in, is_buy).await?;
+        let (router_address, amount_out) = self
+            .v1
+            .lens
+            .get_amount_out(token, amount_in, is_buy)
+            .await?;
 
-        let router = if router_address == self.dex_router.address {
+        let router = if router_address == self.v1.dex_router.address {
             Router::Dex(router_address)
-        } else if router_address == self.bonding_curve_router.address {
+        } else if router_address == self.v1.bonding_curve_router.address {
             Router::BondingCurve(router_address)
         } else {
             return Err(anyhow::anyhow!(
@@ -207,12 +184,15 @@ impl Core {
         amount_out: U256,
         is_buy: bool,
     ) -> Result<(Router, U256)> {
-        let (router_address, amount_in) =
-            self.lens.get_amount_in(token, amount_out, is_buy).await?;
+        let (router_address, amount_in) = self
+            .v1
+            .lens
+            .get_amount_in(token, amount_out, is_buy)
+            .await?;
 
-        let router = if router_address == self.dex_router.address {
+        let router = if router_address == self.v1.dex_router.address {
             Router::Dex(router_address)
-        } else if router_address == self.bonding_curve_router.address {
+        } else if router_address == self.v1.bonding_curve_router.address {
             Router::BondingCurve(router_address)
         } else {
             return Err(anyhow::anyhow!(
@@ -228,24 +208,24 @@ impl Core {
     /// `router`. Returns the submitted tx hash.
     pub async fn buy(&self, params: BuyParams, router: Router) -> Result<B256> {
         match router {
-            Router::Dex(_) => self.dex_router.buy(params).await,
-            Router::BondingCurve(_) => self.bonding_curve_router.buy(params).await,
+            Router::Dex(_) => self.v1.dex_router.buy(params).await,
+            Router::BondingCurve(_) => self.v1.bonding_curve_router.buy(params).await,
         }
     }
 
     /// v1 sell. Pair with [`Self::get_amount_out`] for the router.
     pub async fn sell(&self, params: SellParams, router: Router) -> Result<B256> {
         match router {
-            Router::Dex(_) => self.dex_router.sell(params).await,
-            Router::BondingCurve(_) => self.bonding_curve_router.sell(params).await,
+            Router::Dex(_) => self.v1.dex_router.sell(params).await,
+            Router::BondingCurve(_) => self.v1.bonding_curve_router.sell(params).await,
         }
     }
 
     /// v1 sell with caller-provided EIP-2612 permit signature.
     pub async fn sell_permit(&self, params: SellPermitParams, router: Router) -> Result<B256> {
         match router {
-            Router::Dex(_) => self.dex_router.sell_permit(params).await,
-            Router::BondingCurve(_) => self.bonding_curve_router.sell_permit(params).await,
+            Router::Dex(_) => self.v1.dex_router.sell_permit(params).await,
+            Router::BondingCurve(_) => self.v1.bonding_curve_router.sell_permit(params).await,
         }
     }
 
@@ -273,33 +253,33 @@ impl Core {
 
     /// Get available buy tokens and required MON amount (Lens helper).
     pub async fn available_buy_tokens(&self, token: Address) -> Result<(U256, U256)> {
-        self.lens.available_buy_tokens(token).await
+        self.v1.lens.available_buy_tokens(token).await
     }
 
     /// Check if v1 token is locked.
     pub async fn is_locked(&self, token: Address) -> Result<bool> {
-        self.lens.is_locked(token).await
+        self.v1.lens.is_locked(token).await
     }
 
     /// Check if v1 token has graduated from bonding curve to DEX.
     pub async fn is_graduated(&self, token: Address) -> Result<bool> {
-        self.lens.is_graduated(token).await
+        self.v1.lens.is_graduated(token).await
     }
 
     /// Calculate how many tokens an initial buy of `amount_in` MON produces
     /// at token-creation time (v1 only).
     pub async fn get_initial_buy_amount_out(&self, amount_in: U256) -> Result<U256> {
-        self.lens.get_initial_buy_amount_out(amount_in).await
+        self.v1.lens.get_initial_buy_amount_out(amount_in).await
     }
 
     /// Get v1 deploy fee for token creation.
     pub async fn get_deploy_fee(&self) -> Result<U256> {
-        self.bonding_curve_router.get_deploy_fee().await
+        self.v1.bonding_curve_router.get_deploy_fee().await
     }
 
     /// Get bonding curve progress in basis points (0–10000 = 0–100%).
     pub async fn get_progress(&self, token: Address) -> Result<U256> {
-        self.lens.get_progress(token).await
+        self.v1.lens.get_progress(token).await
     }
 
     /// Estimate gas for a v1 trading operation.
@@ -338,6 +318,7 @@ impl Core {
         let total_value = params.value + deploy_fee;
 
         let tx_hash = self
+            .v1
             .bonding_curve_router
             .create(
                 params.name.clone(),
@@ -391,12 +372,12 @@ impl Core {
     /// Low-level v2 create with ERC-20 quote token + pre-approved initial
     /// buy. Use [`Self::create_token_v2`] for the full orchestrated flow.
     pub async fn create_v2(&self, params: V2CreateParams) -> Result<B256> {
-        self.v2()?.router.create(params).await
+        self.v2.router.create(params).await
     }
 
     /// Low-level v2 create funded by native MON (`msg.value`).
     pub async fn create_with_native_v2(&self, params: V2CreateWithNativeParams) -> Result<B256> {
-        self.v2()?.router.create_with_native(params).await
+        self.v2.router.create_with_native(params).await
     }
 
     /// High-level v2 end-to-end token creation: off-chain (image + metadata
@@ -408,7 +389,7 @@ impl Core {
         params: V2CreateTokenParams,
         api: &ApiClient,
     ) -> Result<V2TokenCreationResult> {
-        let v2 = self.v2()?;
+        let v2 = &self.v2;
 
         // The salt server computes CREATE2 against the v2 BondingCurve +
         // Token implementation of `api.network()`. If that disagrees with
@@ -563,34 +544,34 @@ impl Core {
     // ========================================================================
 
     pub async fn buy_v2(&self, params: V2BuyParams) -> Result<B256> {
-        self.v2()?.router.buy(params).await
+        self.v2.router.buy(params).await
     }
 
     pub async fn buy_with_native_v2(&self, params: V2BuyWithNativeParams) -> Result<B256> {
-        self.v2()?.router.buy_with_native(params).await
+        self.v2.router.buy_with_native(params).await
     }
 
     pub async fn buy_with_permit_v2(&self, params: V2BuyWithPermitParams) -> Result<B256> {
-        self.v2()?.router.buy_with_permit(params).await
+        self.v2.router.buy_with_permit(params).await
     }
 
     pub async fn sell_v2(&self, params: V2SellParams) -> Result<B256> {
-        self.v2()?.router.sell(params).await
+        self.v2.router.sell(params).await
     }
 
     pub async fn sell_to_native_v2(&self, params: V2SellToNativeParams) -> Result<B256> {
-        self.v2()?.router.sell_to_native(params).await
+        self.v2.router.sell_to_native(params).await
     }
 
     pub async fn sell_with_permit_v2(&self, params: V2SellWithPermitParams) -> Result<B256> {
-        self.v2()?.router.sell_with_permit(params).await
+        self.v2.router.sell_with_permit(params).await
     }
 
     pub async fn sell_to_native_with_permit_v2(
         &self,
         params: V2SellToNativeWithPermitParams,
     ) -> Result<B256> {
-        self.v2()?.router.sell_to_native_with_permit(params).await
+        self.v2.router.sell_to_native_with_permit(params).await
     }
 
     // ========================================================================
@@ -598,25 +579,25 @@ impl Core {
     // ========================================================================
 
     pub async fn exact_out_buy_v2(&self, params: V2ExactOutBuyParams) -> Result<B256> {
-        self.v2()?.router.exact_out_buy(params).await
+        self.v2.router.exact_out_buy(params).await
     }
 
     pub async fn exact_out_buy_with_native_v2(
         &self,
         params: V2ExactOutBuyWithNativeParams,
     ) -> Result<B256> {
-        self.v2()?.router.exact_out_buy_with_native(params).await
+        self.v2.router.exact_out_buy_with_native(params).await
     }
 
     pub async fn exact_out_sell_v2(&self, params: V2ExactOutSellParams) -> Result<B256> {
-        self.v2()?.router.exact_out_sell(params).await
+        self.v2.router.exact_out_sell(params).await
     }
 
     pub async fn exact_out_sell_to_native_v2(
         &self,
         params: V2ExactOutSellToNativeParams,
     ) -> Result<B256> {
-        self.v2()?.router.exact_out_sell_to_native(params).await
+        self.v2.router.exact_out_sell_to_native(params).await
     }
 
     // ========================================================================
@@ -625,7 +606,7 @@ impl Core {
 
     /// Auto-routed v2 quote (bonding curve pre-graduation, DEX after).
     pub async fn quote_v2(&self, token: Address, amount_in: U256, is_buy: bool) -> Result<U256> {
-        self.v2()?
+        self.v2
             .router
             .get_amount_out(token, amount_in, is_buy)
             .await
@@ -638,7 +619,7 @@ impl Core {
         amount_out: U256,
         is_buy: bool,
     ) -> Result<U256> {
-        self.v2()?
+        self.v2
             .router
             .get_amount_in(token, amount_out, is_buy)
             .await
@@ -651,7 +632,7 @@ impl Core {
         amount_in: U256,
         is_buy: bool,
     ) -> Result<U256> {
-        self.v2()?
+        self.v2
             .router
             .get_bonding_curve_amount_out(token, amount_in, is_buy)
             .await
@@ -664,7 +645,7 @@ impl Core {
         amount_out: U256,
         is_buy: bool,
     ) -> Result<U256> {
-        self.v2()?
+        self.v2
             .router
             .get_bonding_curve_amount_in(token, amount_out, is_buy)
             .await
@@ -677,7 +658,7 @@ impl Core {
         amount_in: U256,
         is_buy: bool,
     ) -> Result<U256> {
-        self.v2()?
+        self.v2
             .router
             .get_dex_amount_out(token, amount_in, is_buy)
             .await
@@ -690,7 +671,7 @@ impl Core {
         amount_out: U256,
         is_buy: bool,
     ) -> Result<U256> {
-        self.v2()?
+        self.v2
             .router
             .get_dex_amount_in(token, amount_out, is_buy)
             .await
@@ -702,18 +683,18 @@ impl Core {
 
     /// Whether the v2 token has graduated from bonding curve to DEX.
     pub async fn is_graduated_v2(&self, token: Address) -> Result<bool> {
-        self.v2()?.router.is_graduated(token).await
+        self.v2.router.is_graduated(token).await
     }
 
     /// NadFunPair address for a v2 token (via `TokenRegistry::getPair`).
     /// Returns `Address::ZERO` if the token isn't registered on v2.
     pub async fn pool_address_v2(&self, token: Address) -> Result<Address> {
-        self.v2()?.token_registry.get_pair(token).await
+        self.v2.token_registry.get_pair(token).await
     }
 
     /// Wrapped native (WMON) address known to the v2 router.
     pub async fn wrapped_native_v2(&self) -> Result<Address> {
-        self.v2()?.router.wrapped_native().await
+        self.v2.router.wrapped_native().await
     }
 
     /// Estimate gas for any v2 trade or create op. Uses
@@ -728,7 +709,7 @@ impl Core {
                  construct Core with a real signer to estimate gas"
             ));
         }
-        self.v2()?
+        self.v2
             .router
             .estimate_gas(params, self.wallet_address)
             .await
@@ -739,31 +720,31 @@ impl Core {
     // ========================================================================
 
     pub fn bonding_curve_router(&self) -> &BondingCurveRouter<DynProvider> {
-        &self.bonding_curve_router
+        &self.v1.bonding_curve_router
     }
 
     pub fn dex_router(&self) -> &DexRouter<DynProvider> {
-        &self.dex_router
+        &self.v1.dex_router
     }
 
     pub fn lens(&self) -> &Lens<DynProvider> {
-        &self.lens
+        &self.v1.lens
     }
 
-    pub fn router_v2(&self) -> Result<&NadFunRouter<DynProvider>> {
-        Ok(&self.v2()?.router)
+    pub fn router_v2(&self) -> &NadFunRouter<DynProvider> {
+        &self.v2.router
     }
 
-    pub fn factory_v2(&self) -> Result<&NadFunFactory<DynProvider>> {
-        Ok(&self.v2()?.factory)
+    pub fn factory_v2(&self) -> &NadFunFactory<DynProvider> {
+        &self.v2.factory
     }
 
-    pub fn bonding_curve_v2(&self) -> Result<&BondingCurveV2<DynProvider>> {
-        Ok(&self.v2()?.bonding_curve)
+    pub fn bonding_curve_v2(&self) -> &BondingCurveV2<DynProvider> {
+        &self.v2.bonding_curve
     }
 
-    pub fn token_registry_v2(&self) -> Result<&TokenRegistryV2<DynProvider>> {
-        Ok(&self.v2()?.token_registry)
+    pub fn token_registry_v2(&self) -> &TokenRegistryV2<DynProvider> {
+        &self.v2.token_registry
     }
 
     pub fn provider(&self) -> &Arc<DynProvider> {
@@ -779,18 +760,38 @@ impl Core {
     }
 }
 
-/// Build v2 bindings for `network` if v2 is configured there. Returns
-/// `Ok(None)` (NOT an error) when v2 isn't deployed — that's a normal
-/// state on networks without a v2 release.
-fn build_v2_bindings(provider: &Arc<DynProvider>, network: Network) -> Result<Option<V2Bindings>> {
-    let (Some(router_s), Some(factory_s), Some(bc_s), Some(reg_s)) = (
-        get_nadfun_router_v2(network),
-        get_nadfun_factory_v2(network),
-        get_bonding_curve_v2(network),
-        get_token_registry_v2(network),
-    ) else {
-        return Ok(None);
-    };
+/// Build v1 contract bindings for `network`. Parses the v1 addresses and
+/// constructs the BondingCurveRouter, DexRouter, and Lens wrappers.
+fn build_v1_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V1Contracts> {
+    let lens_address: Address = get_lens_address(network).parse()?;
+    let bonding_curve_router_address: Address = get_bonding_curve_router(network).parse()?;
+    let dex_router_address: Address = get_dex_router(network).parse()?;
+    let bonding_curve_address: Address = get_bonding_curve(network).parse()?;
+
+    Ok(V1Contracts {
+        bonding_curve_router: BondingCurveRouter::new(
+            bonding_curve_router_address,
+            bonding_curve_address,
+            provider.clone(),
+        ),
+        dex_router: DexRouter::new(dex_router_address, provider.clone()),
+        lens: Lens::new(lens_address, provider.clone()),
+    })
+}
+
+/// Build v2 contract bindings for `network`. Errors if any v2 address
+/// helper returns `None` (no v2 deployment) or fails to parse. Currently
+/// every supported `Network` variant has v2 wired, so this only fires
+/// for genuinely misconfigured deployments.
+fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V2Contracts> {
+    let router_s = get_nadfun_router_v2(network)
+        .ok_or_else(|| anyhow::anyhow!("NadFunRouter v2 not configured for {network:?}"))?;
+    let factory_s = get_nadfun_factory_v2(network)
+        .ok_or_else(|| anyhow::anyhow!("NadFunFactory v2 not configured for {network:?}"))?;
+    let bc_s = get_bonding_curve_v2(network)
+        .ok_or_else(|| anyhow::anyhow!("BondingCurve v2 not configured for {network:?}"))?;
+    let reg_s = get_token_registry_v2(network)
+        .ok_or_else(|| anyhow::anyhow!("TokenRegistry v2 not configured for {network:?}"))?;
 
     let router_addr: Address = router_s
         .parse()
@@ -805,12 +806,12 @@ fn build_v2_bindings(provider: &Arc<DynProvider>, network: Network) -> Result<Op
         .parse()
         .with_context(|| format!("invalid TokenRegistryV2 address {reg_s:?} for {network:?}"))?;
 
-    Ok(Some(V2Bindings {
+    Ok(V2Contracts {
         router: NadFunRouter::new(router_addr, provider.clone()),
         factory: NadFunFactory::new(factory_addr, provider.clone()),
         bonding_curve: BondingCurveV2::new(bc_addr, provider.clone()),
         token_registry: TokenRegistryV2::new(reg_addr, provider.clone()),
-    }))
+    })
 }
 
 /// Poll for a transaction receipt until `tx_hash` lands or `max_wait`

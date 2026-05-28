@@ -7,12 +7,10 @@
 use alloy::primitives::Address;
 use nadfun_sdk::{Core, Network, SdkVersion};
 
-/// Surface check — `detect_version` exists, returns `Result<SdkVersion>`,
-/// and `Core::v2_available` is reachable.
+/// Surface check — `detect_version` exists and returns `Result<SdkVersion>`.
 #[allow(dead_code, unreachable_code, unused_variables)]
 async fn _detect_version_surface_compiles(c: &Core) {
     let _: anyhow::Result<SdkVersion> = c.detect_version(Address::ZERO).await;
-    let _: bool = c.v2_available();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -28,7 +26,8 @@ async fn dispatches_v1_and_v2_from_one_core() {
     };
 
     let core = Core::new(rpc, key, Network::Testnet).await.unwrap();
-    assert!(core.v2_available(), "v2 should be wired on testnet");
+    // v2 is always wired on the supported networks; if construction succeeded,
+    // v2 surface is reachable.
 
     // Zero address should never be registered in v2.
     let v = core.detect_version(Address::ZERO).await.unwrap();

@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
 
     let core = Core::new(config.rpc_url, private_key, config.network).await?;
     let wallet = core.wallet_address();
-    println!("wallet: {}, router: {}", wallet, core.router_v2()?.address);
+    println!("wallet: {}, router: {}", wallet, core.router_v2().address);
 
     // Quote: router auto-routes BC vs DEX based on graduation.
     let expected = core.quote_v2(token, mon_amount, true).await?;
