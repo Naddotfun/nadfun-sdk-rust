@@ -33,12 +33,12 @@ process-global `set_network` lock is gone — every entry point binds to a
   - Pool / state: `is_graduated_v2`, `pool_address_v2`, `wrapped_native_v2`.
   - Gas: `estimate_gas_v2(V2GasEstimationParams)`.
   - Escape hatches: `router_v2()`, `factory_v2()`, `bonding_curve_v2()`,
-    `token_registry_v2()` — each returns `Result<_>` (errors when v2
-    isn't deployed on this `Core`'s network).
+    `token_registry_v2()` — return `&_` directly. v2 is always wired
+    (`Core::new` fails loudly during construction if a future network
+    ships without it), so no dead-branch guard is needed.
   - `Core::detect_version(token)` — on-chain `TokenRegistryV2::getPair`
     probe with in-process cache. Use this to dispatch user code at v1 /
     v2 boundaries.
-  - `Core::v2_available()` — whether v2 is wired for this network.
 
 - **`SdkVersion`** enum — `V1` / `V2` discriminator used by
   `SaltParams.version`, `ApiTokenInfo.version`, and user-side dispatch.

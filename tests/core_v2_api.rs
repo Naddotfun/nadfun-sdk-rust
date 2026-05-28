@@ -210,8 +210,7 @@ async fn _core_v2_methods_compile(c: &Core) {
     let _: Result<u64, _> = c
         .estimate_gas_v2(V2GasEstimationParams::Buy(sample_buy_params()))
         .await;
-    // escape hatches — v2 ones return Result so the caller knows when v2
-    // isn't deployed.
+    // escape hatches — return &_ directly since v2 is always wired.
     let _r = c.router_v2();
     let _f = c.factory_v2();
     let _bc = c.bonding_curve_v2();

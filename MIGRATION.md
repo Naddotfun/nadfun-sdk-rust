@@ -41,11 +41,13 @@ let core = Core::new(rpc, key, Network::Mainnet).await?;
 | `c.pool_address(t)`                       | `c.pool_address_v2(t)`                         |
 | `c.wrapped_native()`                      | `c.wrapped_native_v2()`                        |
 | `c.estimate_gas(params)`                  | `c.estimate_gas_v2(params)`                    |
-| `c.router()` / `c.factory()` / …          | `c.router_v2()?` / `c.factory_v2()?` / …       |
+| `c.router()` / `c.factory()` / …          | `c.router_v2()` / `c.factory_v2()` / …         |
 
 The escape-hatch accessors (`router_v2`, `factory_v2`,
-`bonding_curve_v2`, `token_registry_v2`) now return `Result<_>` and error
-when v2 isn't deployed on the `Core`'s network.
+`bonding_curve_v2`, `token_registry_v2`) return `&_` directly. Every
+supported `Network` ships with a v2 deployment, so `Core::new` either
+wires v2 or fails loudly during construction — there's no dead branch
+for these accessors to guard against.
 
 Use `Core::detect_version(token)` (with in-process cache) or
 `api.get_token(token).version` to pick v1 vs v2 paths from a token
