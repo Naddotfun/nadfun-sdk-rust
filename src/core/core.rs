@@ -8,20 +8,21 @@
 //! quote; v2 trades use the explicit `*_v2` methods (different params
 //! shape, so auto-dispatch on `buy` / `sell` would erase information).
 //!
-//! Use `Core::detect_version(token)` to ask the on-chain
-//! `TokenRegistryV2::is_registered` probe (with in-process caching)
-//! whether a token is v1 or v2, then dispatch to the right surface.
+//! Use `Core::detect_version(token)` (or `detect_token_info` for the quote
+//! token too) to classify a token via the on-chain `TokenInfoLens` in one
+//! RPC call, then dispatch to the right v1/v2 surface. Stateless — no
+//! caching; cache results yourself if you need to.
 
 use crate::{
     api::ApiClient,
     constants::*,
     contracts::{
         BondingCurveRouter, BondingCurveV2, CreatorClient, DexRouter, Lens, NadFunFactory,
-        NadFunRouter, TokenRegistryV2, TokenVersionLens,
+        NadFunRouter, TokenInfoLens, TokenRegistryV2,
     },
     core::v1::gas::{estimate_gas, GasEstimationParams},
     types::{v2::events::IBondingCurveV2Events, *},
-    version::SdkVersion,
+    version::{SdkVersion, TokenInfo},
 };
 use alloy::{
     network::EthereumWallet,
@@ -59,16 +60,16 @@ struct V1Contracts {
 }
 
 /// v2 contract bindings — NadFunRouter + factory + bonding curve +
-/// per-token registry. `token_version_lens` is `Some(_)` once the Lens is
-/// deployed on the network (see `get_token_version_lens`); when absent,
-/// version detection falls back to a direct `TokenRegistryV2::getPair`
-/// probe.
+/// per-token registry + `TokenInfoLens`. The Lens is required: it's deployed
+/// on every supported network, so `Core::new` resolves it at construction
+/// (failing loudly if a future network ships without it) rather than
+/// carrying a fallback branch.
 struct V2Contracts {
     router: NadFunRouter<DynProvider>,
     factory: NadFunFactory<DynProvider>,
     bonding_curve: BondingCurveV2<DynProvider>,
     token_registry: TokenRegistryV2<DynProvider>,
-    token_version_lens: Option<TokenVersionLens<DynProvider>>,
+    token_info_lens: TokenInfoLens<DynProvider>,
 }
 
 impl Core {
@@ -118,52 +119,40 @@ impl Core {
     // ========================================================================
 
     /// Classify a token as v1 / v2 / not-registered. Stateless — each
-    /// call hits the chain.
-    ///
-    /// Uses the on-chain `TokenVersionLens` when deployed on this
-    /// network (one RPC call covers both v1 and v2 registries +
-    /// returns `None` for unknown tokens). When the Lens isn't
-    /// available yet, falls back to a direct `TokenRegistryV2::getPair`
-    /// probe — in that fallback mode, any token that isn't registered
-    /// on v2 is reported as `V1` (the SDK can't distinguish a real v1
-    /// token from a random ERC-20 without the Lens).
+    /// call hits the chain via the on-chain `TokenInfoLens` (one RPC
+    /// covers both v1 and v2 registries and returns `None` for unknown
+    /// tokens).
     ///
     /// Callers that issue many lookups for the same token should cache
     /// the result themselves — the SDK is intentionally stateless.
     pub async fn detect_version(&self, token: Address) -> Result<SdkVersion> {
-        match self.v2.token_version_lens.as_ref() {
-            Some(lens) => lens.get_version(token).await,
-            None => {
-                // Fallback: only the v2 registry is consulted, so we
-                // can't tell "real v1 token" from "arbitrary ERC-20".
-                let pair = self.v2.token_registry.get_pair(token).await?;
-                if pair == Address::ZERO {
-                    Ok(SdkVersion::V1)
-                } else {
-                    Ok(SdkVersion::V2)
-                }
-            }
-        }
+        Ok(self.detect_token_info(token).await?.version)
     }
 
-    /// Batch version detection — one RPC call for the whole list when
-    /// the `TokenVersionLens` is wired, or N sequential `detect_version`
-    /// calls otherwise. Order matches the input.
+    /// Batch version detection — one `TokenInfoLens` RPC classifies the
+    /// whole list. Order matches the input.
     pub async fn detect_versions(&self, tokens: Vec<Address>) -> Result<Vec<SdkVersion>> {
-        if tokens.is_empty() {
-            return Ok(Vec::new());
-        }
+        Ok(self
+            .detect_token_infos(tokens)
+            .await?
+            .into_iter()
+            .map(|info| info.version)
+            .collect())
+    }
 
-        if let Some(lens) = self.v2.token_version_lens.as_ref() {
-            return lens.get_versions(tokens).await;
-        }
+    /// Classify a token and resolve its on-chain `quote_token` in a single
+    /// `TokenInfoLens` call. See [`TokenInfo`].
+    ///
+    /// The SDK does not pick a trade method from the quote token — that is
+    /// the caller's decision (see the quote-routing matrix in `MIGRATION.md`).
+    pub async fn detect_token_info(&self, token: Address) -> Result<TokenInfo> {
+        self.v2.token_info_lens.get_token_info(token).await
+    }
 
-        // Fallback path — sequential per-token probes.
-        let mut out = Vec::with_capacity(tokens.len());
-        for t in tokens {
-            out.push(self.detect_version(t).await?);
-        }
-        Ok(out)
+    /// Batch [`Self::detect_token_info`] — one RPC call for the whole list,
+    /// order preserved. Empty input returns an empty vec without an RPC.
+    pub async fn detect_token_infos(&self, tokens: Vec<Address>) -> Result<Vec<TokenInfo>> {
+        self.v2.token_info_lens.get_token_infos(tokens).await
     }
 
     // ========================================================================
@@ -774,12 +763,11 @@ impl Core {
         &self.v2.token_registry
     }
 
-    /// `TokenVersionLens` binding when deployed on this `Core`'s
-    /// network. `None` until the Lens is deployed; use
-    /// [`Self::detect_version`] / [`Self::detect_versions`] for
-    /// callers that should transparently fall back.
-    pub fn token_version_lens(&self) -> Option<&TokenVersionLens<DynProvider>> {
-        self.v2.token_version_lens.as_ref()
+    /// `TokenInfoLens` binding for this `Core`'s network. Prefer
+    /// [`Self::detect_version`] / [`Self::detect_token_info`]; this is the
+    /// raw escape hatch.
+    pub fn token_info_lens(&self) -> &TokenInfoLens<DynProvider> {
+        &self.v2.token_info_lens
     }
 
     pub fn provider(&self) -> &Arc<DynProvider> {
@@ -841,26 +829,20 @@ fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V
         .parse()
         .with_context(|| format!("invalid TokenRegistryV2 address {reg_s:?} for {network:?}"))?;
 
-    // TokenVersionLens is optional — wires up only on networks where the
-    // Lens has been deployed (see `get_token_version_lens`). Until then,
-    // `detect_version` falls back to a direct `TokenRegistryV2::getPair`
-    // probe.
-    let token_version_lens = match get_token_version_lens(network) {
-        Some(lens_s) => {
-            let lens_addr: Address = lens_s.parse().with_context(|| {
-                format!("invalid TokenVersionLens address {lens_s:?} for {network:?}")
-            })?;
-            Some(TokenVersionLens::new(lens_addr, provider.clone()))
-        }
-        None => None,
-    };
+    // TokenInfoLens is required — it's deployed on every supported network.
+    let lens_s = get_token_info_lens(network)
+        .ok_or_else(|| anyhow::anyhow!("TokenInfoLens not configured for {network:?}"))?;
+    let lens_addr: Address = lens_s
+        .parse()
+        .with_context(|| format!("invalid TokenInfoLens address {lens_s:?} for {network:?}"))?;
+    let token_info_lens = TokenInfoLens::new(lens_addr, provider.clone());
 
     Ok(V2Contracts {
         router: NadFunRouter::new(router_addr, provider.clone()),
         factory: NadFunFactory::new(factory_addr, provider.clone()),
         bonding_curve: BondingCurveV2::new(bc_addr, provider.clone()),
         token_registry: TokenRegistryV2::new(reg_addr, provider.clone()),
-        token_version_lens,
+        token_info_lens,
     })
 }
 

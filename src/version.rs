@@ -8,11 +8,13 @@
 //!   (`buy_v2`, `sell_v2`, `create_token_v2`, …).
 //! - [`SdkVersion::None`] — token is not registered on either system.
 //!   Returned by [`crate::Core::detect_version`] when the on-chain
-//!   `TokenVersionLens` reports an unknown token (or, in the fallback
+//!   `TokenInfoLens` reports an unknown token (or, in the fallback
 //!   path, when `TokenRegistryV2::getPair` returns `Address::ZERO`).
 //!
 //! Use [`crate::Core::detect_version`] to classify a token from its
 //! address, then dispatch into the right `Core::*` method family.
+//! [`crate::Core::detect_token_info`] additionally returns the token's
+//! on-chain `quote_token` ([`SdkTokenInfo`]) in the same call.
 //!
 //! ## Wire form
 //!
@@ -20,6 +22,7 @@
 //! responses, which deserialize to [`SdkVersion::V1`]). [`SdkVersion::None`]
 //! is an SDK-only state — the API never returns it.
 
+use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 
 /// Token version a Nad.fun token belongs to.
@@ -74,6 +77,27 @@ impl std::fmt::Display for SdkVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
+}
+
+/// On-chain classification of a token: its [`SdkVersion`] plus the
+/// `quote_token` it trades against, resolved in a single `TokenInfoLens`
+/// call.
+///
+/// Returned by [`crate::Core::detect_token_info`] /
+/// [`crate::Core::detect_token_infos`]. The SDK does **not** auto-select a
+/// trade method from `quote_token` — it's data for the caller. Which v2
+/// method to call for a given quote (native vs ERC-20 path) is the caller's
+/// choice; see the quote-routing matrix in `MIGRATION.md`.
+///
+/// For [`SdkVersion::None`] tokens, `quote_token` is [`Address::ZERO`]. For
+/// [`SdkVersion::V1`] tokens it is the wrapped-native (WMON) the v1 surface
+/// always quotes against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenInfo {
+    /// Which contract generation the token belongs to.
+    pub version: SdkVersion,
+    /// The token's quote currency. `Address::ZERO` when `version` is `None`.
+    pub quote_token: Address,
 }
 
 #[cfg(test)]

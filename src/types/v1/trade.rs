@@ -144,13 +144,6 @@ pub struct TokenMetadata {
 }
 
 #[derive(Debug, Clone)]
-pub struct TokenInfo {
-    pub metadata: TokenMetadata,
-    pub balance: U256,
-    pub nonce: U256,
-}
-
-#[derive(Debug, Clone)]
 pub struct AllowanceStatus {
     pub allowance: U256,
     pub balance: U256,

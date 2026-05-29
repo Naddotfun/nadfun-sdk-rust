@@ -14,13 +14,16 @@
 //! classification for real tokens.
 
 use alloy::primitives::{address, Address};
-use nadfun_sdk::{Core, Network, SdkVersion};
+use nadfun_sdk::{Core, Network, SdkVersion, TokenInfo};
 
-/// Surface check — `detect_version` exists and returns `Result<SdkVersion>`.
+/// Surface check — `detect_version` / `detect_token_info` exist with the
+/// expected signatures.
 #[allow(dead_code, unreachable_code, unused_variables)]
-async fn _detect_version_surface_compiles(c: &Core) {
+async fn _detect_surface_compiles(c: &Core) {
     let _: anyhow::Result<SdkVersion> = c.detect_version(Address::ZERO).await;
     let _: anyhow::Result<Vec<SdkVersion>> = c.detect_versions(vec![Address::ZERO]).await;
+    let _: anyhow::Result<TokenInfo> = c.detect_token_info(Address::ZERO).await;
+    let _: anyhow::Result<Vec<TokenInfo>> = c.detect_token_infos(vec![Address::ZERO]).await;
 }
 
 /// Default testnet node used when `TESTNET_RPC_URL` is unset.
@@ -39,7 +42,7 @@ async fn detect_version_classifies_via_lens() {
 
     let core = Core::new(rpc, key, Network::Testnet).await.unwrap();
 
-    // With `TokenVersionLens` wired on testnet, an address that isn't a
+    // With `TokenInfoLens` wired on testnet, an address that isn't a
     // Nad.fun token classifies as `None` (Solidity `Version::None == 0`).
     // This is the Lens path — NOT the pre-Lens fallback, which reported any
     // non-v2 address as `V1`.
@@ -57,7 +60,7 @@ async fn detect_version_classifies_via_lens() {
     let zero_again = core.detect_version(Address::ZERO).await.unwrap();
     assert_eq!(zero_again, SdkVersion::None);
 
-    // Batch path: one `getVersions` RPC classifies the whole list, order
+    // Batch path: one `getTokenInfos` RPC classifies the whole list, order
     // preserved.
     let batch = core
         .detect_versions(vec![Address::ZERO, ARBITRARY_ERC20])
@@ -69,21 +72,47 @@ async fn detect_version_classifies_via_lens() {
     let empty = core.detect_versions(vec![]).await.unwrap();
     assert!(empty.is_empty());
 
+    // `detect_token_info` carries the on-chain quote token alongside the
+    // version. None tokens report a zero quote.
+    let none_info = core.detect_token_info(Address::ZERO).await.unwrap();
+    assert_eq!(none_info.version, SdkVersion::None);
+    assert_eq!(none_info.quote_token, Address::ZERO);
+
+    let infos = core
+        .detect_token_infos(vec![Address::ZERO, ARBITRARY_ERC20])
+        .await
+        .unwrap();
+    assert_eq!(infos.len(), 2);
+    assert!(infos
+        .iter()
+        .all(|i| i.version == SdkVersion::None && i.quote_token == Address::ZERO));
+
     // Optional positive cases when real testnet tokens are provided.
     if let Ok(addr_s) = std::env::var("TESTNET_V1_TOKEN") {
         let token: Address = addr_s.parse().expect("valid TESTNET_V1_TOKEN");
+        let info = core.detect_token_info(token).await.unwrap();
         assert_eq!(
-            core.detect_version(token).await.unwrap(),
+            info.version,
             SdkVersion::V1,
             "expected V1 for TESTNET_V1_TOKEN"
         );
+        // v1 always quotes against the wrapped native (WMON), never zero.
+        assert_ne!(info.quote_token, Address::ZERO, "v1 quote should be WMON");
     }
     if let Ok(addr_s) = std::env::var("TESTNET_V2_TOKEN") {
         let token: Address = addr_s.parse().expect("valid TESTNET_V2_TOKEN");
+        let info = core.detect_token_info(token).await.unwrap();
         assert_eq!(
-            core.detect_version(token).await.unwrap(),
+            info.version,
             SdkVersion::V2,
             "expected V2 for TESTNET_V2_TOKEN"
         );
+        assert_ne!(
+            info.quote_token,
+            Address::ZERO,
+            "v2 token must have a quote token"
+        );
+        // `detect_version` is the thin wrapper over `detect_token_info`.
+        assert_eq!(core.detect_version(token).await.unwrap(), info.version);
     }
 }
