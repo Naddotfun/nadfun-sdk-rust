@@ -23,8 +23,9 @@ use alloy::sol;
 use nadfun_sdk::stream::v2::{CurveIndexerV2, NadFunSwapIndexer};
 use nadfun_sdk::types::v2::events::V2EventType;
 use nadfun_sdk::{
-    ApiClient, Core, GasPricing, SlippageUtils, V2BuyWithNativeParams, V2CreatePayment,
-    V2CreateTokenParams, V2DexType, V2SellToNativeParams, V2VaultAllocation,
+    ActionId, ApiClient, BuyParams, Core, CreateTokenParams, GasPricing, SellParams, SlippageUtils,
+    V2BuyWithNativeParams, V2CreatePayment, V2CreateTokenParams, V2DexType, V2SellToNativeParams,
+    V2VaultAllocation,
 };
 use std::time::Duration;
 
@@ -337,4 +338,184 @@ async fn sell_v2_native(core: &Core, token: Address, amount_in: U256) {
         .await
         .expect("sell_to_native_v2");
     assert!(wait_receipt(core, tx).await, "sell tx reverted");
+}
+
+// ============================================================================
+// v1 lifecycle
+// ============================================================================
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore] // live testnet, funded key + real txs
+async fn v1_lifecycle() {
+    let Some(pk) = key() else {
+        eprintln!("skip: TESTNET_PRIVATE_KEY not set");
+        return;
+    };
+    let core = Core::new(rpc(), pk, nadfun_sdk::Network::Testnet)
+        .await
+        .expect("core");
+    let wallet = core.wallet_address();
+    let api = ApiClient::from_env(nadfun_sdk::Network::Testnet);
+
+    let bal0 = core.provider().get_balance(wallet).await.unwrap();
+    println!("[v1] wallet {wallet} balance {} MON", format_ether(bal0));
+
+    // ── 1. create (v1) ─────────────────────────────────────────────────
+    let n = unique_suffix(&core).await;
+    let initial_buy = parse_ether("1").unwrap();
+    let amount_out = core
+        .get_initial_buy_amount_out(initial_buy)
+        .await
+        .expect("initial buy quote");
+    let params = CreateTokenParams {
+        name: format!("Lifecycle V1 {n}"),
+        symbol: format!("LCV1{n}"),
+        description: "v1 lifecycle smoke".to_string(),
+        image_uri: "https://i.imgur.com/0qY8Vp6.png".to_string(),
+        website: None,
+        twitter: None,
+        telegram: None,
+        creator_address: wallet,
+        amount_out,
+        value: initial_buy,
+        action_id: ActionId::CapricornActor,
+    };
+    let result = core.create_token(params, &api).await.expect("create_token");
+    let token = result.token_address;
+    println!("[v1] created {token} (tx {})", result.transaction_hash);
+    assert!(
+        wait_receipt(&core, result.transaction_hash).await,
+        "v1 create reverted"
+    );
+    assert_eq!(
+        core.detect_version(token).await.unwrap(),
+        nadfun_sdk::SdkVersion::V1
+    );
+    assert!(
+        !core.is_graduated(token).await.unwrap(),
+        "fresh v1 token is pre-graduation"
+    );
+
+    // ── 2. bonding buy ─────────────────────────────────────────────────
+    v1_buy(&core, token, parse_ether("1").unwrap()).await;
+    let bal_tok = balance_of(&core, token, wallet).await;
+    println!("[v1] token balance after bonding buy: {bal_tok}");
+    assert!(bal_tok > U256::ZERO, "should hold tokens after v1 buy");
+
+    // ── 3. bonding sell ────────────────────────────────────────────────
+    v1_sell(&core, token, bal_tok / U256::from(4u64)).await;
+    println!("[v1] bonding sell ok");
+
+    // ── 4. graduate (adaptive on balance) ──────────────────────────────
+    let (_available, required_mon) = core.available_buy_tokens(token).await.expect("available");
+    let bal_now = core.provider().get_balance(wallet).await.unwrap();
+    println!(
+        "[v1] graduation needs ~{} MON, have {} MON",
+        format_ether(required_mon),
+        format_ether(bal_now)
+    );
+    if required_mon == U256::ZERO || required_mon + parse_ether("500").unwrap() >= bal_now {
+        println!(
+            "[v1] skip graduate+DEX: insufficient balance for {} MON",
+            format_ether(required_mon)
+        );
+        println!("[v1] v1 create + bonding buy/sell PASSED for {token}");
+        return;
+    }
+
+    // Drain the curve: buy the remaining supply (+5% headroom over the
+    // re-quoted remainder) until nothing is left to buy.
+    let cap = bal_now - parse_ether("500").unwrap();
+    let mut spent = U256::ZERO;
+    loop {
+        let (_avail, need) = core.available_buy_tokens(token).await.expect("available");
+        if need == U256::ZERO || spent >= cap {
+            break;
+        }
+        let chunk = (need + need / U256::from(20u64)).max(parse_ether("50").unwrap());
+        v1_buy(&core, token, chunk).await;
+        spent += chunk;
+        println!("[v1] drain progress: spent ~{} MON", format_ether(spent));
+    }
+    println!("[v1] curve drained (~{} MON)", format_ether(spent));
+
+    // v1 graduation (DEX listing) is keeper-driven and lands a few blocks
+    // after the curve sells out — poll the on-chain flag.
+    let mut graduated = false;
+    for _ in 0..60 {
+        if core.is_graduated(token).await.unwrap() {
+            graduated = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+    assert!(
+        graduated,
+        "v1 graduation (keeper) did not complete within 120s"
+    );
+    println!("[v1] graduated");
+
+    // ── 5. DEX buy (auto-routed to Capricorn CL post-graduation) ───────
+    let pre = balance_of(&core, token, wallet).await;
+    v1_buy(&core, token, parse_ether("1").unwrap()).await;
+    let post = balance_of(&core, token, wallet).await;
+    assert!(post > pre, "v1 DEX buy should increase balance");
+    println!("[v1] DEX buy ok (+{} tokens)", post - pre);
+
+    // ── 6. DEX sell ────────────────────────────────────────────────────
+    v1_sell(&core, token, (post - pre) / U256::from(2u64)).await;
+    println!("[v1] full v1 lifecycle PASSED for {token}");
+}
+
+async fn v1_buy(core: &Core, token: Address, value: U256) {
+    let (router, expected) = core
+        .get_amount_out(token, value, true)
+        .await
+        .expect("v1 buy quote");
+    assert!(expected > U256::ZERO, "zero v1 buy quote");
+    let min_out = SlippageUtils::calculate_amount_out_min(expected, SLIPPAGE);
+    let tx = core
+        .buy(
+            BuyParams {
+                token,
+                amount_in: value,
+                amount_out_min: min_out,
+                to: core.wallet_address(),
+                deadline: U256::from(DEADLINE),
+                gas_limit: Some(2_000_000),
+                gas_price: Some(GasPricing::Legacy),
+                nonce: None,
+            },
+            router,
+        )
+        .await
+        .expect("v1 buy");
+    assert!(wait_receipt(core, tx).await, "v1 buy reverted");
+}
+
+async fn v1_sell(core: &Core, token: Address, amount_in: U256) {
+    let (router, expected) = core
+        .get_amount_out(token, amount_in, false)
+        .await
+        .expect("v1 sell quote");
+    assert!(expected > U256::ZERO, "zero v1 sell quote");
+    approve_if_needed(core, token, router.address(), amount_in).await;
+    let min_out = SlippageUtils::calculate_amount_out_min(expected, SLIPPAGE);
+    let tx = core
+        .sell(
+            SellParams {
+                amount_in,
+                amount_out_min: min_out,
+                token,
+                to: core.wallet_address(),
+                deadline: U256::from(DEADLINE),
+                gas_limit: Some(2_000_000),
+                gas_price: Some(GasPricing::Legacy),
+                nonce: None,
+            },
+            router,
+        )
+        .await
+        .expect("v1 sell");
+    assert!(wait_receipt(core, tx).await, "v1 sell reverted");
 }
