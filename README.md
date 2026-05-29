@@ -114,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
 
     let tx = core.buy_with_native_v2(V2BuyWithNativeParams {
         token,
+        to: core.wallet_address(),
         amount_out_min: min_out,
         deadline: U256::from(9_999_999_999u64),
         value: mon_amount,
@@ -137,7 +138,7 @@ discovery, and event streaming are covered under
 The SDK uses optional API key authentication for higher rate limits:
 
 ```rust
-use nadfun_sdk::ApiClient;
+use nadfun_sdk::{ApiClient, Network};
 
 // Option 1: Without API key (lower rate limit, but works)
 let api = ApiClient::new(Network::Mainnet);
