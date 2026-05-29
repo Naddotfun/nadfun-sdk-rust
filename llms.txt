@@ -574,15 +574,18 @@ ERC-20), exact-output swaps, EIP-2612 permit flows, and a vault system
 Two ways to find out whether a token is v1 or v2:
 
 ```rust
-// (a) On-chain (preferred): TokenRegistryV2::getPair with in-process cache.
+// (a) On-chain (preferred): TokenVersionLens when deployed (one RPC for
+//     v1/v2/None), else a TokenRegistryV2::getPair fallback. Stateless —
+//     each call hits the chain; cache the result yourself if needed.
 match core.detect_version(token).await? {
     SdkVersion::V1 => /* call core.buy(...) */,
     SdkVersion::V2 => /* call core.buy_v2(...) */,
+    SdkVersion::None => /* not a Nad.fun token — refuse */,
 }
 
 // (b) Off-chain: ApiClient::get_token returns ApiTokenInfo.version.
 let info = api.get_token(token).await?;
-let version = info.version; // SdkVersion::V1 | V2
+let version = info.version; // SdkVersion::V1 | V2 | None
 ```
 
 ### v2 Quick Start
@@ -641,9 +644,9 @@ core.wrapped_native_v2()
 // Gas estimation:
 core.estimate_gas_v2(V2GasEstimationParams::BuyWithNative(params)).await?
 
-// Escape hatches (raw alloy bindings; Result<_> errors when v2 isn't deployed):
-core.router_v2()?, core.factory_v2()?, core.bonding_curve_v2()?,
-core.token_registry_v2()?, core.provider()
+// Escape hatches (raw alloy bindings; infallible — return &T directly):
+core.router_v2(), core.factory_v2(), core.bonding_curve_v2(),
+core.token_registry_v2(), core.provider()
 ```
 
 ### v2 Token Creation
@@ -708,6 +711,7 @@ async fn auto_buy(core: &Core, token: Address, value: U256, to: Address, deadlin
             core.buy_with_native_v2(V2BuyWithNativeParams { token, amount_out_min: min,
                 deadline, value, gas_limit: None, gas_price: None, nonce: None }).await
         }
+        SdkVersion::None => anyhow::bail!("not a Nad.fun token: {token}"),
     }
 }
 ```

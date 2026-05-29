@@ -89,6 +89,7 @@ Dispatch a v1 vs v2 path with the on-chain probe:
 match core.detect_version(token).await? {
     SdkVersion::V1 => { /* core.buy(...) */ }
     SdkVersion::V2 => { /* core.buy_v2(...) */ }
+    SdkVersion::None => { /* not a Nad.fun token — refuse */ }
 }
 ```
 
