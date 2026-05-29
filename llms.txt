@@ -574,14 +574,19 @@ ERC-20), exact-output swaps, EIP-2612 permit flows, and a vault system
 Two ways to find out whether a token is v1 or v2:
 
 ```rust
-// (a) On-chain (preferred): TokenVersionLens when deployed (one RPC for
-//     v1/v2/None), else a TokenRegistryV2::getPair fallback. Stateless —
-//     each call hits the chain; cache the result yourself if needed.
+// (a) On-chain (preferred): TokenInfoLens, one RPC for v1/v2/None.
+//     Stateless — each call hits the chain; cache the result yourself.
 match core.detect_version(token).await? {
     SdkVersion::V1 => /* call core.buy(...) */,
     SdkVersion::V2 => /* call core.buy_v2(...) */,
     SdkVersion::None => /* not a Nad.fun token — refuse */,
 }
+
+// detect_token_info also returns the on-chain quote_token (1 RPC):
+let info = core.detect_token_info(token).await?; // TokenInfo { version, quote_token }
+// detect_token_infos(tokens) / detect_versions(tokens) batch the whole list.
+// The SDK does NOT pick a trade method from quote_token — that's yours
+// (native vs ERC-20 path). See the quote-routing matrix in MIGRATION.md §7.
 
 // (b) Off-chain: ApiClient::get_token returns ApiTokenInfo.version.
 let info = api.get_token(token).await?;
@@ -726,8 +731,9 @@ Full example at `examples/unified_dispatch.rs`. Companion v2 examples at
 `get_protocol_manager_v2`, `get_bonding_curve_v2`, `get_fee_collector_v2`,
 `get_creator_fee_processor_v2`, `get_lp_manager_v2`, `get_vault_registry_v2`,
 `get_burn_vault_v2`, `get_lp_vault_v2`, `get_creator_fee_vault_v2`,
-`get_gift_vault_v2` — each returns `Option<&'static str>` for the active
-network. Both mainnet and testnet have v2 deployed.
+`get_gift_vault_v2`, `get_token_info_lens` — each returns
+`Option<&'static str>` for the active network. Both mainnet and testnet
+have v2 deployed.
 
 ## Links
 
