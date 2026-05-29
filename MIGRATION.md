@@ -49,13 +49,18 @@ supported `Network` ships with a v2 deployment, so `Core::new` either
 wires v2 or fails loudly during construction — there's no dead branch
 for these accessors to guard against.
 
-Use `Core::detect_version(token)` (with in-process cache + on-chain
-`TokenVersionLens` lookup when deployed) or
-`api.get_token(token).version` to pick v1 vs v2 paths from a token
-address you don't know up front. When the Lens is wired,
-`SdkVersion::None` distinguishes "arbitrary ERC-20" from "real v1
-token" — be sure to handle the new variant in your `match`. For
-batch lookups use `Core::detect_versions(tokens)`.
+Use `Core::detect_version(token)` (stateless on-chain `TokenInfoLens`
+lookup, one RPC) or `api.get_token(token).version` to pick v1 vs v2 paths
+from a token address you don't know up front. `SdkVersion::None`
+distinguishes "arbitrary ERC-20" from "real v1 token" — be sure to handle
+the variant in your `match`. For batch lookups use
+`Core::detect_versions(tokens)` (one RPC for the whole list).
+
+`Core::detect_token_info(token)` returns a `TokenInfo { version,
+quote_token }` — the version **plus** the token's on-chain quote token —
+in the same single call (`Core::detect_token_infos` for the batch). The
+SDK does not auto-select a trade method from `quote_token`; use it to drive
+the matrix in §7 yourself.
 
 ## 2. Drop `set_network` — pass `Network` to every constructor
 
@@ -200,6 +205,7 @@ The router handles BC vs DEX + quote-token bookkeeping internally:
 | Graduation status        | `core.is_graduated_v2(token)`               |
 | Wrapped native           | `core.wrapped_native_v2()`                  |
 | Version detect (v1/v2/None) | `core.detect_version(token)`             |
+| Version + quote token (1 RPC) | `core.detect_token_info(token)` → `TokenInfo` |
 
 ### Trade execution — pick by `quote_token`
 
@@ -220,9 +226,11 @@ native-flavored helpers.
 
 `exact_out_*` and `*_with_permit` variants follow the same matrix
 (`exact_out_buy_with_native_v2` for WMON/LvMON buy, `exact_out_buy_v2`
-for other ERC-20s, etc.). Look up `quote_token` via
-`api.get_token(token).quote_token` or the per-token registry if you're
-dispatching from a generic address.
+for other ERC-20s, etc.). To dispatch from a generic address, read the
+`quote_token` on-chain in one call with `core.detect_token_info(token)`
+(returns `{ version, quote_token }`) — or off-chain via
+`api.get_token(token).quote_token`. The SDK never picks the trade method
+for you; this matrix is yours to apply.
 
 ## 8. Rename: `quote_*` → `get_*amount_*` on v2
 
