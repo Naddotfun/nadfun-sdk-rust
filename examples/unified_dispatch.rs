@@ -1,13 +1,13 @@
 //! Mixed-token dispatch: receive an arbitrary token and route the buy
 //! through the correct v1/v2 path on a single `Core` instance.
 //!
-//! Two patterns shown:
-//!   1. `core.detect_version(token)` — on-chain probe of
-//!      `TokenRegistryV2::isRegistered`, with in-process caching.
-//!   2. `api.get_token(token).version` — same answer from the API.
-//!
-//! Either is fine. The on-chain probe avoids the API hop; the API answer
-//! avoids the RPC hop. Pick whichever fits your latency budget.
+//! `core.detect_token_info(token)` does one on-chain `TokenInfoLens` call
+//! returning both the version (v1 / v2 / None) and the token's quote token.
+//! (`api.get_token(token)` is the off-chain equivalent.) The SDK does not
+//! pick a trade method for you — this example shows the v2 quote-routing
+//! choice the caller makes (see MIGRATION.md §7 for the full matrix):
+//!   quote == wrapped native (WMON) -> buy_with_native_v2 (send MON)
+//!   quote == other ERC-20          -> buy_v2 (pre-approve the quote token)
 //!
 //! Usage:
 //!   export PRIVATE_KEY="..." RPC_URL="..."
@@ -17,15 +17,17 @@
 use alloy::primitives::{utils::parse_ether, Address, B256, U256};
 use anyhow::Result;
 use nadfun_sdk::{
-    ApiClient, BuyParams, Core, GasPricing, SdkVersion, SlippageUtils, V2BuyWithNativeParams,
+    ApiClient, BuyParams, Core, GasPricing, SdkVersion, SlippageUtils, V2BuyParams,
+    V2BuyWithNativeParams,
 };
 
 #[path = "common/mod.rs"]
 mod common;
 use common::Config;
 
-/// Buy `value` MON worth of `token`, picking v1 or v2 based on
-/// `Core::detect_version`. Returns the submitted transaction hash.
+/// Buy `value` worth of `token`, picking the v1/v2 path (and, for v2, the
+/// native vs ERC-20 quote path) from `Core::detect_token_info`. Returns the
+/// submitted transaction hash.
 async fn auto_buy(
     core: &Core,
     token: Address,
@@ -33,9 +35,9 @@ async fn auto_buy(
     to: Address,
     deadline: U256,
 ) -> Result<B256> {
-    let version = core.detect_version(token).await?;
-    println!("token version: {:?}", version);
-    match version {
+    let info = core.detect_token_info(token).await?;
+    println!("token info: {:?}", info);
+    match info.version {
         SdkVersion::V1 => {
             let (router, expected) = core.get_amount_out(token, value, true).await?;
             let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
@@ -55,19 +57,41 @@ async fn auto_buy(
             .await
         }
         SdkVersion::V2 => {
-            let _ = to; // v2 buy_with_native infers recipient from msg.sender
+            // The quote token decides how the buy is funded. `get_amount_out_v2`
+            // is quote-agnostic; the trade method is not.
             let expected = core.get_amount_out_v2(token, value, true).await?;
             let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-            core.buy_with_native_v2(V2BuyWithNativeParams {
-                token,
-                amount_out_min: min_out,
-                deadline,
-                value,
-                gas_limit: None,
-                gas_price: Some(GasPricing::Legacy),
-                nonce: None,
-            })
-            .await
+            let wrapped_native = core.wrapped_native_v2().await?;
+
+            if info.quote_token == wrapped_native {
+                // Native path: send `value` MON, the router wraps it. Recipient
+                // is inferred from msg.sender.
+                let _ = to;
+                core.buy_with_native_v2(V2BuyWithNativeParams {
+                    token,
+                    amount_out_min: min_out,
+                    deadline,
+                    value,
+                    gas_limit: None,
+                    gas_price: Some(GasPricing::Legacy),
+                    nonce: None,
+                })
+                .await
+            } else {
+                // ERC-20 quote (e.g. USDT): `value` is the quote-token amount and
+                // must already be approved to the v2 router. (LvMON is a special
+                // case that mints from native on buy — see MIGRATION.md §7.)
+                core.buy_v2(V2BuyParams {
+                    token,
+                    amount_in: value,
+                    amount_out_min: min_out,
+                    deadline,
+                    gas_limit: None,
+                    gas_price: Some(GasPricing::Legacy),
+                    nonce: None,
+                })
+                .await
+            }
         }
         SdkVersion::None => {
             anyhow::bail!("token {token} is not registered on either v1 or v2 — refusing to trade");
