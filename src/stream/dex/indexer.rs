@@ -60,6 +60,13 @@ impl DexIndexer {
     /// Fetch swap events for a specific block range
     /// Returns events sorted chronologically
     pub async fn fetch_events(&self, from_block: u64, to_block: u64) -> Result<Vec<SwapEvent>> {
+        // An empty address filter is a no-op on the wire, so it would scan
+        // every `Swap` log in the range and return unrelated pools' events.
+        // No pools means nothing to index — short-circuit.
+        if self.pool_addresses.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let swap_signature = ICapricornCLPool::Swap::SIGNATURE_HASH;
 
         let filter = Filter::new()
@@ -93,6 +100,11 @@ impl DexIndexer {
         start_block: u64,
         batch_size: u64,
     ) -> Result<Vec<SwapEvent>> {
+        // Nothing to index, and avoid a needless `get_block_number` round-trip.
+        if self.pool_addresses.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut all_events = Vec::new();
         let mut current_block = start_block;
         let target_block = self.provider.get_block_number().await?;
@@ -116,5 +128,44 @@ impl DexIndexer {
     /// Get all pool addresses being monitored
     pub fn pool_addresses(&self) -> &[Address] {
         &self.pool_addresses
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An empty `pool_addresses` list must NOT produce a broad on-chain query.
+    ///
+    /// `Filter::address(vec![])` serializes to no address constraint (alloy's
+    /// `FilterSet::to_value_or_array` returns `None` for an empty set), so
+    /// `get_logs` would match every Capricorn CL `Swap` log in the range and
+    /// return unrelated pools' swaps as if they were ours. `pool_addresses`
+    /// can legitimately end up empty — `discover_pools_for_tokens` skips
+    /// tokens that have no DEX pool yet. Short-circuit before any RPC: the
+    /// provider points at an unreachable port, so a regressed guard would
+    /// fail the call instead of returning `Ok([])`.
+    #[tokio::test]
+    async fn fetch_events_empty_pools_returns_empty_without_querying() {
+        let indexer = DexIndexer::new("http://127.0.0.1:1".to_string(), Vec::new())
+            .expect("indexer construction");
+
+        let events = indexer
+            .fetch_events(0, 100)
+            .await
+            .expect("empty pools must short-circuit, not query the chain");
+        assert!(events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn fetch_all_events_empty_pools_returns_empty_without_querying() {
+        let indexer = DexIndexer::new("http://127.0.0.1:1".to_string(), Vec::new())
+            .expect("indexer construction");
+
+        let events = indexer
+            .fetch_all_events(0, 1000)
+            .await
+            .expect("empty pools must short-circuit, not query the chain");
+        assert!(events.is_empty());
     }
 }
