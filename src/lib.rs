@@ -90,8 +90,8 @@ pub mod types;
 /// internally by the public API but hidden from end users for simplicity.
 pub(crate) mod contracts;
 
-/// Token version discriminator used at API boundaries (`SaltParams.version`,
-/// `TokenInfo.version`) and for user-side v1/v2 dispatch.
+/// Token version discriminator (`SdkVersion`) and on-chain classification
+/// (`TokenInfo` = version + quote token) used for user-side v1/v2 dispatch.
 pub mod version;
 
 // Pool discovery is still useful for advanced users
@@ -105,7 +105,7 @@ pub use stream::{
 };
 pub use token::TokenHelper;
 pub use types::*;
-pub use version::SdkVersion;
+pub use version::{SdkVersion, TokenInfo};
 
 /// Convenient prelude module for importing commonly used types and functions
 ///
@@ -139,7 +139,7 @@ pub mod prelude {
     // Constants and types
     pub use crate::constants::{get_nadfun_router_v2, Network};
     pub use crate::types::*;
-    pub use crate::version::SdkVersion;
+    pub use crate::version::{SdkVersion, TokenInfo};
 
     // Creator reward claiming
     pub use crate::contracts::CreatorClient;

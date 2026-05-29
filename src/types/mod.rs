@@ -26,8 +26,8 @@ pub use v1::bonding_curve::{
 // trading params + router enum + transaction result + allowance
 pub use v1::trade::{
     AllowanceStatus, BuyParams, CurveState, ExactOutBuyParams, ExactOutSellParams,
-    ExactOutSellPermitParams, GasPricing, Router, SellParams, SellPermitParams, TokenInfo,
-    TokenMetadata, TransactionResult,
+    ExactOutSellPermitParams, GasPricing, Router, SellParams, SellPermitParams, TokenMetadata,
+    TransactionResult,
 };
 
 // token creation
