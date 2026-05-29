@@ -57,11 +57,6 @@
         "internalType": "struct INadFunRouter.BuyParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountIn",
             "type": "uint256",
             "internalType": "uint256"
@@ -70,6 +65,16 @@
             "name": "amountOutMin",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -98,14 +103,19 @@
         "internalType": "struct INadFunRouter.BuyWithNativeParams",
         "components": [
           {
+            "name": "amountOutMin",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "token",
             "type": "address",
             "internalType": "address"
           },
           {
-            "name": "amountOutMin",
-            "type": "uint256",
-            "internalType": "uint256"
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -134,11 +144,6 @@
         "internalType": "struct INadFunRouter.BuyWithPermitParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountIn",
             "type": "uint256",
             "internalType": "uint256"
@@ -147,6 +152,21 @@
             "name": "amountOutMin",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "amountAllowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -376,9 +396,9 @@
         "internalType": "struct INadFunRouter.ExactOutBuyParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
+            "name": "amountInMax",
+            "type": "uint256",
+            "internalType": "uint256"
           },
           {
             "name": "amountOut",
@@ -386,9 +406,14 @@
             "internalType": "uint256"
           },
           {
-            "name": "amountInMax",
-            "type": "uint256",
-            "internalType": "uint256"
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -417,14 +442,19 @@
         "internalType": "struct INadFunRouter.ExactOutBuyWithNativeParams",
         "components": [
           {
+            "name": "amountOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "token",
             "type": "address",
             "internalType": "address"
           },
           {
-            "name": "amountOut",
-            "type": "uint256",
-            "internalType": "uint256"
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -453,11 +483,6 @@
         "internalType": "struct INadFunRouter.ExactOutSellParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountInMax",
             "type": "uint256",
             "internalType": "uint256"
@@ -466,6 +491,16 @@
             "name": "amountOut",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -494,11 +529,6 @@
         "internalType": "struct INadFunRouter.ExactOutSellToNativeParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountInMax",
             "type": "uint256",
             "internalType": "uint256"
@@ -507,6 +537,16 @@
             "name": "amountOut",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -722,6 +762,11 @@
         "name": "wrappedNative_",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "lvMonMinter_",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -761,6 +806,19 @@
   },
   {
     "type": "function",
+    "name": "lvMonMinter",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "proxiableUUID",
     "inputs": [],
     "outputs": [
@@ -782,11 +840,6 @@
         "internalType": "struct INadFunRouter.SellParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountIn",
             "type": "uint256",
             "internalType": "uint256"
@@ -795,6 +848,16 @@
             "name": "amountOutMin",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -823,11 +886,6 @@
         "internalType": "struct INadFunRouter.SellToNativeParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountIn",
             "type": "uint256",
             "internalType": "uint256"
@@ -836,6 +894,16 @@
             "name": "amountOutMin",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -864,11 +932,6 @@
         "internalType": "struct INadFunRouter.SellToNativeWithPermitParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountIn",
             "type": "uint256",
             "internalType": "uint256"
@@ -877,6 +940,21 @@
             "name": "amountOutMin",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "amountAllowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -920,11 +998,6 @@
         "internalType": "struct INadFunRouter.SellWithPermitParams",
         "components": [
           {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
             "name": "amountIn",
             "type": "uint256",
             "internalType": "uint256"
@@ -933,6 +1006,21 @@
             "name": "amountOutMin",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "amountAllowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
           },
           {
             "name": "deadline",
@@ -1237,7 +1325,17 @@
   },
   {
     "type": "error",
+    "name": "InsufficientNativeQuoteMinted",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InsufficientOutput",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAllowance",
     "inputs": []
   },
   {
@@ -1257,7 +1355,17 @@
   },
   {
     "type": "error",
+    "name": "InvalidLvMonMinter",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidNativeQuoteToken",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRecipient",
     "inputs": []
   },
   {
@@ -1311,5 +1419,10 @@
         "internalType": "bytes32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "UnexpectedNative",
+    "inputs": []
   }
 ]

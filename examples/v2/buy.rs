@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
     let deadline = U256::from(9_999_999_999_u64);
     let params = V2BuyWithNativeParams {
         token,
+        to: wallet,
         amount_out_min: min_out,
         deadline,
         value: mon_amount,

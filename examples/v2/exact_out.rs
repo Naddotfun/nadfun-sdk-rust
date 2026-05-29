@@ -36,6 +36,7 @@ async fn main() -> Result<()> {
     let tx_hash = core
         .exact_out_buy_with_native_v2(V2ExactOutBuyWithNativeParams {
             token,
+            to: core.wallet_address(),
             amount_out,
             amount_in_max: max_in,
             deadline: U256::from(9_999_999_999_u64),
