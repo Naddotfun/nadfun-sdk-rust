@@ -95,7 +95,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             name: params.name,
             symbol: params.symbol,
             tokenURI: params.token_uri,
-            quoteToken: Address::ZERO,
+            quoteToken: params.quote_token,
             creatorFeeRate: params.creator_fee_rate,
             vaults: params
                 .vaults
@@ -439,7 +439,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
                     name: p.name,
                     symbol: p.symbol,
                     tokenURI: p.token_uri,
-                    quoteToken: Address::ZERO,
+                    quoteToken: p.quote_token,
                     creatorFeeRate: p.creator_fee_rate,
                     vaults: map_vaults(p.vaults),
                     salt: p.salt,

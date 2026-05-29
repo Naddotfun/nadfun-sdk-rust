@@ -82,6 +82,11 @@ pub struct V2CreateWithNativeParams {
     pub name: String,
     pub symbol: String,
     pub token_uri: String,
+    /// Quote token for the new token. Native funding only supports the
+    /// wrapped native (WMON) or LvMON (minted from native); any other value
+    /// reverts on-chain with `InvalidNativeQuoteToken`.
+    /// `Core::create_token_v2` fills this with WMON automatically.
+    pub quote_token: Address,
     pub creator_fee_rate: u16,
     pub vaults: Vec<V2VaultAllocation>,
     pub salt: B256,
