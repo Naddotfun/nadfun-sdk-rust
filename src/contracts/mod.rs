@@ -11,7 +11,9 @@ pub use v1::{
     get_pool_addresses_for_tokens, BondingCurveRouter, CreatorClient, DexRouter, Lens,
     PoolDiscovery,
 };
-pub use v2::{BondingCurveV2, NadFunFactory, NadFunRouter, TokenInfoLens, TokenRegistryV2};
+pub use v2::{
+    BondingCurveV2, NadFunFactory, NadFunRouter, ProtocolManagerV2, TokenInfoLens, TokenRegistryV2,
+};
 // Lower-visibility helpers — still reachable for advanced callers via
 // `nadfun_sdk::contracts::v2::*` but not surfaced at the top-level path.
 #[allow(unused_imports)]

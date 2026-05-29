@@ -18,7 +18,7 @@ use crate::{
     constants::*,
     contracts::{
         BondingCurveRouter, BondingCurveV2, CreatorClient, DexRouter, Lens, NadFunFactory,
-        NadFunRouter, TokenInfoLens, TokenRegistryV2,
+        NadFunRouter, ProtocolManagerV2, TokenInfoLens, TokenRegistryV2,
     },
     core::v1::gas::{estimate_gas, GasEstimationParams},
     types::{v2::events::IBondingCurveV2Events, *},
@@ -70,6 +70,7 @@ struct V2Contracts {
     bonding_curve: BondingCurveV2<DynProvider>,
     token_registry: TokenRegistryV2<DynProvider>,
     token_info_lens: TokenInfoLens<DynProvider>,
+    protocol_manager: ProtocolManagerV2<DynProvider>,
 }
 
 impl Core {
@@ -453,18 +454,28 @@ impl Core {
 
         let tx_hash = match params.payment {
             V2CreatePayment::Native => {
+                // Native create funds a WMON-quoted token: the on-chain
+                // `createWithNative` requires `quoteToken == wrappedNative`
+                // and `msg.value >= deployFee(quoteToken) + buyQuoteAmount`.
+                // Resolve both so the caller doesn't have to.
+                let quote_token: Address = get_wmon(self.network)
+                    .parse()
+                    .with_context(|| format!("invalid WMON address for {:?}", self.network))?;
+                let deploy_fee = v2.protocol_manager.deploy_fee(quote_token).await?;
+                let native_value = deploy_fee + params.buy_quote_amount;
                 let on_chain = V2CreateWithNativeParams {
                     name: on_chain_name,
                     symbol: on_chain_symbol,
                     token_uri: prepared.metadata_uri.clone(),
+                    quote_token,
                     creator_fee_rate: params.creator_fee_rate,
                     vaults: params.vaults.clone(),
                     salt: prepared.salt,
                     dex_type: params.dex_type,
                     buy_quote_amount: params.buy_quote_amount,
-                    // msg.value is always equal to buy_quote_amount for
-                    // native payments — no separate knob (Codex P1 #4).
-                    native_value: params.buy_quote_amount,
+                    // msg.value = deployFee + buyQuoteAmount (drawn from
+                    // buy_quote_amount; the deploy fee is added on top).
+                    native_value,
                     deadline: params.deadline,
                     gas_limit: params.gas_limit,
                     gas_price: params.gas_price.clone(),
@@ -713,6 +724,14 @@ impl Core {
         self.v2.router.wrapped_native().await
     }
 
+    /// One-time v2 deploy fee for creating a token quoted in `quote_token`
+    /// (denominated in the quote token). The on-chain create requires
+    /// `msg.value >= deploy_fee + buy_quote_amount` for native funding;
+    /// `create_token_v2` adds it automatically.
+    pub async fn deploy_fee_v2(&self, quote_token: Address) -> Result<U256> {
+        self.v2.protocol_manager.deploy_fee(quote_token).await
+    }
+
     /// Estimate gas for any v2 trade or create op. Uses
     /// `self.wallet_address` as the `from` so allowance / balance checks
     /// succeed. Errors when `self.wallet_address` is `Address::ZERO`
@@ -837,12 +856,20 @@ fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V
         .with_context(|| format!("invalid TokenInfoLens address {lens_s:?} for {network:?}"))?;
     let token_info_lens = TokenInfoLens::new(lens_addr, provider.clone());
 
+    let pm_s = get_protocol_manager_v2(network)
+        .ok_or_else(|| anyhow::anyhow!("ProtocolManager v2 not configured for {network:?}"))?;
+    let pm_addr: Address = pm_s
+        .parse()
+        .with_context(|| format!("invalid ProtocolManager address {pm_s:?} for {network:?}"))?;
+    let protocol_manager = ProtocolManagerV2::new(pm_addr, provider.clone());
+
     Ok(V2Contracts {
         router: NadFunRouter::new(router_addr, provider.clone()),
         factory: NadFunFactory::new(factory_addr, provider.clone()),
         bonding_curve: BondingCurveV2::new(bc_addr, provider.clone()),
         token_registry: TokenRegistryV2::new(reg_addr, provider.clone()),
         token_info_lens,
+        protocol_manager,
     })
 }
 
