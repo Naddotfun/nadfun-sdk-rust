@@ -20,6 +20,7 @@ const SAMPLE_QUOTE: Address = Address::ZERO;
 fn sample_buy_params() -> V2BuyParams {
     V2BuyParams {
         token: SAMPLE_TOKEN,
+        to: SAMPLE_TOKEN,
         amount_in: U256::from(100u64),
         amount_out_min: U256::from(1u64),
         deadline: U256::from(1_900_000_000u64),
@@ -39,6 +40,7 @@ fn v2_params_construct_and_field_access() {
 
     let native = V2BuyWithNativeParams {
         token: SAMPLE_TOKEN,
+        to: SAMPLE_TOKEN,
         amount_out_min: U256::from(1u64),
         deadline: U256::from(1_900_000_000u64),
         value: U256::from(100u64),
@@ -51,8 +53,10 @@ fn v2_params_construct_and_field_access() {
 
     let permit = V2BuyWithPermitParams {
         token: SAMPLE_TOKEN,
+        to: SAMPLE_TOKEN,
         amount_in: U256::from(100u64),
         amount_out_min: U256::from(1u64),
+        amount_allowance: U256::from(100u64),
         deadline: U256::from(1_900_000_000u64),
         permit: V2PermitParams {
             v: 27,
@@ -124,6 +128,7 @@ fn v2_gas_estimation_params_enum_constructs_each_variant() {
     let _ = V2GasEstimationParams::Buy(sample_buy_params());
     let _ = V2GasEstimationParams::BuyWithNative(V2BuyWithNativeParams {
         token: SAMPLE_TOKEN,
+        to: SAMPLE_TOKEN,
         amount_out_min: U256::from(1u64),
         deadline: U256::from(1_900_000_000u64),
         value: U256::from(1u64),
@@ -133,6 +138,7 @@ fn v2_gas_estimation_params_enum_constructs_each_variant() {
     });
     let _ = V2GasEstimationParams::Sell(V2SellParams {
         token: SAMPLE_TOKEN,
+        to: SAMPLE_TOKEN,
         amount_in: U256::from(1u64),
         amount_out_min: U256::from(1u64),
         deadline: U256::from(1_900_000_000u64),
@@ -142,6 +148,7 @@ fn v2_gas_estimation_params_enum_constructs_each_variant() {
     });
     let _ = V2GasEstimationParams::ExactOutBuy(V2ExactOutBuyParams {
         token: SAMPLE_TOKEN,
+        to: SAMPLE_TOKEN,
         amount_out: U256::from(1u64),
         amount_in_max: U256::from(1u64),
         deadline: U256::from(1_900_000_000u64),
@@ -163,6 +170,7 @@ async fn _core_v2_methods_compile(c: &Core) {
     let _: Result<B256, _> = c
         .buy_with_native_v2(V2BuyWithNativeParams {
             token,
+            to: token,
             amount_out_min: amount,
             deadline: amount,
             value: amount,
@@ -174,8 +182,10 @@ async fn _core_v2_methods_compile(c: &Core) {
     let _: Result<B256, _> = c
         .buy_with_permit_v2(V2BuyWithPermitParams {
             token,
+            to: token,
             amount_in: amount,
             amount_out_min: amount,
+            amount_allowance: amount,
             deadline: amount,
             permit: V2PermitParams {
                 v: 27,
@@ -190,6 +200,7 @@ async fn _core_v2_methods_compile(c: &Core) {
     let _: Result<B256, _> = c
         .sell_v2(V2SellParams {
             token,
+            to: token,
             amount_in: amount,
             amount_out_min: amount,
             deadline: amount,

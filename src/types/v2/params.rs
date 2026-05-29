@@ -102,6 +102,8 @@ pub struct V2CreateWithNativeParams {
 #[derive(Debug, Clone)]
 pub struct V2BuyParams {
     pub token: Address,
+    /// Recipient of the bought tokens.
+    pub to: Address,
     pub amount_in: U256,
     pub amount_out_min: U256,
     pub deadline: U256,
@@ -113,6 +115,8 @@ pub struct V2BuyParams {
 #[derive(Debug, Clone)]
 pub struct V2BuyWithNativeParams {
     pub token: Address,
+    /// Recipient of the bought tokens.
+    pub to: Address,
     pub amount_out_min: U256,
     pub deadline: U256,
     /// Native MON sent with the call (`msg.value`). Must equal the
@@ -128,6 +132,8 @@ pub struct V2BuyWithNativeParams {
 #[derive(Debug, Clone)]
 pub struct V2SellParams {
     pub token: Address,
+    /// Recipient of the proceeds (quote token, or native for `*_to_native`).
+    pub to: Address,
     pub amount_in: U256,
     pub amount_out_min: U256,
     pub deadline: U256,
@@ -146,8 +152,12 @@ pub struct V2PermitParams {
 #[derive(Debug, Clone)]
 pub struct V2BuyWithPermitParams {
     pub token: Address,
+    /// Recipient of the bought tokens.
+    pub to: Address,
     pub amount_in: U256,
     pub amount_out_min: U256,
+    /// Permit allowance authorized to the router (≥ `amount_in`).
+    pub amount_allowance: U256,
     pub deadline: U256,
     pub permit: V2PermitParams,
     pub gas_limit: Option<u64>,
@@ -158,8 +168,12 @@ pub struct V2BuyWithPermitParams {
 #[derive(Debug, Clone)]
 pub struct V2SellWithPermitParams {
     pub token: Address,
+    /// Recipient of the proceeds (quote token, or native for `*_to_native`).
+    pub to: Address,
     pub amount_in: U256,
     pub amount_out_min: U256,
+    /// Permit allowance authorized to the router (≥ `amount_in`).
+    pub amount_allowance: U256,
     pub deadline: U256,
     pub permit: V2PermitParams,
     pub gas_limit: Option<u64>,
@@ -170,6 +184,8 @@ pub struct V2SellWithPermitParams {
 #[derive(Debug, Clone)]
 pub struct V2ExactOutBuyParams {
     pub token: Address,
+    /// Recipient of the bought tokens.
+    pub to: Address,
     pub amount_out: U256,
     pub amount_in_max: U256,
     pub deadline: U256,
@@ -181,6 +197,8 @@ pub struct V2ExactOutBuyParams {
 #[derive(Debug, Clone)]
 pub struct V2ExactOutBuyWithNativeParams {
     pub token: Address,
+    /// Recipient of the bought tokens.
+    pub to: Address,
     pub amount_out: U256,
     pub amount_in_max: U256,
     pub deadline: U256,
@@ -192,6 +210,8 @@ pub struct V2ExactOutBuyWithNativeParams {
 #[derive(Debug, Clone)]
 pub struct V2ExactOutSellParams {
     pub token: Address,
+    /// Recipient of the proceeds (quote token, or native for `*_to_native`).
+    pub to: Address,
     pub amount_in_max: U256,
     pub amount_out: U256,
     pub deadline: U256,

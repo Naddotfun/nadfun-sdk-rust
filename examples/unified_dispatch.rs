@@ -64,11 +64,10 @@ async fn auto_buy(
             let wrapped_native = core.wrapped_native_v2().await?;
 
             if info.quote_token == wrapped_native {
-                // Native path: send `value` MON, the router wraps it. Recipient
-                // is inferred from msg.sender.
-                let _ = to;
+                // Native path: send `value` MON, the router wraps it.
                 core.buy_with_native_v2(V2BuyWithNativeParams {
                     token,
+                    to,
                     amount_out_min: min_out,
                     deadline,
                     value,
@@ -83,6 +82,7 @@ async fn auto_buy(
                 // case that mints from native on buy — see MIGRATION.md §7.)
                 core.buy_v2(V2BuyParams {
                     token,
+                    to,
                     amount_in: value,
                     amount_out_min: min_out,
                     deadline,

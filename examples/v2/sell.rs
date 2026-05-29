@@ -39,6 +39,7 @@ async fn main() -> Result<()> {
     let tx_hash = core
         .sell_to_native_v2(V2SellToNativeParams {
             token,
+            to: core.wallet_address(),
             amount_in,
             amount_out_min: min_out,
             deadline: U256::from(9_999_999_999_u64),

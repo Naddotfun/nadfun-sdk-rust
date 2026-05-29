@@ -124,6 +124,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::BuyParams {
             token: params.token,
+            to: params.to,
             amountIn: params.amount_in,
             amountOutMin: params.amount_out_min,
             deadline: params.deadline,
@@ -139,6 +140,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::BuyWithNativeParams {
             token: params.token,
+            to: params.to,
             amountOutMin: params.amount_out_min,
             deadline: params.deadline,
         };
@@ -153,8 +155,10 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::BuyWithPermitParams {
             token: params.token,
+            to: params.to,
             amountIn: params.amount_in,
             amountOutMin: params.amount_out_min,
+            amountAllowance: params.amount_allowance,
             deadline: params.deadline,
             v: params.permit.v,
             r: params.permit.r,
@@ -171,6 +175,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::SellParams {
             token: params.token,
+            to: params.to,
             amountIn: params.amount_in,
             amountOutMin: params.amount_out_min,
             deadline: params.deadline,
@@ -186,6 +191,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::SellToNativeParams {
             token: params.token,
+            to: params.to,
             amountIn: params.amount_in,
             amountOutMin: params.amount_out_min,
             deadline: params.deadline,
@@ -201,8 +207,10 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::SellWithPermitParams {
             token: params.token,
+            to: params.to,
             amountIn: params.amount_in,
             amountOutMin: params.amount_out_min,
+            amountAllowance: params.amount_allowance,
             deadline: params.deadline,
             v: params.permit.v,
             r: params.permit.r,
@@ -222,8 +230,10 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::SellToNativeWithPermitParams {
             token: params.token,
+            to: params.to,
             amountIn: params.amount_in,
             amountOutMin: params.amount_out_min,
+            amountAllowance: params.amount_allowance,
             deadline: params.deadline,
             v: params.permit.v,
             r: params.permit.r,
@@ -240,6 +250,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::ExactOutBuyParams {
             token: params.token,
+            to: params.to,
             amountOut: params.amount_out,
             amountInMax: params.amount_in_max,
             deadline: params.deadline,
@@ -258,6 +269,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::ExactOutBuyWithNativeParams {
             token: params.token,
+            to: params.to,
             amountOut: params.amount_out,
             deadline: params.deadline,
         };
@@ -274,6 +286,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::ExactOutSellParams {
             token: params.token,
+            to: params.to,
             amountInMax: params.amount_in_max,
             amountOut: params.amount_out,
             deadline: params.deadline,
@@ -292,6 +305,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let router_params = INadFunRouter::ExactOutSellToNativeParams {
             token: params.token,
+            to: params.to,
             amountInMax: params.amount_in_max,
             amountOut: params.amount_out,
             deadline: params.deadline,
@@ -457,6 +471,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::Buy(p) => {
                 let rp = INadFunRouter::BuyParams {
                     token: p.token,
+                    to: p.to,
                     amountIn: p.amount_in,
                     amountOutMin: p.amount_out_min,
                     deadline: p.deadline,
@@ -466,6 +481,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::BuyWithNative(params) => {
                 let rp = INadFunRouter::BuyWithNativeParams {
                     token: params.token,
+                    to: params.to,
                     amountOutMin: params.amount_out_min,
                     deadline: params.deadline,
                 };
@@ -479,8 +495,10 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::BuyWithPermit(p) => {
                 let rp = INadFunRouter::BuyWithPermitParams {
                     token: p.token,
+                    to: p.to,
                     amountIn: p.amount_in,
                     amountOutMin: p.amount_out_min,
+                    amountAllowance: p.amount_allowance,
                     deadline: p.deadline,
                     v: p.permit.v,
                     r: p.permit.r,
@@ -491,6 +509,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::Sell(p) => {
                 let rp = INadFunRouter::SellParams {
                     token: p.token,
+                    to: p.to,
                     amountIn: p.amount_in,
                     amountOutMin: p.amount_out_min,
                     deadline: p.deadline,
@@ -500,6 +519,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::SellToNative(p) => {
                 let rp = INadFunRouter::SellToNativeParams {
                     token: p.token,
+                    to: p.to,
                     amountIn: p.amount_in,
                     amountOutMin: p.amount_out_min,
                     deadline: p.deadline,
@@ -509,8 +529,10 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::SellWithPermit(p) => {
                 let rp = INadFunRouter::SellWithPermitParams {
                     token: p.token,
+                    to: p.to,
                     amountIn: p.amount_in,
                     amountOutMin: p.amount_out_min,
+                    amountAllowance: p.amount_allowance,
                     deadline: p.deadline,
                     v: p.permit.v,
                     r: p.permit.r,
@@ -525,8 +547,10 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::SellToNativeWithPermit(p) => {
                 let rp = INadFunRouter::SellToNativeWithPermitParams {
                     token: p.token,
+                    to: p.to,
                     amountIn: p.amount_in,
                     amountOutMin: p.amount_out_min,
+                    amountAllowance: p.amount_allowance,
                     deadline: p.deadline,
                     v: p.permit.v,
                     r: p.permit.r,
@@ -541,6 +565,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::ExactOutBuy(p) => {
                 let rp = INadFunRouter::ExactOutBuyParams {
                     token: p.token,
+                    to: p.to,
                     amountOut: p.amount_out,
                     amountInMax: p.amount_in_max,
                     deadline: p.deadline,
@@ -550,6 +575,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::ExactOutBuyWithNative(p) => {
                 let rp = INadFunRouter::ExactOutBuyWithNativeParams {
                     token: p.token,
+                    to: p.to,
                     amountOut: p.amount_out,
                     deadline: p.deadline,
                 };
@@ -563,6 +589,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::ExactOutSell(p) => {
                 let rp = INadFunRouter::ExactOutSellParams {
                     token: p.token,
+                    to: p.to,
                     amountInMax: p.amount_in_max,
                     amountOut: p.amount_out,
                     deadline: p.deadline,
@@ -572,6 +599,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             V2GasEstimationParams::ExactOutSellToNative(p) => {
                 let rp = INadFunRouter::ExactOutSellToNativeParams {
                     token: p.token,
+                    to: p.to,
                     amountInMax: p.amount_in_max,
                     amountOut: p.amount_out,
                     deadline: p.deadline,

@@ -39,6 +39,7 @@ async fn main() -> Result<()> {
     let tx_hash = core
         .buy_v2(V2BuyParams {
             token,
+            to: core.wallet_address(),
             amount_in,
             amount_out_min: min_out,
             deadline: U256::from(9_999_999_999_u64),
