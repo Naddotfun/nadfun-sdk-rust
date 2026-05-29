@@ -95,20 +95,20 @@ impl<P: Provider + Clone> NadFunSwapIndexer<P> {
 mod tests {
     use super::*;
     use alloy::providers::ProviderBuilder;
+    use alloy::transports::mock::Asserter;
 
     /// An empty `pairs` list must NOT produce a broad on-chain query.
     ///
     /// `Filter::address(vec![])` is a no-op address filter on many RPC
     /// providers, so `get_logs` would scan every `Swap` log in the range and
     /// return unrelated pools' swaps. The indexer must short-circuit to an
-    /// empty result before touching the network. The provider here points at
-    /// an unreachable port: if the guard regressed, `get_logs` would attempt
-    /// the connection and the call would fail instead of returning `Ok([])`.
+    /// empty result before touching the network. The provider is a mock
+    /// transport with no queued responses: if the guard regressed, the
+    /// `get_logs` request would have no mocked reply and the call would error
+    /// instead of returning `Ok([])`.
     #[tokio::test]
     async fn fetch_events_empty_pairs_returns_empty_without_querying() {
-        let provider = Arc::new(
-            ProviderBuilder::new().connect_http("http://127.0.0.1:1".parse().expect("valid url")),
-        );
+        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(Asserter::new()));
         let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
 
         let events = indexer
@@ -120,9 +120,7 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_all_events_empty_pairs_returns_empty_without_querying() {
-        let provider = Arc::new(
-            ProviderBuilder::new().connect_http("http://127.0.0.1:1".parse().expect("valid url")),
-        );
+        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(Asserter::new()));
         let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
 
         let events = indexer
