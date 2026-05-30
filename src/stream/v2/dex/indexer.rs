@@ -36,13 +36,6 @@ impl<P: Provider + Clone> NadFunSwapIndexer<P> {
         from_block: u64,
         to_block: u64,
     ) -> Result<Vec<NadFunSwapEvent>> {
-        // An empty address filter is a no-op on many RPC providers, so it
-        // would scan every `Swap` log in the range and return unrelated
-        // pools' events. No pairs means nothing to index — short-circuit.
-        if self.pairs.is_empty() {
-            return Ok(Vec::new());
-        }
-
         let filter = Filter::new()
             .from_block(from_block)
             .to_block(to_block)
@@ -65,11 +58,6 @@ impl<P: Provider + Clone> NadFunSwapIndexer<P> {
         start_block: u64,
         batch_size: u64,
     ) -> Result<Vec<NadFunSwapEvent>> {
-        // Nothing to index, and avoid a needless `get_block_number` round-trip.
-        if self.pairs.is_empty() {
-            return Ok(Vec::new());
-        }
-
         let mut all_events = Vec::new();
         let mut current_block = start_block;
         let target_block = self.provider.get_block_number().await?;
@@ -94,39 +82,90 @@ impl<P: Provider + Clone> NadFunSwapIndexer<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::primitives::{address, Bytes, LogData, B256, U256, U64};
     use alloy::providers::ProviderBuilder;
+    use alloy::sol_types::SolValue;
     use alloy::transports::mock::Asserter;
 
-    /// An empty `pairs` list must NOT produce a broad on-chain query.
-    ///
-    /// `Filter::address(vec![])` is a no-op address filter on many RPC
-    /// providers, so `get_logs` would scan every `Swap` log in the range and
-    /// return unrelated pools' swaps. The indexer must short-circuit to an
-    /// empty result before touching the network. The provider is a mock
-    /// transport with no queued responses: if the guard regressed, the
-    /// `get_logs` request would have no mocked reply and the call would error
-    /// instead of returning `Ok([])`.
+    /// Pad a 20-byte address into a 32-byte indexed-topic value.
+    fn addr_topic(addr: Address) -> B256 {
+        let mut t = [0u8; 32];
+        t[12..].copy_from_slice(addr.as_slice());
+        B256::from(t)
+    }
+
+    /// Build a synthetic NadFunPair `Swap` RPC log at `pair`/`block`/`log_index`.
+    fn swap_log(pair: Address, block: u64, log_index: u64) -> alloy::rpc::types::Log {
+        // Non-indexed data: amount0In, amount1In, amount0Out, amount1Out.
+        let data: Bytes = (
+            U256::from(1u64),
+            U256::from(0u64),
+            U256::from(0u64),
+            U256::from(2u64),
+        )
+            .abi_encode_params()
+            .into();
+        // Indexed topics: [sig, sender, to].
+        let topics = vec![
+            nadfun_swap_signature(),
+            addr_topic(Address::ZERO),
+            addr_topic(Address::ZERO),
+        ];
+        let inner = alloy::primitives::Log {
+            address: pair,
+            data: LogData::new_unchecked(topics, data),
+        };
+        alloy::rpc::types::Log {
+            inner,
+            block_hash: None,
+            block_number: Some(block),
+            block_timestamp: None,
+            transaction_hash: Some(B256::ZERO),
+            transaction_index: Some(0),
+            log_index: Some(log_index),
+            removed: false,
+        }
+    }
+
+    /// Empty `pairs` means "no address filter" — matching v1 `DexIndexer`, the
+    /// indexer must fetch EVERY NadFunPair `Swap` in the range rather than
+    /// short-circuit. Owner decision (2026-05-30): v1/v2 empty-filter behavior
+    /// is unified — empty input = receive all swaps. The mock has two swaps
+    /// queued from different pairs; both must come back.
     #[tokio::test]
-    async fn fetch_events_empty_pairs_returns_empty_without_querying() {
-        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(Asserter::new()));
+    async fn fetch_events_empty_pairs_fetches_all_swaps() {
+        let asserter = Asserter::new();
+        let logs = vec![
+            swap_log(address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 10, 0),
+            swap_log(address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 11, 1),
+        ];
+        asserter.push_success(&logs);
+        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
         let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
 
         let events = indexer
             .fetch_events(0, 100)
             .await
-            .expect("empty pairs must short-circuit, not query the chain");
-        assert!(events.is_empty());
+            .expect("empty pairs must query the chain, not short-circuit");
+        assert_eq!(events.len(), 2, "empty pairs must return ALL swaps in range");
     }
 
     #[tokio::test]
-    async fn fetch_all_events_empty_pairs_returns_empty_without_querying() {
-        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(Asserter::new()));
+    async fn fetch_all_events_empty_pairs_fetches_all_swaps() {
+        let asserter = Asserter::new();
+        asserter.push_success(&U64::from(100u64)); // eth_blockNumber
+        asserter.push_success(&vec![swap_log(
+            address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            10,
+            0,
+        )]); // eth_getLogs(0..=100)
+        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
         let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
 
         let events = indexer
             .fetch_all_events(0, 1000)
             .await
-            .expect("empty pairs must short-circuit, not query the chain");
-        assert!(events.is_empty());
+            .expect("empty pairs must walk the range, not short-circuit");
+        assert_eq!(events.len(), 1, "empty pairs must return all swaps");
     }
 }
