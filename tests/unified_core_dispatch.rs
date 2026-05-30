@@ -116,3 +116,22 @@ async fn detect_version_classifies_via_lens() {
         assert_eq!(core.detect_version(token).await.unwrap(), info.version);
     }
 }
+
+/// Surface check — the v1 namespace handle exposes the v1 query/escape surface.
+#[allow(dead_code, unreachable_code, unused_variables)]
+async fn _core_v1_methods_compile(c: &nadfun_sdk::Core) {
+    use alloy::primitives::{Address, U256};
+    let t = Address::ZERO;
+    let a = U256::ZERO;
+    let _: anyhow::Result<(nadfun_sdk::Router, U256)> = c.v1().get_amount_out(t, a, true).await;
+    let _: anyhow::Result<(nadfun_sdk::Router, U256)> = c.v1().get_amount_in(t, a, true).await;
+    let _: anyhow::Result<(U256, U256)> = c.v1().available_buy_tokens(t).await;
+    let _: anyhow::Result<bool> = c.v1().is_locked(t).await;
+    let _: anyhow::Result<bool> = c.v1().is_graduated(t).await;
+    let _: anyhow::Result<U256> = c.v1().get_initial_buy_amount_out(a).await;
+    let _: anyhow::Result<U256> = c.v1().get_deploy_fee().await;
+    let _: anyhow::Result<U256> = c.v1().get_progress(t).await;
+    let _bcr = c.v1().bonding_curve_router();
+    let _dxr = c.v1().dex_router();
+    let _lens = c.v1().lens();
+}
