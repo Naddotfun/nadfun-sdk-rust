@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **v2 DEX streaming/indexing now mirrors v1 on empty input.**
+  `NadFunSwapIndexer` (`fetch_events` / `fetch_all_events`) and
+  `NadFunSwapStream::new` no longer short-circuit or reject an empty `pairs`
+  list. As with v1 `DexIndexer` / `DexStream`, an empty list means "no address
+  filter" and receives every NadFunPair `Swap` in scope. Signatures are
+  unchanged; `NadFunSwapStream::new` no longer returns the "at least one pair
+  address is required" error.
+
 ## [0.4.0] - 2026-05-28
 
 ### Added — unified `Core` (v1 + v2 from one instance) + v2 contract support
