@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** `Core` trading methods moved behind namespace handles
+  `core.v1()` / `core.v2()`. The flat `Core::buy`, `Core::get_amount_out`, …
+  and all `*_v2` methods are removed; call `core.v1().buy(...)` /
+  `core.v2().buy(...)` instead (the `_v2` suffix is dropped). Cross-version
+  methods (`detect_version`, `detect_token_info`, `get_receipt`) stay on `Core`.
+  New `CoreV1` / `CoreV2` handle types are re-exported from the crate root and
+  prelude.
+
 - **v2 DEX streaming/indexing now mirrors v1 on empty input.**
   `NadFunSwapIndexer` (`fetch_events` / `fetch_all_events`) and
   `NadFunSwapStream::new` no longer short-circuit or reject an empty `pairs`

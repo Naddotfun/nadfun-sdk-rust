@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     // Get quote with auto-routing (bonding curve or DEX)
     let token: Address = "0x...".parse()?;
     let mon_amount = parse_ether("0.1")?;
-    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+    let (router, expected_tokens) = core.v1().get_amount_out(token, mon_amount, true).await?;
 
     // Apply slippage (5%)
     let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
         nonce: None,
     };
 
-    let tx_hash = core.buy(buy_params, router).await?;
+    let tx_hash = core.v1().buy(buy_params, router).await?;
     println!("TX: {}", tx_hash);
 
     // Optionally wait for confirmation
@@ -107,27 +107,27 @@ let router_v2 = get_nadfun_router_v2(Network::Testnet).expect("v2 deployed");
 
 | Function | Description |
 |----------|-------------|
-| `core.buy(params, router)` | Buy tokens, returns tx_hash immediately |
-| `core.sell(params, router)` | Sell tokens with approval |
-| `core.sell_permit(params, router)` | Gasless sell with EIP-2612 permit |
-| `core.get_amount_out(token, amount, is_buy)` | Get quote with auto-routing |
-| `core.get_amount_in(token, amount, is_buy)` | Get required input with auto-routing |
+| `core.v1().buy(params, router)` | Buy tokens, returns tx_hash immediately |
+| `core.v1().sell(params, router)` | Sell tokens with approval |
+| `core.v1().sell_permit(params, router)` | Gasless sell with EIP-2612 permit |
+| `core.v1().get_amount_out(token, amount, is_buy)` | Get quote with auto-routing |
+| `core.v1().get_amount_in(token, amount, is_buy)` | Get required input with auto-routing |
 
 ### Lens Utility Functions
 
 ```rust
 // Check token status
-let is_graduated = core.is_graduated(token).await?;
-let is_locked = core.is_locked(token).await?;
+let is_graduated = core.v1().is_graduated(token).await?;
+let is_locked = core.v1().is_locked(token).await?;
 
 // Get curve progress (0-10000 = 0-100%)
-let progress = core.get_progress(token).await?;
+let progress = core.v1().get_progress(token).await?;
 
 // Get available buy tokens and required MON
-let (available_tokens, required_mon) = core.available_buy_tokens(token).await?;
+let (available_tokens, required_mon) = core.v1().available_buy_tokens(token).await?;
 
 // Get initial buy amount for token creation
-let amount_out = core.get_initial_buy_amount_out(mon_amount).await?;
+let amount_out = core.v1().get_initial_buy_amount_out(mon_amount).await?;
 ```
 
 ### Example: Buy with Gas Estimation
@@ -136,7 +136,7 @@ let amount_out = core.get_initial_buy_amount_out(mon_amount).await?;
 use nadfun_sdk::{Core, GasEstimationParams, BuyParams};
 
 // 1. Get quote
-let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+let (router, expected_tokens) = core.v1().get_amount_out(token, mon_amount, true).await?;
 let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
 // 2. Estimate gas
@@ -147,11 +147,11 @@ let gas_params = GasEstimationParams::Buy {
     to: core.wallet_address(),
     deadline: U256::from(9999999999999999u64),
 };
-let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
 
 // 3. Execute
-let tx_hash = core.buy(BuyParams {
+let tx_hash = core.v1().buy(BuyParams {
     token,
     amount_in: mon_amount,
     amount_out_min: min_tokens,
@@ -196,7 +196,7 @@ let params = SellPermitParams {
     nonce: None,
 };
 
-let tx_hash = core.sell_permit(params, router).await?;
+let tx_hash = core.v1().sell_permit(params, router).await?;
 ```
 
 ## Gas Pricing Options
@@ -237,12 +237,12 @@ let params = CreateTokenParams {
     twitter: Some("https://x.com/mytoken".to_string()),
     telegram: Some("https://t.me/mytoken".to_string()),
     creator_address: core.wallet_address(),
-    amount_out: core.get_initial_buy_amount_out(initial_buy_mon).await?,
+    amount_out: core.v1().get_initial_buy_amount_out(initial_buy_mon).await?,
     value: initial_buy_mon,
     action_id: ActionId::CapricornActor, // or ActionId::AmplifyActor
 };
 
-let result = core.create_token(params, &api).await?;
+let result = core.v1().create_token(params, &api).await?;
 println!("Token: {}", result.token_address);
 println!("Metadata URI: {}", result.metadata_uri);
 println!("Is NSFW: {}", result.is_nsfw);
@@ -261,14 +261,14 @@ let response = api.get_created_tokens(creator_address, 1, 10).await?;
 // Claim single token reward
 for token in &response.tokens {
     if let Some(params) = ApiClient::build_claim_params(token) {
-        let tx_hash = core.claim_creator_reward(params).await?;
+        let tx_hash = core.v1().claim_creator_reward(params).await?;
         println!("Claimed: {}", tx_hash);
     }
 }
 
 // Or batch claim multiple tokens
 if let Some(batch_params) = ApiClient::build_batch_claim_params(&response.tokens) {
-    let tx_hash = core.claim_creator_rewards_batch(batch_params).await?;
+    let tx_hash = core.v1().claim_creator_rewards_batch(batch_params).await?;
     println!("Batch claimed: {}", tx_hash);
 }
 ```
@@ -577,8 +577,8 @@ Two ways to find out whether a token is v1 or v2:
 // (a) On-chain (preferred): TokenInfoLens, one RPC for v1/v2/None.
 //     Stateless — each call hits the chain; cache the result yourself.
 match core.detect_version(token).await? {
-    SdkVersion::V1 => /* call core.buy(...) */,
-    SdkVersion::V2 => /* call core.buy_v2(...) */,
+    SdkVersion::V1 => /* call core.v1().buy(...) */,
+    SdkVersion::V2 => /* call core.v2().buy(...) */,
     SdkVersion::None => /* not a Nad.fun token — refuse */,
 }
 
@@ -602,11 +602,11 @@ use alloy::primitives::utils::parse_ether;
 let core = Core::new(rpc, private_key, Network::Mainnet).await?;
 
 // Auto-routed v2 quote (bonding curve pre-graduation, DEX post-graduation)
-let expected = core.get_amount_out_v2(token, parse_ether("0.1")?, /*is_buy*/ true).await?;
+let expected = core.v2().get_amount_out(token, parse_ether("0.1")?, /*is_buy*/ true).await?;
 let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
 // Buy with native MON
-let tx = core.buy_with_native_v2(V2BuyWithNativeParams {
+let tx = core.v2().buy_with_native(V2BuyWithNativeParams {
     token,
     to: core.wallet_address(),
     amount_out_min: min_out,
@@ -622,43 +622,43 @@ let tx = core.buy_with_native_v2(V2BuyWithNativeParams {
 
 ```rust
 // Buy / Sell variants (all return tx hash immediately):
-core.buy_v2(V2BuyParams { ... })                                  // ERC-20 quote
-core.buy_with_native_v2(V2BuyWithNativeParams { /* value in struct */, ... })
-core.buy_with_permit_v2(V2BuyWithPermitParams { ... })            // permit
-core.sell_v2(V2SellParams { ... })                                // ERC-20 quote
-core.sell_to_native_v2(V2SellToNativeParams { ... })              // MON
-core.sell_with_permit_v2(V2SellWithPermitParams { ... })          // permit
-core.sell_to_native_with_permit_v2(V2SellToNativeWithPermitParams { ... })
+core.v2().buy(V2BuyParams { ... })                                // ERC-20 quote
+core.v2().buy_with_native(V2BuyWithNativeParams { /* value in struct */, ... })
+core.v2().buy_with_permit(V2BuyWithPermitParams { ... })          // permit
+core.v2().sell(V2SellParams { ... })                              // ERC-20 quote
+core.v2().sell_to_native(V2SellToNativeParams { ... })            // MON
+core.v2().sell_with_permit(V2SellWithPermitParams { ... })        // permit
+core.v2().sell_to_native_with_permit(V2SellToNativeWithPermitParams { ... })
 
 // Exact-output:
-core.exact_out_buy_v2(V2ExactOutBuyParams { ... })
-core.exact_out_buy_with_native_v2(V2ExactOutBuyWithNativeParams { ... })
-core.exact_out_sell_v2(V2ExactOutSellParams { ... })
-core.exact_out_sell_to_native_v2(V2ExactOutSellToNativeParams { ... })
+core.v2().exact_out_buy(V2ExactOutBuyParams { ... })
+core.v2().exact_out_buy_with_native(V2ExactOutBuyWithNativeParams { ... })
+core.v2().exact_out_sell(V2ExactOutSellParams { ... })
+core.v2().exact_out_sell_to_native(V2ExactOutSellToNativeParams { ... })
 
 // Quote:
-core.get_amount_out_v2(token, amount_in, is_buy)                  // auto-route
-core.get_amount_in_v2(token, amount_out, is_buy)              // inverse
-core.get_bonding_curve_amount_out_v2(token, amount_in, is_buy)    // BC only
-core.get_dex_amount_out_v2(token, amount_in, is_buy)              // DEX only
+core.v2().get_amount_out(token, amount_in, is_buy)                // auto-route
+core.v2().get_amount_in(token, amount_out, is_buy)                // inverse
+core.v2().get_bonding_curve_amount_out(token, amount_in, is_buy)  // BC only
+core.v2().get_dex_amount_out(token, amount_in, is_buy)            // DEX only
 
 // State:
-core.is_graduated_v2(token)
-core.pool_address_v2(token)        // via TokenRegistry
-core.wrapped_native_v2()
+core.v2().is_graduated(token)
+core.v2().pool_address(token)      // via TokenRegistry
+core.v2().wrapped_native()
 
 // Gas estimation:
-core.estimate_gas_v2(V2GasEstimationParams::BuyWithNative(params)).await?
+core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(params)).await?
 
 // Escape hatches (raw alloy bindings; infallible — return &T directly):
-core.router_v2(), core.factory_v2(), core.bonding_curve_v2(),
-core.token_registry_v2(), core.provider()
+core.v2().router(), core.v2().factory(), core.v2().bonding_curve(),
+core.v2().token_registry(), core.provider()
 ```
 
 ### v2 Token Creation
 
 ```rust
-let result = core.create_token_v2(V2CreateTokenParams {
+let result = core.v2().create_token(V2CreateTokenParams {
     name: "Foo".into(),
     symbol: "FOO".into(),
     description: "..".into(),
@@ -691,7 +691,7 @@ while let Some(ev) = s.next().await { /* V2BondingCurveEvent */ }
 // "no address filter": like v1 DexStream it streams every Swap-signature log on
 // chain, which can include unrelated Uniswap-V2-fork contracts (pair_address is the
 // emitting contract, not a verified NadFun pair — see rustdoc).
-let pair = core.pool_address_v2(token).await?;
+let pair = core.v2().pool_address(token).await?;
 let swaps = NadFunSwapStream::new(ws_url, vec![pair], Network::Mainnet)
     .await?
     .subscribe()
@@ -709,15 +709,15 @@ async fn auto_buy(core: &Core, token: Address, value: U256, to: Address, deadlin
 {
     match core.detect_version(token).await? {
         SdkVersion::V1 => {
-            let (router, expected) = core.get_amount_out(token, value, true).await?;
+            let (router, expected) = core.v1().get_amount_out(token, value, true).await?;
             let min = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-            core.buy(BuyParams { token, amount_in: value, amount_out_min: min, to,
+            core.v1().buy(BuyParams { token, amount_in: value, amount_out_min: min, to,
                 deadline, gas_limit: None, gas_price: None, nonce: None }, router).await
         }
         SdkVersion::V2 => {
-            let expected = core.get_amount_out_v2(token, value, true).await?;
+            let expected = core.v2().get_amount_out(token, value, true).await?;
             let min = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-            core.buy_with_native_v2(V2BuyWithNativeParams { token, to, amount_out_min: min,
+            core.v2().buy_with_native(V2BuyWithNativeParams { token, to, amount_out_min: min,
                 deadline, value, gas_limit: None, gas_price: None, nonce: None }).await
         }
         SdkVersion::None => anyhow::bail!("not a Nad.fun token: {token}"),
