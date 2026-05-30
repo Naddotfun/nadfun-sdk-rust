@@ -17,21 +17,21 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     // Initialize Core - set network once, used everywhere
+//!     // Initialize Core - binds to a Network at construction
 //!     let core = Core::new(
 //!         "https://your-rpc-url".to_string(),
 //!         "your-private-key".to_string(),
 //!         Network::Mainnet
 //!     ).await?;
 //!
-//!     // Get quote and execute trade
-//!     let (router, amount_out) = core.get_amount_out(token, mon_amount, true).await?;
+//!     // v1 trading: access through core.v1() handle
+//!     let (router, amount_out) = core.v1().get_amount_out(token, mon_amount, true).await?;
 //!
 //!     // Execute buy - returns tx_hash immediately (fast!)
-//!     let tx_hash = core.buy(buy_params, router).await?;
+//!     let tx_hash = core.v1().buy(buy_params, router).await?;
 //!     println!("Transaction submitted: {}", tx_hash);
 //!
-//!     // Optionally check receipt later
+//!     // Cross-cutting: get_receipt stays on Core
 //!     let receipt = core.get_receipt(tx_hash).await?;
 //!     println!("Confirmed: {}", receipt.status);
 //!

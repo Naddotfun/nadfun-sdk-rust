@@ -1,8 +1,9 @@
 //! v1 trading internals — gas estimation + slippage utilities.
 //!
-//! The unified `Core` (see [`crate::core::Core`]) absorbs the v1 trading
-//! surface. This sub-module is kept for the standalone helpers that
-//! advanced callers still want direct access to.
+//! The v1 trading surface is exposed via `core.v1()` which returns a
+//! borrowed [`CoreV1`] handle (see [`crate::core::Core`]). This sub-module
+//! additionally exposes standalone gas/slippage helpers that advanced
+//! callers may use directly.
 
 pub mod gas;
 pub mod handle;

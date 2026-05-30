@@ -5,9 +5,9 @@
 //! - **[`Core`]**: Single high-level trading client. Handles v1 (bonding
 //!   curve + Capricorn CL DEX) and v2 (NadFunRouter + per-token registry +
 //!   vaults) from one instance.
-//!   - Auto-routing between bonding curve and DEX on v1 via `Lens`.
-//!   - Explicit `*_v2` methods for v2-only operations (different params
-//!     shape, can't auto-dispatch).
+//!   - v1 trading surface exposed via `core.v1()` → [`CoreV1`] handle.
+//!   - v2 trading surface exposed via `core.v2()` → [`CoreV2`] handle
+//!     (the `_v2` suffix is dropped on the handle methods).
 //!   - `Core::detect_version(token)` for picking v1 vs v2 at call sites.
 //! - **[`SlippageUtils`]**: Slippage math (basis-points based, no floating
 //!   point).
@@ -23,12 +23,12 @@
 //!
 //! match core.detect_version(token).await? {
 //!     SdkVersion::V1 => {
-//!         let (router, expected) = core.get_amount_out(token, amount_in, true).await?;
-//!         core.buy(buy_params, router).await?;
+//!         let (router, expected) = core.v1().get_amount_out(token, amount_in, true).await?;
+//!         core.v1().buy(buy_params, router).await?;
 //!     }
 //!     SdkVersion::V2 => {
-//!         let expected = core.get_amount_out_v2(token, amount_in, true).await?;
-//!         core.buy_v2(v2_buy_params).await?;
+//!         let expected = core.v2().get_amount_out(token, amount_in, true).await?;
+//!         core.v2().buy(v2_buy_params).await?;
 //!     }
 //! }
 //! ```
