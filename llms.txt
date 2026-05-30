@@ -687,7 +687,10 @@ let stream = CurveStreamV2::new(ws_url, Network::Mainnet).await?
 let mut s = stream.subscribe().await?;
 while let Some(ev) = s.next().await { /* V2BondingCurveEvent */ }
 
-// NadFunPair swaps (pairs vec must be non-empty)
+// NadFunPair swaps. Pass specific pairs to scope. An empty vec means
+// "no address filter": like v1 DexStream it streams every NadFunPair Swap,
+// which can include unrelated Uniswap-V2-fork contracts (pair_address is the
+// emitting contract, not a verified NadFun pair — see rustdoc).
 let pair = core.pool_address_v2(token).await?;
 let swaps = NadFunSwapStream::new(ws_url, vec![pair], Network::Mainnet)
     .await?
