@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.12"
+nadfun_sdk = "0.4.0"
 ```
 
 ## Quick Start
@@ -83,18 +83,47 @@ Nad.fun ships two generations of contracts. Starting in 0.4.0 a single
 | Vaults | n/a | Burn / LP / CreatorFee / Gift |
 | Streaming | `CurveStream` / `DexStream` | `CurveStreamV2` / `NadFunSwapStream` |
 
-Dispatch a v1 vs v2 path with the on-chain probe:
+Dispatch a v1 vs v2 path with the on-chain probe. The SDK does **not**
+auto-route between generations — you pick the method by version:
 
 ```rust
+// `detect_version` does one `TokenInfoLens` call and returns V1 / V2 / None.
 match core.detect_version(token).await? {
-    SdkVersion::V1 => { /* core.buy(...) */ }
-    SdkVersion::V2 => { /* core.buy_v2(...) */ }
+    SdkVersion::V1 => {
+        // v1 quote returns (router, expected); buy takes that router.
+        let (router, expected) = core.get_amount_out(token, mon_amount, true).await?;
+        let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
+        core.buy(/* BuyParams { .. } */, router).await?;
+    }
+    SdkVersion::V2 => {
+        // v2 quote is quote-agnostic; the trade method funds the buy.
+        let expected = core.get_amount_out_v2(token, mon_amount, true).await?;
+        let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
+        core.buy_with_native_v2(/* V2BuyWithNativeParams { .. } */).await?;
+    }
     SdkVersion::None => { /* not a Nad.fun token — refuse */ }
 }
 ```
 
+Need the token's quote token alongside the version (to choose
+`buy_with_native_v2` vs `buy_v2` for an ERC-20-quoted v2 token)? Use
+`core.detect_token_info(token).await?` → `TokenInfo { version, quote_token }`.
+The complete runnable dispatcher (including the v2 native-vs-ERC-20 quote
+routing) is [`examples/unified_dispatch.rs`](examples/unified_dispatch.rs).
+
 For UI / agent scenarios where the token comes from outside,
-`api.get_token(token).version` is the equivalent API-side answer.
+`api.get_token(token).await?.version` is the equivalent API-side answer.
+
+The same version split applies to event streaming — pick the v1 or v2
+stream/indexer by token version (see [Real-time Event Streaming](#-real-time-event-streaming)):
+
+| | v1 | v2 |
+|---|---|---|
+| Curve stream | `CurveStream` | `CurveStreamV2` |
+| Curve indexer | `CurveIndexer` | `CurveIndexerV2` |
+| Swap stream | `DexStream` (Capricorn CL) | `NadFunSwapStream` (NadFunPair) |
+| Swap indexer | `DexIndexer` | `NadFunSwapIndexer` |
+| Pool discovery | `DexIndexer::discover_pools_for_tokens` | `stream::v2::discover_pools_unified` (both surfaces) |
 
 ### v2 Quick Start
 
@@ -332,10 +361,16 @@ if let Some(batch_params) = ApiClient::build_batch_claim_params(&response.tokens
 
 Execute buy/sell operations on bonding curves with slippage protection:
 
-```rust
-use nadfun_sdk::{Trade, SlippageUtils, GasEstimationParams, types::BuyParams};
+> v1 trading shown here. For v2 (`buy_v2` / `buy_with_native_v2` /
+> `sell_to_native_v2` / `get_amount_out_v2`) see [v2 Quick Start](#v2-quick-start)
+> and [`examples/v2/`](examples/v2/). Choose the path by token version
+> (`core.detect_version(token)`), as shown above.
 
-// Get quote and execute buy
+```rust
+use nadfun_sdk::{Core, SlippageUtils, GasEstimationParams};
+use nadfun_sdk::types::{BuyParams, GasPricing};
+
+// Get quote and execute buy (v1)
 let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
 let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
@@ -427,7 +462,7 @@ let buy_params = BuyParams {
 #### Unified Gas Estimation (New in v0.2.0)
 
 ```rust
-use nadfun_sdk::{GasEstimationParams, Trade};
+use nadfun_sdk::{Core, GasEstimationParams};
 
 // Create gas estimation parameters for any operation
 let gas_params = GasEstimationParams::Buy {
@@ -531,17 +566,20 @@ let tx = token_helper.approve(token, spender, amount).await?;
 
 ### 🔄 Real-time Event Streaming
 
-Monitor bonding curve and DEX events in real-time:
+Monitor bonding curve and DEX events in real-time. Every stream takes the
+`Network` it is bound to. **Pick the v1 or v2 stream by token version** —
+the SDK does not multiplex generations for you.
 
-#### Bonding Curve Streaming
+#### Bonding Curve Streaming (v1)
 
 ```rust
 use nadfun_sdk::stream::CurveStream;
 use nadfun_sdk::types::{BondingCurveEvent, EventType};
+use nadfun_sdk::Network;
 use futures_util::{pin_mut, StreamExt};
 
-// Create WebSocket stream
-let curve_stream = CurveStream::new("wss://your-ws-endpoint".to_string()).await?;
+// Create WebSocket stream (network is required)
+let curve_stream = CurveStream::new("wss://your-ws-endpoint".to_string(), Network::Mainnet).await?;
 
 // Configure filters (optional)
 let curve_stream = curve_stream
@@ -562,17 +600,44 @@ while let Some(event_result) = stream.next().await {
 }
 ```
 
-#### DEX Swap Streaming
+#### Bonding Curve Streaming (v2)
+
+For v2 tokens, use `CurveStreamV2` with `V2EventType` filters:
 
 ```rust
-use nadfun_sdk::stream::UniswapSwapStream;
+use nadfun_sdk::stream::v2::CurveStreamV2;
+use nadfun_sdk::{Network, V2EventType};
 use futures_util::{pin_mut, StreamExt};
 
-// Auto-discover pools for tokens
-let swap_stream = UniswapSwapStream::discover_pools_for_tokens(
+let stream = CurveStreamV2::new("wss://your-ws-endpoint".to_string(), Network::Mainnet)
+    .await?
+    // V2EventType: Create, Buy, Sell, Sync, Graduate, SnipingPenalty
+    .subscribe_events(vec![V2EventType::Buy, V2EventType::Sell])
+    .filter_tokens(vec![token_address]);
+
+let s = stream.subscribe().await?;
+pin_mut!(s);
+while let Some(item) = s.next().await {
+    if let Ok(event) = item {
+        println!("v2 {:?} for token {}", event.event_type(), event.token());
+    }
+}
+```
+
+#### DEX Swap Streaming (v1 — Capricorn CL)
+
+```rust
+use nadfun_sdk::stream::DexStream;
+use nadfun_sdk::Network;
+use futures_util::{pin_mut, StreamExt};
+
+// Auto-discover pools for tokens (network is required)
+let swap_stream = DexStream::discover_pools_for_tokens(
     "wss://your-ws-endpoint".to_string(),
-    vec![token_address]
+    vec![token_address],
+    Network::Mainnet,
 ).await?;
+// Or monitor explicit pools: DexStream::new(ws_url, pool_addresses, network)
 
 // Subscribe and process events
 let stream = swap_stream.subscribe().await?;
@@ -581,6 +646,7 @@ pin_mut!(stream);
 while let Some(event_result) = stream.next().await {
     match event_result {
         Ok(event) => {
+            // SwapEvent fields are flat — `event.pool_address`, not `event.pool_metadata.*`.
             println!("Swap in pool {}: {} -> {}",
                 event.pool_address, event.amount0, event.amount1);
         }
@@ -589,15 +655,46 @@ while let Some(event_result) = stream.next().await {
 }
 ```
 
+#### DEX Swap Streaming (v2 — NadFunPair)
+
+For v2 tokens, swaps come from `NadFunPair` contracts via `NadFunSwapStream`.
+Resolve pair addresses first (`core.pool_address_v2(token)`), then stream:
+
+```rust
+use nadfun_sdk::stream::v2::NadFunSwapStream;
+use nadfun_sdk::Network;
+use futures_util::{pin_mut, StreamExt};
+
+// `pairs` are NadFunPair addresses (resolve via core.pool_address_v2(token)).
+let stream = NadFunSwapStream::new("wss://your-ws-endpoint".to_string(), pairs, Network::Mainnet).await?;
+let s = stream.subscribe().await?;
+pin_mut!(s);
+while let Some(item) = s.next().await {
+    if let Ok(swap) = item {
+        // NadFunPair Swap (Uniswap-V2 shape): amount{0,1}_{in,out}, `to`, `pair_address`.
+        println!("swap pair={} 0in={} 1out={}", swap.pair_address, swap.amount0_in, swap.amount1_out);
+    }
+}
+```
+
+> ⚠️ **Empty `pairs` = no address filter.** `NadFunSwapStream::new` (and
+> `NadFunSwapIndexer::new`) with an empty `pairs` vec subscribes to *every*
+> `NadFunPair::Swap` log. That signature is the standard Uniswap-V2 `Swap`, so
+> results can include unrelated non-NadFun V2-fork contracts — `pair_address`
+> is the emitting contract, not a verified NadFun pair. Pass explicit pairs (and
+> bound the block range / result size) to scope and trust the stream.
+
 ### 📈 Historical Data Analysis
 
-Fetch and analyze historical events:
+Fetch and analyze historical events. The indexer takes the `Network` it
+targets; choose v1 (`CurveIndexer`) or v2 (`CurveIndexerV2`) by token version.
 
 ```rust
 use nadfun_sdk::stream::{CurveIndexer, EventType};
+use nadfun_sdk::Network;
 
 let provider = Arc::new(ProviderBuilder::new().connect_http(http_url.parse()?));
-let indexer = CurveIndexer::new(provider);
+let indexer = CurveIndexer::new(provider, Network::Mainnet);
 
 // Fetch events from block range
 let events = indexer.fetch_events(
@@ -608,42 +705,67 @@ let events = indexer.fetch_events(
 ).await?;
 
 println!("Found {} events", events.len());
+
+// v2 equivalent — same shape, V2EventType filters:
+// let v2_indexer = nadfun_sdk::stream::v2::CurveIndexerV2::new(provider, Network::Mainnet);
 ```
 
 ### 🔍 Pool Discovery
 
-Find Capricorn CL pool addresses for tokens:
+Find Capricorn CL (v1) pool addresses for tokens. Discovery takes the RPC
+URL plus the target `Network` (not a pre-built provider):
 
 ```rust
-use nadfun_sdk::stream::UniswapSwapIndexer;
+use nadfun_sdk::stream::DexIndexer;
+use nadfun_sdk::Network;
 
 // Auto-discover pools for multiple tokens
-let indexer = UniswapSwapIndexer::discover_pools_for_tokens(provider, tokens).await?;
+let indexer = DexIndexer::discover_pools_for_tokens(rpc_url.clone(), tokens, Network::Mainnet).await?;
 let pools = indexer.pool_addresses();
 
-// Discover pool for single token
-let indexer = UniswapSwapIndexer::discover_pool_for_token(provider, token).await?;
+// Discover pool for a single token
+let indexer = DexIndexer::discover_pool_for_token(rpc_url, token, Network::Mainnet).await?;
+```
+
+For a **version-agnostic** sweep that resolves pools across *both* v1
+(Capricorn CL) and v2 (NadFunPair) surfaces in one call, use
+`stream::v2::discover_pools_unified`:
+
+```rust
+use nadfun_sdk::stream::v2::discover_pools_unified;
+
+// Returns Vec<PoolLocation { token, pool, surface }>, surface = Capricorn | NadFun.
+let pools = discover_pools_unified(provider, tokens, Network::Mainnet).await?;
+for p in pools {
+    println!("token={} pool={} surface={:?}", p.token, p.pool, p.surface);
+}
 ```
 
 ### 💱 DEX Monitoring
 
-Monitor Capricorn CL swap events:
+Monitor Capricorn CL (v1) swap events historically:
 
 ```rust
-use nadfun_sdk::stream::UniswapSwapIndexer;
+use nadfun_sdk::stream::DexIndexer;
+use nadfun_sdk::Network;
 
 // Auto-discover pools for tokens
-let indexer = UniswapSwapIndexer::discover_pools_for_tokens(provider, tokens).await?;
+let indexer = DexIndexer::discover_pools_for_tokens(rpc_url, tokens, Network::Mainnet).await?;
 let swaps = indexer.fetch_events(from_block, to_block).await?;
 
 for swap in swaps {
+    // SwapEvent fields are flat — use `swap.pool_address`.
     println!("Swap in pool {}: {} -> {}",
-        swap.pool_metadata.pool_address,
+        swap.pool_address,
         swap.amount0,
         swap.amount1
     );
 }
 ```
+
+For v2 (NadFunPair) swap history, use `NadFunSwapIndexer::new(provider, pairs, network)`
+(same `fetch_events(from, to)` / `fetch_all_events(start, batch)` interface;
+mind the empty-`pairs` caveat above).
 
 ## Examples
 
@@ -815,6 +937,30 @@ cargo run --example pool_discovery -- \
   --token 0xTokenAddress
 ```
 
+### v2 Examples
+
+v2 example targets use a `v2_` prefix. Trading, creation, and streaming all
+go through the unified `Core` (`*_v2` methods) or the `stream::v2` module:
+
+```bash
+# Mixed-token dispatch: routes buy through v1 or v2 by detected version
+cargo run --example unified_dispatch -- --token 0xToken
+
+# v2 trading (native MON in / out, ERC-20 quote, exact-output)
+cargo run --example v2_buy             -- --token 0xToken
+cargo run --example v2_sell            -- --token 0xToken
+cargo run --example v2_buy_erc20_quote -- --token 0xToken
+cargo run --example v2_exact_out       -- --token 0xToken
+
+# v2 token creation (NadFunRouter + vault split)
+cargo run --example v2_create_token
+
+# v2 streaming + discovery
+cargo run --example v2_curve_stream    -- --ws-url wss://your-ws-endpoint
+cargo run --example v2_dex_stream      -- --ws-url wss://your-ws-endpoint --tokens 0xToken
+cargo run --example v2_pool_discovery  -- --rpc-url https://your-rpc-endpoint --tokens 0xToken
+```
+
 ### Testing & Verification
 
 All examples have been tested and verified working. Here are ready-to-run test commands:
@@ -869,24 +1015,54 @@ cargo run --example dex_stream -- --token 0xTokenAddress --ws-url wss://your-ws-
 
 ## Core Types
 
-### Event Types
+### Event Types (v1)
 
 - `BondingCurveEvent`: Unified enum for all bonding curve events
-  - `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Listed` variants
+  - `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Graduate` variants
   - Methods: `.token()`, `.event_type()`, `.block_number()`, `.transaction_index()`
-- `SwapEvent`: Capricorn CL swap events with complete metadata
-  - Fields: `pool_address`, `amount0`, `amount1`, `sender`, `recipient`, `liquidity`, `tick`, `sqrt_price_x96`
+- `SwapEvent`: Capricorn CL swap events. Fields are flat (no `pool_metadata`):
+  - `sender`, `recipient`, `amount0: I256`, `amount1: I256`, `sqrt_price_x96: U256`,
+    `liquidity`, `tick`, `pool_address`, `block_number`, `transaction_hash`,
+    `transaction_index`, `log_index`
 - `EventType`: Enum for filtering bonding curve events
-  - Variants: `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Listed`
+  - Variants: `Create`, `Buy`, `Sell`, `Sync`, `Lock`, `Graduate`
+
+### Event Types (v2)
+
+- `V2BondingCurveEvent` / `V2EventType`: v2 bonding curve events and filter enum
+  - `V2EventType` variants: `Create`, `Buy`, `Sell`, `Sync`, `Graduate`, `SnipingPenalty`
+- `NadFunSwapEvent`: NadFunPair (Uniswap-V2-shaped) swap events
+  - `sender`, `to`, `amount0_in`, `amount1_in`, `amount0_out`, `amount1_out`,
+    `pair_address`, `block_number`, `transaction_hash`, `transaction_index`, `log_index`
 
 ### Stream Types
 
-- `CurveStream`: Bonding curve event streaming
-  - Methods: `.subscribe_events()`, `.filter_tokens()`, `.subscribe()`
-  - Returns: `Pin<Box<dyn Stream<Item = Result<BondingCurveEvent>> + Send>>`
-- `UniswapSwapStream`: DEX swap event streaming
-  - Methods: `.new()`, `.discover_pools_for_tokens()`, `.discover_pool_for_token()`, `.subscribe()`
-  - Returns: `Pin<Box<dyn Stream<Item = Result<SwapEvent>> + Send>>`
+v1 (re-exported at `nadfun_sdk::stream::*`):
+
+- `CurveStream`: bonding curve streaming — `CurveStream::new(ws_url, network)`,
+  `.subscribe_events()`, `.filter_tokens()`, `.subscribe()` →
+  `Stream<Item = Result<BondingCurveEvent>>`
+- `CurveIndexer`: bonding curve history — `CurveIndexer::new(provider, network)`,
+  `.fetch_events(from, to, events, tokens)`, `.fetch_all_events(start, batch, events, tokens)`
+- `DexStream`: Capricorn CL swap streaming — `DexStream::new(ws_url, pools, network)`,
+  `::discover_pools_for_tokens(ws_url, tokens, network)`,
+  `::discover_pool_for_token(ws_url, token, network)` → `Stream<Item = Result<SwapEvent>>`
+- `DexIndexer`: Capricorn CL swap history — `::discover_pools_for_tokens(rpc_url, tokens, network)`,
+  `::discover_pool_for_token(rpc_url, token, network)`, `.fetch_events(from, to)`,
+  `.fetch_all_events(start, batch)`, `.pool_addresses()`
+
+v2 (under `nadfun_sdk::stream::v2`):
+
+- `CurveStreamV2`: `CurveStreamV2::new(ws_url, network)` → `Stream<Item = Result<V2BondingCurveEvent>>`
+- `CurveIndexerV2`: `CurveIndexerV2::new(provider, network)`
+- `NadFunSwapStream`: `NadFunSwapStream::new(ws_url, pairs, network)` → `Stream<Item = Result<NadFunSwapEvent>>`
+- `NadFunSwapIndexer`: `NadFunSwapIndexer::new(provider, pairs, network)`
+- `discover_pools_unified(provider, tokens, network)` → `Vec<PoolLocation { token, pool, surface }>`
+  (`PoolSurface::{Capricorn, NadFun}`) — resolves both v1 and v2 surfaces
+
+> Empty `pairs` on `NadFunSwapStream` / `NadFunSwapIndexer` = no address filter
+> (every `NadFunPair::Swap`, including unrelated V2-fork contracts). Scope with
+> explicit pairs and a bounded block range.
 
 ### Trading Types
 
@@ -952,9 +1128,14 @@ cargo run --example pool_discovery -- \
 
 ### Contract Addresses
 
-All contract addresses are defined in `constants.rs`:
+All contract addresses are defined in `constants.rs` (the source of truth),
+organized by network and version (`addresses::{mainnet,testnet}::{v1,v2}`).
+Access them via the typed helpers — `get_bonding_curve(network)`,
+`get_nadfun_router_v2(network)` (returns `Option`), etc. The v2 set has many
+more contracts (vaults, registry, bonding curve, lens); the most useful are
+listed below.
 
-#### Mainnet
+#### Mainnet — v1
 
 - DEX Factory: `0x6B5F564339DbAD6b780249827f2198a841FEB7F3`
 - WMON Token: `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A`
@@ -963,14 +1144,30 @@ All contract addresses are defined in `constants.rs`:
 - DEX Router: `0x0B79d71AE99528D1dB24A4148b5f4F865cc2b137`
 - Lens: `0x7e78A8DE94f21804F7a17F4E8BF9EC2c872187ea`
 
-#### Testnet
+#### Mainnet — v2
 
-- DEX Factory: `0xE6dc50f36E26bAfC5f103021e01EF111402Cd940`
-- WMON Token: `0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701`
-- Bonding Curve: `0xbD40afc47F0a42680819513d556C2eBCcd1eBC68`
-- Bonding Curve Router: `0xC703bCe420882b1A35428773B92731adCB4a1f7f`
-- DEX Router: `0x65586647FC66221c5f208F9b8FC0A93C72e3a598`
-- Lens: `0x181B05cD8D73564A22C17825F3413A0f30634CCF`
+- NadFun Router: `0x8986C8fD44eb85294A725a7e61AF35E76bA26F91`
+- NadFun Factory: `0xA25b13127e63ddae6d0b35570FF3D39dBD621001`
+- Token Registry: `0x3CBF1E9F8847A4c968Bb2636696723CC82b91565`
+- Bonding Curve (v2): `0x9f3832732923252A21044F21eE6bd87F09514ae4`
+- TokenInfoLens (v1/v2 classifier): `0x40c126f92DAD5C26D3b36aA7F2A949265FA534cB`
+
+#### Testnet — v1
+
+- DEX Factory: `0xd0a37cf728CE2902eB8d4F6f2afc76854048253b`
+- WMON Token: `0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd`
+- Bonding Curve: `0x1228b0dc9481C11D3071E7A924B794CfB038994e`
+- Bonding Curve Router: `0x865054F0F6A288adaAc30261731361EA7E908003`
+- DEX Router: `0x5D4a4f430cA3B1b2dB86B9cFE48a5316800F5fb2`
+- Lens: `0xB056d79CA5257589692699a46623F901a3BB76f1`
+
+#### Testnet — v2
+
+- NadFun Router: `0x75588668999cA0557b78046b8a5E86b47b9234ec`
+- NadFun Factory: `0x59C51c66B79c68F63d5446940CD13b6968788e36`
+- Token Registry: `0x2Bc127be900aD290E703Cd2C71eB0EDCa162C898`
+- Bonding Curve (v2): `0x27063a38eC0D3281D354090EB92e669Ed1eB956C`
+- TokenInfoLens (v1/v2 classifier): `0xFC635B7A09cac1A643F5148F8e05Bcd979A8bcC4`
 
 ## Error Handling
 
