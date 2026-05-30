@@ -114,7 +114,12 @@ mod tests {
     }
 
     /// Build a synthetic NadFunPair `Swap` RPC log at `pair`/`block`/`log_index`.
-    fn swap_log(pair: Address, block: u64, tx_index: u64, log_index: u64) -> alloy::rpc::types::Log {
+    fn swap_log(
+        pair: Address,
+        block: u64,
+        tx_index: u64,
+        log_index: u64,
+    ) -> alloy::rpc::types::Log {
         // Non-indexed data: amount0In, amount1In, amount0Out, amount1Out.
         let data: Bytes = (
             U256::from(1u64),
@@ -155,8 +160,18 @@ mod tests {
     async fn fetch_events_empty_pairs_fetches_all_swaps() {
         let asserter = Asserter::new();
         let logs = vec![
-            swap_log(address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 10, 0, 0),
-            swap_log(address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 11, 1, 1),
+            swap_log(
+                address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                10,
+                0,
+                0,
+            ),
+            swap_log(
+                address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                11,
+                1,
+                1,
+            ),
         ];
         asserter.push_success(&logs);
         let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
@@ -166,7 +181,11 @@ mod tests {
             .fetch_events(0, 100)
             .await
             .expect("empty pairs must query the chain, not short-circuit");
-        assert_eq!(events.len(), 2, "empty pairs must return ALL swaps in range");
+        assert_eq!(
+            events.len(),
+            2,
+            "empty pairs must return ALL swaps in range"
+        );
     }
 
     #[tokio::test]
@@ -198,8 +217,18 @@ mod tests {
         let asserter = Asserter::new();
         // Queue tx 1 BEFORE tx 0, both at the same (block, log_index).
         asserter.push_success(&vec![
-            swap_log(address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 10, 1, 0),
-            swap_log(address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 10, 0, 0),
+            swap_log(
+                address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                10,
+                1,
+                0,
+            ),
+            swap_log(
+                address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                10,
+                0,
+                0,
+            ),
         ]);
         let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
         let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
