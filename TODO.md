@@ -3,13 +3,14 @@
 ## ▶ CURRENT — v2 namespace refactor + v1↔v2 parity
 Spec: `docs/superpowers/specs/2026-05-30-v2-namespace-refactor-design.md` · 3 PRs off `v2`.
 
-### Phase 1 — namespace refactor (breaking) — `feat/v2-namespace`
-- [ ] `CoreV1<'a>` / `CoreV2<'a>` handles + `core.v1()` / `core.v2()` accessors
-- [ ] Move v1 → `src/core/v1/handle.rs`; v2 → `src/core/v2/handle.rs` (drop `_v2`)
-- [ ] Cross-cutting (`detect_*`, `get_receipt`, accessors) stay on `Core`
-- [ ] `lib.rs` + `prelude` re-export `CoreV1`, `CoreV2`
-- [ ] ~97 call sites: examples + tests + README + EXAMPLES.md + llms.txt + CHANGELOG
-- [ ] Dispatch tests (TDD) + `cargo build --examples` + clippy gate + `/codex review` → PR
+### Phase 1 — namespace refactor (breaking) — `feat/v2-namespace` ✅ PR #4 OPEN
+- [x] `CoreV1<'a>` / `CoreV2<'a>` handles + `core.v1()` / `core.v2()` accessors (by-value, Copy)
+- [x] Move v1 → `src/core/v1/handle.rs`; v2 → `src/core/v2/handle.rs` (drop `_v2`)
+- [x] Cross-cutting (`detect_*`, `get_receipt`, accessors) stay on `Core`
+- [x] `lib.rs` + `prelude` re-export `CoreV1`, `CoreV2`
+- [x] call sites: examples + tests + README + EXAMPLES.md + llms.txt + CHANGELOG
+- [x] Dispatch tests (TDD) + `cargo build --examples` + clippy gate + `/codex review` (GATE PASS) → PR #4
+- [ ] merge `feat/v2-namespace → v2`
 
 ### Phase 2 — v2 passthrough parity (additive) — `feat/v2-passthrough-parity`
 - [ ] **R1: pin deployed contract variant via live testnet `eth_call`** (blocker)
