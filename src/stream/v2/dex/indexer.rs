@@ -9,6 +9,17 @@ use std::sync::Arc;
 /// Bound to a `Network` for downstream callers that need the context.
 /// Pairs with [`crate::stream::v2::dex::NadFunSwapStream`] for backfilling
 /// pool history before tailing real-time events.
+///
+/// # Empty `pairs` = no address filter
+///
+/// An empty `pairs` list is **not** rejected: like v1 `DexIndexer`, it drops
+/// the address filter, so every log matching the `Swap` topic in the range is
+/// returned. `NadFunPair::Swap` is the standard Uniswap-V2 signature, so the
+/// result can include swaps from **unrelated, non-NadFun** V2-fork contracts;
+/// `pair_address` is whatever emitted the log, not a verified NadFun pair. Over
+/// a wide block range this can also hit provider result-size caps or large
+/// payloads. Bounding the range and result size is the **caller's**
+/// responsibility. Pass explicit `pairs` to scope and trust the results.
 pub struct NadFunSwapIndexer<P> {
     provider: Arc<P>,
     pairs: Vec<Address>,
@@ -47,7 +58,15 @@ impl<P: Provider + Clone> NadFunSwapIndexer<P> {
             .into_iter()
             .filter_map(|log| decode_nadfun_swap_event(log).ok())
             .collect();
-        events.sort_by(|a, b| (a.block_number, a.log_index).cmp(&(b.block_number, b.log_index)));
+        // Sort by the full (block, tx_index, log_index) triple to match v1
+        // DexIndexer — log_index alone can tie when metadata is missing.
+        events.sort_by(|a, b| {
+            (a.block_number, a.transaction_index, a.log_index).cmp(&(
+                b.block_number,
+                b.transaction_index,
+                b.log_index,
+            ))
+        });
         Ok(events)
     }
 
@@ -95,7 +114,7 @@ mod tests {
     }
 
     /// Build a synthetic NadFunPair `Swap` RPC log at `pair`/`block`/`log_index`.
-    fn swap_log(pair: Address, block: u64, log_index: u64) -> alloy::rpc::types::Log {
+    fn swap_log(pair: Address, block: u64, tx_index: u64, log_index: u64) -> alloy::rpc::types::Log {
         // Non-indexed data: amount0In, amount1In, amount0Out, amount1Out.
         let data: Bytes = (
             U256::from(1u64),
@@ -121,7 +140,7 @@ mod tests {
             block_number: Some(block),
             block_timestamp: None,
             transaction_hash: Some(B256::ZERO),
-            transaction_index: Some(0),
+            transaction_index: Some(tx_index),
             log_index: Some(log_index),
             removed: false,
         }
@@ -136,8 +155,8 @@ mod tests {
     async fn fetch_events_empty_pairs_fetches_all_swaps() {
         let asserter = Asserter::new();
         let logs = vec![
-            swap_log(address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 10, 0),
-            swap_log(address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 11, 1),
+            swap_log(address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 10, 0, 0),
+            swap_log(address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 11, 1, 1),
         ];
         asserter.push_success(&logs);
         let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
@@ -158,6 +177,7 @@ mod tests {
             address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
             10,
             0,
+            0,
         )]); // eth_getLogs(0..=100)
         let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
         let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
@@ -167,5 +187,26 @@ mod tests {
             .await
             .expect("empty pairs must walk the range, not short-circuit");
         assert_eq!(events.len(), 1, "empty pairs must return all swaps");
+    }
+
+    /// Same block + same log_index but different transaction_index must sort by
+    /// transaction_index (v1 `DexIndexer` parity; Codex P3). A stable sort on
+    /// (block, log_index) alone would leave the input order, so tx 1 (queued
+    /// first) would wrongly precede tx 0.
+    #[tokio::test]
+    async fn fetch_events_sorts_by_block_txindex_logindex() {
+        let asserter = Asserter::new();
+        // Queue tx 1 BEFORE tx 0, both at the same (block, log_index).
+        asserter.push_success(&vec![
+            swap_log(address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 10, 1, 0),
+            swap_log(address!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 10, 0, 0),
+        ]);
+        let provider = Arc::new(ProviderBuilder::new().connect_mocked_client(asserter));
+        let indexer = NadFunSwapIndexer::new(provider, Vec::new(), Network::Testnet);
+
+        let events = indexer.fetch_events(0, 100).await.expect("fetch");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].transaction_index, 0, "tx 0 must sort first");
+        assert_eq!(events[1].transaction_index, 1, "tx 1 must sort second");
     }
 }
