@@ -214,8 +214,14 @@ async fn _core_v2_methods_compile(c: &Core) {
         .await;
     let _: Result<U256, _> = c.v2().get_amount_out(token, amount, true).await;
     let _: Result<U256, _> = c.v2().get_amount_in(token, amount, true).await;
-    let _: Result<U256, _> = c.v2().get_bonding_curve_amount_out(token, amount, true).await;
-    let _: Result<U256, _> = c.v2().get_bonding_curve_amount_in(token, amount, true).await;
+    let _: Result<U256, _> = c
+        .v2()
+        .get_bonding_curve_amount_out(token, amount, true)
+        .await;
+    let _: Result<U256, _> = c
+        .v2()
+        .get_bonding_curve_amount_in(token, amount, true)
+        .await;
     let _: Result<U256, _> = c.v2().get_dex_amount_out(token, amount, true).await;
     let _: Result<U256, _> = c.v2().get_dex_amount_in(token, amount, true).await;
     let _: Result<bool, _> = c.v2().is_graduated(token).await;

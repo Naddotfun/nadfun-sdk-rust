@@ -124,7 +124,9 @@ pub mod prelude {
     pub use crate::api::{ApiClient, ALLOWED_IMAGE_TYPES};
 
     // Core trading functionality
-    pub use crate::core::{estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils};
+    pub use crate::core::{
+        estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils,
+    };
 
     // Token operations
     pub use crate::token::TokenHelper;
