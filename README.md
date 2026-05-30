@@ -679,7 +679,7 @@ while let Some(item) = s.next().await {
 
 > ⚠️ **Empty `pairs` = no address filter.** `NadFunSwapStream::new` (and
 > `NadFunSwapIndexer::new`) with an empty `pairs` vec subscribes to *every*
-> `NadFunPair::Swap` log. That signature is the standard Uniswap-V2 `Swap`, so
+> Swap-signature log on chain. That signature is the standard Uniswap-V2 `Swap`, so
 > results can include unrelated non-NadFun V2-fork contracts — `pair_address`
 > is the emitting contract, not a verified NadFun pair. Pass explicit pairs (and
 > bound the block range / result size) to scope and trust the stream.
@@ -872,7 +872,7 @@ EVENTS=Buy,Sell cargo run --example curve_stream -- \
 
 **Features:**
 
-- ✅ All event types: Create, Buy, Sell, Sync, Lock, Listed
+- ✅ All event types: Create, Buy, Sell, Sync, Lock, Graduate
 - ✅ Event type filtering via `EVENTS` environment variable
 - ✅ Token filtering via `--tokens` argument
 - ✅ Combined filtering (events + tokens)
@@ -944,20 +944,20 @@ go through the unified `Core` (`*_v2` methods) or the `stream::v2` module:
 
 ```bash
 # Mixed-token dispatch: routes buy through v1 or v2 by detected version
-cargo run --example unified_dispatch -- --token 0xToken
+cargo run --example unified_dispatch -- --private-key your_private_key_here --token 0xToken
 
 # v2 trading (native MON in / out, ERC-20 quote, exact-output)
-cargo run --example v2_buy             -- --token 0xToken
-cargo run --example v2_sell            -- --token 0xToken
-cargo run --example v2_buy_erc20_quote -- --token 0xToken
-cargo run --example v2_exact_out       -- --token 0xToken
+cargo run --example v2_buy             -- --private-key your_private_key_here --token 0xToken
+cargo run --example v2_sell            -- --private-key your_private_key_here --token 0xToken
+cargo run --example v2_buy_erc20_quote -- --private-key your_private_key_here --token 0xToken
+cargo run --example v2_exact_out       -- --private-key your_private_key_here --token 0xToken
 
 # v2 token creation (NadFunRouter + vault split)
-cargo run --example v2_create_token
+cargo run --example v2_create_token    -- --private-key your_private_key_here
 
 # v2 streaming + discovery
 cargo run --example v2_curve_stream    -- --ws-url wss://your-ws-endpoint
-cargo run --example v2_dex_stream      -- --ws-url wss://your-ws-endpoint --tokens 0xToken
+cargo run --example v2_dex_stream      -- --rpc-url https://your-rpc-endpoint --ws-url wss://your-ws-endpoint --tokens 0xToken
 cargo run --example v2_pool_discovery  -- --rpc-url https://your-rpc-endpoint --tokens 0xToken
 ```
 
@@ -1053,9 +1053,9 @@ v1 (re-exported at `nadfun_sdk::stream::*`):
 
 v2 (under `nadfun_sdk::stream::v2`):
 
-- `CurveStreamV2`: `CurveStreamV2::new(ws_url, network)` → `Stream<Item = Result<V2BondingCurveEvent>>`
+- `CurveStreamV2`: `CurveStreamV2::new(ws_url, network)` → `Result<CurveStreamV2>`; `.subscribe().await?` → `Pin<Box<dyn Stream<Item = Result<V2BondingCurveEvent>> + Send>>`
 - `CurveIndexerV2`: `CurveIndexerV2::new(provider, network)`
-- `NadFunSwapStream`: `NadFunSwapStream::new(ws_url, pairs, network)` → `Stream<Item = Result<NadFunSwapEvent>>`
+- `NadFunSwapStream`: `NadFunSwapStream::new(ws_url, pairs, network)` → `Result<NadFunSwapStream>`; `.subscribe().await?` → `Pin<Box<dyn Stream<Item = Result<NadFunSwapEvent>> + Send>>`
 - `NadFunSwapIndexer`: `NadFunSwapIndexer::new(provider, pairs, network)`
 - `discover_pools_unified(provider, tokens, network)` → `Vec<PoolLocation { token, pool, surface }>`
   (`PoolSurface::{Capricorn, NadFun}`) — resolves both v1 and v2 surfaces
@@ -1067,13 +1067,13 @@ v2 (under `nadfun_sdk::stream::v2`):
 ### Trading Types
 
 - `BuyParams` / `SellParams`: Parameters for buy/sell operations
-- `TradeResult`: Transaction result with status and metadata
+- `TransactionResult`: Transaction result with status and metadata
 - `SlippageUtils`: Utilities for slippage calculations
 
 ### Token Types
 
 - `TokenMetadata`: Name, symbol, decimals, total supply
-- `PermitSignature`: EIP-2612 permit signature data
+- EIP-2612 permit signatures are produced by `TokenHelper::generate_permit_signature`, which returns a `(u8, B256, B256)` `(v, r, s)` tuple (no dedicated public type)
 
 ## Configuration
 
@@ -1094,8 +1094,8 @@ All examples support command line arguments for configuration:
 
 ```bash
 # Available options
---rpc-url <URL>      # RPC URL (default: https://your-rpc-endpoint)
---ws-url <URL>       # WebSocket URL (default: wss://your-ws-endpoint)
+--rpc-url <URL>      # RPC URL (default: https://eth.merkle.io)
+--ws-url <URL>       # WebSocket URL (default: wss://eth.merkle.io)
 --private-key <KEY>  # Private key for transactions
 --token <ADDRESS>    # Token address for operations
 --tokens <ADDRS>     # Token addresses: 'addr1,addr2' or '["addr1","addr2"]'

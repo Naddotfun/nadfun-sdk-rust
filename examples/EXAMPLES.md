@@ -178,7 +178,7 @@ cargo run --example curve_indexer -- --rpc-url https://your-rpc-endpoint --token
 
 **Features:**
 - 📊 **Historical Data**: Fetch events from specific block ranges
-- 🎯 **Event Filtering**: Create, Buy, Sell, Sync, Lock, Listed events
+- 🎯 **Event Filtering**: Create, Buy, Sell, Sync, Lock, Graduate events
 - 🔄 **Batch Processing**: Efficient handling of large datasets
 - 📈 **Statistics**: Event counts and analysis
 - 🪙 **Token Filtering**: Focus on specific token addresses
@@ -203,7 +203,7 @@ EVENTS=Buy,Sell cargo run --example curve_stream -- --ws-url wss://your-ws-endpo
 **Features:**
 - ⚡ **Real-time Streaming**: WebSocket-based low-latency event delivery
 - 🎯 **Flexible Filtering**: Event types and token address filtering
-- 🔄 **All Event Types**: Create, Buy, Sell, Sync, Lock, Listed support
+- 🔄 **All Event Types**: Create, Buy, Sell, Sync, Lock, Graduate support
 - 📊 **Live Processing**: Immediate event handling and analysis
 - 🛡️ **Error Handling**: Robust connection management
 
@@ -463,7 +463,7 @@ cargo run --example unified_dispatch -- --token 0xV2Token
 - 🧭 **Single Instance**: One `Core` handles both generations (0.4.0+) — no side-by-side clients
 - 🔎 **On-chain Detection**: `detect_token_info` (or `detect_version` for version-only; `ApiClient::get_token` for the off-chain equivalent)
 - 🛡️ **Slippage + Guard**: 5% `amount_out_min`; bails on unregistered tokens
-- 💵 **Fixed Amount**: Buys 0.01 MON worth (`value`, hardcoded)
+- 💵 **Fixed Amount**: `value` is hardcoded to `0.01` (1e16) — MON sent on the native/v1 path, but the quote-token `amount_in` on the v2 ERC-20-quote path (so 0.01 of that quote token, not MON)
 
 ## ✅ v2 Smoke Test
 
@@ -510,7 +510,7 @@ All trading examples now use the new unified gas estimation system:
 
 **Example Usage:**
 ```rust
-use nadfun_sdk::{GasEstimationParams, Trade};
+use nadfun_sdk::{Core, GasEstimationParams};
 
 // Unified gas estimation for any operation
 let gas_params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };

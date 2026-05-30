@@ -8,7 +8,7 @@ Nad.fun is a meme coin launchpad on Monad with bonding curve mechanics. Tokens g
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.3.12"
+nadfun_sdk = "0.4.0"
 ```
 
 ## Quick Start
@@ -688,8 +688,8 @@ let mut s = stream.subscribe().await?;
 while let Some(ev) = s.next().await { /* V2BondingCurveEvent */ }
 
 // NadFunPair swaps. Pass specific pairs to scope. An empty vec means
-// "no address filter": like v1 DexStream it streams every NadFunPair Swap,
-// which can include unrelated Uniswap-V2-fork contracts (pair_address is the
+// "no address filter": like v1 DexStream it streams every Swap-signature log on
+// chain, which can include unrelated Uniswap-V2-fork contracts (pair_address is the
 // emitting contract, not a verified NadFun pair — see rustdoc).
 let pair = core.pool_address_v2(token).await?;
 let swaps = NadFunSwapStream::new(ws_url, vec![pair], Network::Mainnet)
