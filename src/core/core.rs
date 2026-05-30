@@ -16,8 +16,8 @@
 use crate::{
     constants::*,
     contracts::{
-        BondingCurveRouter, BondingCurveV2, DexRouter, Lens, NadFunFactory,
-        NadFunRouter, ProtocolManagerV2, TokenInfoLens, TokenRegistryV2,
+        BondingCurveRouter, BondingCurveV2, DexRouter, Lens, NadFunFactory, NadFunRouter,
+        ProtocolManagerV2, TokenInfoLens, TokenRegistryV2,
     },
     core::v1::CoreV1,
     core::v2::CoreV2,
@@ -184,8 +184,6 @@ impl Core {
             logs: receipt.logs().to_vec(),
         })
     }
-
-
 
     // ========================================================================
     // Escape hatches: direct access to underlying contract bindings.

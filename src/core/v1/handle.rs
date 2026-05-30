@@ -1,8 +1,8 @@
 //! `CoreV1` — v1 namespace handle. Borrows `&Core`; methods delegate to the
 //! v1 contract bindings. Construct via [`crate::Core::v1`].
 
-use crate::core::Core;
 use crate::core::v1::{estimate_gas as free_estimate_gas, GasEstimationParams};
+use crate::core::Core;
 use crate::{
     api::ApiClient,
     constants::get_creator_treasury,
@@ -131,7 +131,11 @@ impl<'a> CoreV1<'a> {
     /// Calculate how many tokens an initial buy of `amount_in` MON produces
     /// at token-creation time (v1 only).
     pub async fn get_initial_buy_amount_out(&self, amount_in: U256) -> Result<U256> {
-        self.core.v1.lens.get_initial_buy_amount_out(amount_in).await
+        self.core
+            .v1
+            .lens
+            .get_initial_buy_amount_out(amount_in)
+            .await
     }
 
     /// Get v1 deploy fee for token creation.

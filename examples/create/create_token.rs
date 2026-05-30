@@ -54,7 +54,10 @@ async fn main() -> Result<()> {
     println!("\n📊 Calculating initial buy amount...");
     println!("  Initial buy: {} MON", initial_buy_str);
 
-    let amount_out = core.v1().get_initial_buy_amount_out(initial_buy_mon).await?;
+    let amount_out = core
+        .v1()
+        .get_initial_buy_amount_out(initial_buy_mon)
+        .await?;
     println!("  Tokens to receive: {}", amount_out);
 
     // Step 2: Get token creation parameters from CLI or use defaults

@@ -386,7 +386,11 @@ async fn v1_lifecycle() {
         value: initial_buy,
         action_id: ActionId::CapricornActor,
     };
-    let result = core.v1().create_token(params, &api).await.expect("create_token");
+    let result = core
+        .v1()
+        .create_token(params, &api)
+        .await
+        .expect("create_token");
     let token = result.token_address;
     println!("[v1] created {token} (tx {})", result.transaction_hash);
     assert!(
@@ -413,7 +417,11 @@ async fn v1_lifecycle() {
     println!("[v1] bonding sell ok");
 
     // ── 4. graduate (adaptive on balance) ──────────────────────────────
-    let (_available, required_mon) = core.v1().available_buy_tokens(token).await.expect("available");
+    let (_available, required_mon) = core
+        .v1()
+        .available_buy_tokens(token)
+        .await
+        .expect("available");
     let bal_now = core.provider().get_balance(wallet).await.unwrap();
     println!(
         "[v1] graduation needs ~{} MON, have {} MON",
@@ -434,7 +442,11 @@ async fn v1_lifecycle() {
     let cap = bal_now - parse_ether("500").unwrap();
     let mut spent = U256::ZERO;
     loop {
-        let (_avail, need) = core.v1().available_buy_tokens(token).await.expect("available");
+        let (_avail, need) = core
+            .v1()
+            .available_buy_tokens(token)
+            .await
+            .expect("available");
         if need == U256::ZERO || spent >= cap {
             break;
         }

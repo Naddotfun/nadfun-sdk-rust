@@ -145,15 +145,18 @@ async fn main() -> Result<()> {
 
     println!("🔄 Using amount for estimation: {}", actual_sell_amount);
 
-    let (sell_router, expected_mon) =
-        match core.v1().get_amount_out(token, actual_sell_amount, false).await {
-            Ok((router, amount)) => (router, amount),
-            Err(e) => {
-                println!("⚠️ Could not get sell quote: {}", e);
-                // Use buy router as fallback
-                (router.clone(), U256::from(1000000)) // 1 wei as fallback
-            }
-        };
+    let (sell_router, expected_mon) = match core
+        .v1()
+        .get_amount_out(token, actual_sell_amount, false)
+        .await
+    {
+        Ok((router, amount)) => (router, amount),
+        Err(e) => {
+            println!("⚠️ Could not get sell quote: {}", e);
+            // Use buy router as fallback
+            (router.clone(), U256::from(1000000)) // 1 wei as fallback
+        }
+    };
 
     // Check allowance for the router
     let allowance = match token_helper
@@ -266,7 +269,11 @@ async fn main() -> Result<()> {
         s,
     };
 
-    let sell_permit_gas = match core.v1().estimate_gas(&sell_router, sell_permit_params).await {
+    let sell_permit_gas = match core
+        .v1()
+        .estimate_gas(&sell_router, sell_permit_params)
+        .await
+    {
         Ok(gas) => {
             println!("📈 Estimated gas for SELL PERMIT: {}", gas);
             gas
