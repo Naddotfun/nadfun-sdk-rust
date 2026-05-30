@@ -59,5 +59,5 @@ not this refactor.
 
 ## Outcome
 
-Phase 1 complete and codex-reviewed (GATE PASS). Ready for PR
-`feat/v2-namespace → v2`. _(PR link filled at open.)_
+Phase 1 complete and codex-reviewed (GATE PASS). PR:
+https://github.com/Naddotfun/nadfun-sdk-rust/pull/4 (`feat/v2-namespace → v2`).
