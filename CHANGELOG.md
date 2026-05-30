@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   filter" and receives every NadFunPair `Swap` in scope. Signatures are
   unchanged; `NadFunSwapStream::new` no longer returns the "at least one pair
   address is required" error.
+- **v2 DEX indexer sorts by `(block, transaction_index, log_index)`.**
+  `NadFunSwapIndexer` now orders results by the full triple, matching v1
+  `DexIndexer` (previously `(block, log_index)`, which could tie when
+  `transaction_index` / `log_index` metadata is missing).
 
 ## [0.4.0] - 2026-05-28
 
