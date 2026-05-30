@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
 
     let mut pairs = Vec::new();
     for token in &tokens {
-        let pool = core.pool_address_v2(*token).await?;
+        let pool = core.v2().pool_address(*token).await?;
         if pool != Address::ZERO {
             pairs.push(pool);
             println!("token {} -> pair {}", token, pool);

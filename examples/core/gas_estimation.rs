@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     let deadline = U256::from(9999999999999999u64);
 
     // Get router information
-    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+    let (router, expected_tokens) = core.v1().get_amount_out(token, mon_amount, true).await?;
     let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
     println!("📊 Router: {:?}", router);
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let buy_gas = match core.estimate_gas(&router, buy_params).await {
+    let buy_gas = match core.v1().estimate_gas(&router, buy_params).await {
         Ok(gas) => {
             println!("📈 Estimated gas for BUY: {}", gas);
             gas
@@ -146,7 +146,7 @@ async fn main() -> Result<()> {
     println!("🔄 Using amount for estimation: {}", actual_sell_amount);
 
     let (sell_router, expected_mon) =
-        match core.get_amount_out(token, actual_sell_amount, false).await {
+        match core.v1().get_amount_out(token, actual_sell_amount, false).await {
             Ok((router, amount)) => (router, amount),
             Err(e) => {
                 println!("⚠️ Could not get sell quote: {}", e);
@@ -205,7 +205,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let sell_gas = match core.estimate_gas(&sell_router, sell_params).await {
+    let sell_gas = match core.v1().estimate_gas(&sell_router, sell_params).await {
         Ok(gas) => {
             println!("📈 Estimated gas for SELL: {}", gas);
             gas
@@ -266,7 +266,7 @@ async fn main() -> Result<()> {
         s,
     };
 
-    let sell_permit_gas = match core.estimate_gas(&sell_router, sell_permit_params).await {
+    let sell_permit_gas = match core.v1().estimate_gas(&sell_router, sell_permit_params).await {
         Ok(gas) => {
             println!("📈 Estimated gas for SELL PERMIT: {}", gas);
             gas
