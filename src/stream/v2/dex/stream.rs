@@ -28,9 +28,12 @@ impl NadFunSwapStream {
     /// `network`.
     ///
     /// An empty `pairs` list means "no address filter": like v1 `DexStream`,
-    /// the subscription then receives EVERY NadFunPair `Swap` on chain. Pass
-    /// specific pairs to scope the stream. (v1/v2 empty-filter behavior is
-    /// unified — empty input = receive all swaps, owner decision 2026-05-30.)
+    /// the subscription receives every log matching the `Swap` topic. Since
+    /// `NadFunPair::Swap` is the standard Uniswap-V2 signature, this can include
+    /// swaps from unrelated, non-NadFun V2-fork contracts; `pair_address` is the
+    /// emitting contract, not a verified NadFun pair. Pass specific pairs to
+    /// scope and trust the stream. (v1/v2 empty-filter unified — empty input =
+    /// receive all swaps, owner decision 2026-05-30.)
     pub async fn new(
         ws_url: String,
         pairs: Vec<Address>,
