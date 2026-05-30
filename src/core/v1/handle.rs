@@ -16,6 +16,12 @@ use alloy::{
 use anyhow::Result;
 
 /// v1 trading/query namespace handle. Zero-cost `Copy` wrapper over `&Core`.
+///
+/// Methods take `self` by value (the handle is `Copy`) so a future or an
+/// escape-hatch reference can outlive the temporary returned by
+/// [`crate::Core::v1`] — e.g. `let fut = core.v1().get_amount_out(..);` then
+/// `fut.await`, or `let lens = core.v1().lens();` used later. Reference-
+/// returning escape hatches yield `&'a _` tied to the underlying `&Core`.
 #[derive(Clone, Copy)]
 pub struct CoreV1<'a> {
     pub(crate) core: &'a Core,
@@ -29,7 +35,7 @@ impl<'a> CoreV1<'a> {
     /// Get amount out for a v1 trade, with auto-routed router selection
     /// (bonding curve vs Capricorn CL DEX) via Lens.
     pub async fn get_amount_out(
-        &self,
+        self,
         token: Address,
         amount_in: U256,
         is_buy: bool,
@@ -58,7 +64,7 @@ impl<'a> CoreV1<'a> {
     /// Inverse: how much `amount_in` produces `amount_out`. Returns the
     /// router that owns the position.
     pub async fn get_amount_in(
-        &self,
+        self,
         token: Address,
         amount_out: U256,
         is_buy: bool,
@@ -86,7 +92,7 @@ impl<'a> CoreV1<'a> {
 
     /// v1 buy. Pair with [`Self::get_amount_out`] to get the correct
     /// `router`. Returns the submitted tx hash.
-    pub async fn buy(&self, params: BuyParams, router: Router) -> Result<B256> {
+    pub async fn buy(self, params: BuyParams, router: Router) -> Result<B256> {
         match router {
             Router::Dex(_) => self.core.v1.dex_router.buy(params).await,
             Router::BondingCurve(_) => self.core.v1.bonding_curve_router.buy(params).await,
@@ -94,7 +100,7 @@ impl<'a> CoreV1<'a> {
     }
 
     /// v1 sell. Pair with [`Self::get_amount_out`] for the router.
-    pub async fn sell(&self, params: SellParams, router: Router) -> Result<B256> {
+    pub async fn sell(self, params: SellParams, router: Router) -> Result<B256> {
         match router {
             Router::Dex(_) => self.core.v1.dex_router.sell(params).await,
             Router::BondingCurve(_) => self.core.v1.bonding_curve_router.sell(params).await,
@@ -102,7 +108,7 @@ impl<'a> CoreV1<'a> {
     }
 
     /// v1 sell with caller-provided EIP-2612 permit signature.
-    pub async fn sell_permit(&self, params: SellPermitParams, router: Router) -> Result<B256> {
+    pub async fn sell_permit(self, params: SellPermitParams, router: Router) -> Result<B256> {
         match router {
             Router::Dex(_) => self.core.v1.dex_router.sell_permit(params).await,
             Router::BondingCurve(_) => self.core.v1.bonding_curve_router.sell_permit(params).await,
@@ -114,23 +120,23 @@ impl<'a> CoreV1<'a> {
     // ========================================================================
 
     /// Get available buy tokens and required MON amount (Lens helper).
-    pub async fn available_buy_tokens(&self, token: Address) -> Result<(U256, U256)> {
+    pub async fn available_buy_tokens(self, token: Address) -> Result<(U256, U256)> {
         self.core.v1.lens.available_buy_tokens(token).await
     }
 
     /// Check if v1 token is locked.
-    pub async fn is_locked(&self, token: Address) -> Result<bool> {
+    pub async fn is_locked(self, token: Address) -> Result<bool> {
         self.core.v1.lens.is_locked(token).await
     }
 
     /// Check if v1 token has graduated from bonding curve to DEX.
-    pub async fn is_graduated(&self, token: Address) -> Result<bool> {
+    pub async fn is_graduated(self, token: Address) -> Result<bool> {
         self.core.v1.lens.is_graduated(token).await
     }
 
     /// Calculate how many tokens an initial buy of `amount_in` MON produces
     /// at token-creation time (v1 only).
-    pub async fn get_initial_buy_amount_out(&self, amount_in: U256) -> Result<U256> {
+    pub async fn get_initial_buy_amount_out(self, amount_in: U256) -> Result<U256> {
         self.core
             .v1
             .lens
@@ -139,17 +145,17 @@ impl<'a> CoreV1<'a> {
     }
 
     /// Get v1 deploy fee for token creation.
-    pub async fn get_deploy_fee(&self) -> Result<U256> {
+    pub async fn get_deploy_fee(self) -> Result<U256> {
         self.core.v1.bonding_curve_router.get_deploy_fee().await
     }
 
     /// Get bonding curve progress in basis points (0–10000 = 0–100%).
-    pub async fn get_progress(&self, token: Address) -> Result<U256> {
+    pub async fn get_progress(self, token: Address) -> Result<U256> {
         self.core.v1.lens.get_progress(token).await
     }
 
     /// Estimate gas for a v1 trading operation.
-    pub async fn estimate_gas(&self, router: &Router, params: GasEstimationParams) -> Result<u64> {
+    pub async fn estimate_gas(self, router: &Router, params: GasEstimationParams) -> Result<u64> {
         free_estimate_gas(self.core.provider.clone(), router, params).await
     }
 
@@ -160,7 +166,7 @@ impl<'a> CoreV1<'a> {
     /// v1 end-to-end token creation flow: image upload + metadata + salt
     /// mining + on-chain create transaction.
     pub async fn create_token(
-        &self,
+        self,
         params: CreateTokenParams,
         api_client: &ApiClient,
     ) -> Result<TokenCreationResult> {
@@ -216,7 +222,7 @@ impl<'a> CoreV1<'a> {
     // ========================================================================
 
     /// Claim creator reward for a single v1 token.
-    pub async fn claim_creator_reward(&self, params: CreatorClaimParams) -> Result<B256> {
+    pub async fn claim_creator_reward(self, params: CreatorClaimParams) -> Result<B256> {
         let treasury_address: Address = get_creator_treasury(self.core.network).parse()?;
         let creator = CreatorClient::new(treasury_address, self.core.provider.clone());
         creator.claim(params).await
@@ -224,7 +230,7 @@ impl<'a> CoreV1<'a> {
 
     /// Batch-claim creator rewards across multiple v1 tokens in one tx.
     pub async fn claim_creator_rewards_batch(
-        &self,
+        self,
         params: CreatorBatchClaimParams,
     ) -> Result<B256> {
         let treasury_address: Address = get_creator_treasury(self.core.network).parse()?;
@@ -234,17 +240,21 @@ impl<'a> CoreV1<'a> {
 
     // ========================================================================
     // Escape hatches: direct access to underlying v1 contract bindings.
+    //
+    // Return `&'a _` (tied to the borrowed `Core`, not to the temporary
+    // handle) so `let lens = core.v1().lens();` keeps the reference valid
+    // after the `core.v1()` temporary is dropped.
     // ========================================================================
 
-    pub fn bonding_curve_router(&self) -> &BondingCurveRouter<DynProvider> {
+    pub fn bonding_curve_router(self) -> &'a BondingCurveRouter<DynProvider> {
         &self.core.v1.bonding_curve_router
     }
 
-    pub fn dex_router(&self) -> &DexRouter<DynProvider> {
+    pub fn dex_router(self) -> &'a DexRouter<DynProvider> {
         &self.core.v1.dex_router
     }
 
-    pub fn lens(&self) -> &Lens<DynProvider> {
+    pub fn lens(self) -> &'a Lens<DynProvider> {
         &self.core.v1.lens
     }
 }
