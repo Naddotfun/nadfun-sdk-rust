@@ -18,6 +18,12 @@ use anyhow::{Context, Result};
 use std::time::Duration;
 
 /// v2 trading/query namespace handle. Zero-cost `Copy` wrapper over `&Core`.
+///
+/// Methods take `self` by value (the handle is `Copy`) so a future or an
+/// escape-hatch reference can outlive the temporary returned by
+/// [`crate::Core::v2`] — e.g. `let fut = core.v2().get_amount_out(..);` then
+/// `fut.await`, or `let router = core.v2().router();` used later. Reference-
+/// returning escape hatches yield `&'a _` tied to the underlying `&Core`.
 #[derive(Clone, Copy)]
 pub struct CoreV2<'a> {
     pub(crate) core: &'a Core,
@@ -30,12 +36,12 @@ impl<'a> CoreV2<'a> {
 
     /// Low-level v2 create with ERC-20 quote token + pre-approved initial
     /// buy. Use [`Self::create_token`] for the full orchestrated flow.
-    pub async fn create(&self, params: V2CreateParams) -> Result<B256> {
+    pub async fn create(self, params: V2CreateParams) -> Result<B256> {
         self.core.v2.router.create(params).await
     }
 
     /// Low-level v2 create funded by native MON (`msg.value`).
-    pub async fn create_with_native(&self, params: V2CreateWithNativeParams) -> Result<B256> {
+    pub async fn create_with_native(self, params: V2CreateWithNativeParams) -> Result<B256> {
         self.core.v2.router.create_with_native(params).await
     }
 
@@ -44,7 +50,7 @@ impl<'a> CoreV2<'a> {
     ///   - `NadFunRouter::create` for `V2CreatePayment::Erc20`, or
     ///   - `createWithNative` for `V2CreatePayment::Native`.
     pub async fn create_token(
-        &self,
+        self,
         params: V2CreateTokenParams,
         api: &ApiClient,
     ) -> Result<V2TokenCreationResult> {
@@ -58,7 +64,7 @@ impl<'a> CoreV2<'a> {
         // catch it after funds have been committed.
         if api.network() != self.core.network {
             return Err(anyhow::anyhow!(
-                "create_token_v2: ApiClient is bound to {:?} but Core is on {:?}; \
+                "create_token: ApiClient is bound to {:?} but Core is on {:?}; \
                  v2 contract addresses differ per network — construct ApiClient with the same network",
                 api.network(),
                 self.core.network,
@@ -73,7 +79,7 @@ impl<'a> CoreV2<'a> {
         // committed).
         if params.creator_address != self.core.wallet_address {
             return Err(anyhow::anyhow!(
-                "create_token_v2: params.creator_address ({}) must match Core's \
+                "create_token: params.creator_address ({}) must match Core's \
                  signing wallet ({}); the v2 router uses msg.sender as the creator",
                 params.creator_address,
                 self.core.wallet_address,
@@ -160,10 +166,10 @@ impl<'a> CoreV2<'a> {
         // a "receipt not found" error on healthy RPCs.
         let receipt = wait_for_receipt(&self.core.provider, tx_hash, Duration::from_secs(120))
             .await
-            .with_context(|| format!("create_token_v2: waiting for receipt of {tx_hash}"))?;
+            .with_context(|| format!("create_token: waiting for receipt of {tx_hash}"))?;
         if !receipt.status() {
             return Err(anyhow::anyhow!(
-                "create_token_v2: transaction reverted ({tx_hash})"
+                "create_token: transaction reverted ({tx_hash})"
             ));
         }
 
@@ -175,11 +181,11 @@ impl<'a> CoreV2<'a> {
 
         if let Some(rpc_log) = create_log_opt {
             let decoded = IBondingCurveV2Events::Create::decode_log(&rpc_log.inner)
-                .with_context(|| "create_token_v2: failed to decode on-chain Create event")?;
+                .with_context(|| "create_token: failed to decode on-chain Create event")?;
             let on_chain_token = decoded.data.token;
             if on_chain_token != prepared.token_address {
                 return Err(anyhow::anyhow!(
-                    "create_token_v2: predicted token {} does not match on-chain {} (tx {})",
+                    "create_token: predicted token {} does not match on-chain {} (tx {})",
                     prepared.token_address,
                     on_chain_token,
                     tx_hash
@@ -191,7 +197,7 @@ impl<'a> CoreV2<'a> {
             let pair = v2.token_registry.get_pair(prepared.token_address).await?;
             if pair == Address::ZERO {
                 return Err(anyhow::anyhow!(
-                    "create_token_v2: predicted token {} not registered on-chain after tx {}",
+                    "create_token: predicted token {} not registered on-chain after tx {}",
                     prepared.token_address,
                     tx_hash
                 ));
@@ -212,32 +218,32 @@ impl<'a> CoreV2<'a> {
     // v2: trading (exact-in)
     // ========================================================================
 
-    pub async fn buy(&self, params: V2BuyParams) -> Result<B256> {
+    pub async fn buy(self, params: V2BuyParams) -> Result<B256> {
         self.core.v2.router.buy(params).await
     }
 
-    pub async fn buy_with_native(&self, params: V2BuyWithNativeParams) -> Result<B256> {
+    pub async fn buy_with_native(self, params: V2BuyWithNativeParams) -> Result<B256> {
         self.core.v2.router.buy_with_native(params).await
     }
 
-    pub async fn buy_with_permit(&self, params: V2BuyWithPermitParams) -> Result<B256> {
+    pub async fn buy_with_permit(self, params: V2BuyWithPermitParams) -> Result<B256> {
         self.core.v2.router.buy_with_permit(params).await
     }
 
-    pub async fn sell(&self, params: V2SellParams) -> Result<B256> {
+    pub async fn sell(self, params: V2SellParams) -> Result<B256> {
         self.core.v2.router.sell(params).await
     }
 
-    pub async fn sell_to_native(&self, params: V2SellToNativeParams) -> Result<B256> {
+    pub async fn sell_to_native(self, params: V2SellToNativeParams) -> Result<B256> {
         self.core.v2.router.sell_to_native(params).await
     }
 
-    pub async fn sell_with_permit(&self, params: V2SellWithPermitParams) -> Result<B256> {
+    pub async fn sell_with_permit(self, params: V2SellWithPermitParams) -> Result<B256> {
         self.core.v2.router.sell_with_permit(params).await
     }
 
     pub async fn sell_to_native_with_permit(
-        &self,
+        self,
         params: V2SellToNativeWithPermitParams,
     ) -> Result<B256> {
         self.core.v2.router.sell_to_native_with_permit(params).await
@@ -247,23 +253,23 @@ impl<'a> CoreV2<'a> {
     // v2: trading (exact-out)
     // ========================================================================
 
-    pub async fn exact_out_buy(&self, params: V2ExactOutBuyParams) -> Result<B256> {
+    pub async fn exact_out_buy(self, params: V2ExactOutBuyParams) -> Result<B256> {
         self.core.v2.router.exact_out_buy(params).await
     }
 
     pub async fn exact_out_buy_with_native(
-        &self,
+        self,
         params: V2ExactOutBuyWithNativeParams,
     ) -> Result<B256> {
         self.core.v2.router.exact_out_buy_with_native(params).await
     }
 
-    pub async fn exact_out_sell(&self, params: V2ExactOutSellParams) -> Result<B256> {
+    pub async fn exact_out_sell(self, params: V2ExactOutSellParams) -> Result<B256> {
         self.core.v2.router.exact_out_sell(params).await
     }
 
     pub async fn exact_out_sell_to_native(
-        &self,
+        self,
         params: V2ExactOutSellToNativeParams,
     ) -> Result<B256> {
         self.core.v2.router.exact_out_sell_to_native(params).await
@@ -275,7 +281,7 @@ impl<'a> CoreV2<'a> {
 
     /// Auto-routed v2 quote (bonding curve pre-graduation, DEX after).
     pub async fn get_amount_out(
-        &self,
+        self,
         token: Address,
         amount_in: U256,
         is_buy: bool,
@@ -289,7 +295,7 @@ impl<'a> CoreV2<'a> {
 
     /// Auto-routed inverse v2 quote.
     pub async fn get_amount_in(
-        &self,
+        self,
         token: Address,
         amount_out: U256,
         is_buy: bool,
@@ -303,7 +309,7 @@ impl<'a> CoreV2<'a> {
 
     /// v2 bonding-curve-only quote (errors if graduated).
     pub async fn get_bonding_curve_amount_out(
-        &self,
+        self,
         token: Address,
         amount_in: U256,
         is_buy: bool,
@@ -317,7 +323,7 @@ impl<'a> CoreV2<'a> {
 
     /// Inverse v2 bonding-curve-only quote.
     pub async fn get_bonding_curve_amount_in(
-        &self,
+        self,
         token: Address,
         amount_out: U256,
         is_buy: bool,
@@ -331,7 +337,7 @@ impl<'a> CoreV2<'a> {
 
     /// v2 DEX-only quote (errors if not graduated).
     pub async fn get_dex_amount_out(
-        &self,
+        self,
         token: Address,
         amount_in: U256,
         is_buy: bool,
@@ -345,7 +351,7 @@ impl<'a> CoreV2<'a> {
 
     /// Inverse v2 DEX-only quote.
     pub async fn get_dex_amount_in(
-        &self,
+        self,
         token: Address,
         amount_out: U256,
         is_buy: bool,
@@ -362,18 +368,18 @@ impl<'a> CoreV2<'a> {
     // ========================================================================
 
     /// Whether the v2 token has graduated from bonding curve to DEX.
-    pub async fn is_graduated(&self, token: Address) -> Result<bool> {
+    pub async fn is_graduated(self, token: Address) -> Result<bool> {
         self.core.v2.router.is_graduated(token).await
     }
 
     /// NadFunPair address for a v2 token (via `TokenRegistry::getPair`).
     /// Returns `Address::ZERO` if the token isn't registered on v2.
-    pub async fn pool_address(&self, token: Address) -> Result<Address> {
+    pub async fn pool_address(self, token: Address) -> Result<Address> {
         self.core.v2.token_registry.get_pair(token).await
     }
 
     /// Wrapped native (WMON) address known to the v2 router.
-    pub async fn wrapped_native(&self) -> Result<Address> {
+    pub async fn wrapped_native(self) -> Result<Address> {
         self.core.v2.router.wrapped_native().await
     }
 
@@ -381,7 +387,7 @@ impl<'a> CoreV2<'a> {
     /// (denominated in the quote token). The on-chain create requires
     /// `msg.value >= deploy_fee + buy_quote_amount` for native funding;
     /// `create_token` adds it automatically.
-    pub async fn deploy_fee(&self, quote_token: Address) -> Result<U256> {
+    pub async fn deploy_fee(self, quote_token: Address) -> Result<U256> {
         self.core.v2.protocol_manager.deploy_fee(quote_token).await
     }
 
@@ -390,10 +396,10 @@ impl<'a> CoreV2<'a> {
     /// succeed. Errors when `self.core.wallet_address` is `Address::ZERO`
     /// (Codex P2 #9) — a read-only `Core` built via
     /// `Core::with_provider(_, Address::ZERO, _)` cannot estimate gas.
-    pub async fn estimate_gas(&self, params: V2GasEstimationParams) -> Result<u64> {
+    pub async fn estimate_gas(self, params: V2GasEstimationParams) -> Result<u64> {
         if self.core.wallet_address == Address::ZERO {
             return Err(anyhow::anyhow!(
-                "estimate_gas_v2: wallet_address is Address::ZERO; \
+                "estimate_gas: wallet_address is Address::ZERO; \
                  construct Core with a real signer to estimate gas"
             ));
         }
@@ -406,28 +412,32 @@ impl<'a> CoreV2<'a> {
 
     // ========================================================================
     // Escape hatches: direct access to underlying v2 contract bindings.
+    //
+    // Return `&'a _` (tied to the borrowed `Core`, not to the temporary
+    // handle) so `let router = core.v2().router();` keeps the reference valid
+    // after the `core.v2()` temporary is dropped.
     // ========================================================================
 
-    pub fn router(&self) -> &NadFunRouter<DynProvider> {
+    pub fn router(self) -> &'a NadFunRouter<DynProvider> {
         &self.core.v2.router
     }
 
-    pub fn factory(&self) -> &NadFunFactory<DynProvider> {
+    pub fn factory(self) -> &'a NadFunFactory<DynProvider> {
         &self.core.v2.factory
     }
 
-    pub fn bonding_curve(&self) -> &BondingCurveV2<DynProvider> {
+    pub fn bonding_curve(self) -> &'a BondingCurveV2<DynProvider> {
         &self.core.v2.bonding_curve
     }
 
-    pub fn token_registry(&self) -> &TokenRegistryV2<DynProvider> {
+    pub fn token_registry(self) -> &'a TokenRegistryV2<DynProvider> {
         &self.core.v2.token_registry
     }
 
     /// `TokenInfoLens` binding for this `Core`'s network. Prefer
     /// [`crate::Core::detect_version`] / [`crate::Core::detect_token_info`];
     /// this is the raw escape hatch.
-    pub fn token_info_lens(&self) -> &TokenInfoLens<DynProvider> {
+    pub fn token_info_lens(self) -> &'a TokenInfoLens<DynProvider> {
         &self.core.v2.token_info_lens
     }
 }

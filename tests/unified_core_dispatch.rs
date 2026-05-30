@@ -135,3 +135,26 @@ async fn _core_v1_methods_compile(c: &nadfun_sdk::Core) {
     let _dxr = c.v1().dex_router();
     let _lens = c.v1().lens();
 }
+
+/// Regression (Codex review [P2], 2026-05-31): namespace handles must support
+/// the common pattern where a future or an escape-hatch reference outlives the
+/// temporary `core.v1()` / `core.v2()` handle that produced it. The handles are
+/// `Copy` and take `self` by value, and escape hatches return `&'a _` tied to
+/// the underlying `&Core`, so storing a result across the temporary compiles.
+/// Before the fix these lines failed with E0716 (temporary dropped while
+/// borrowed). The earlier surface checks never *use* the stored value after a
+/// subsequent statement, so they did not catch this.
+#[allow(dead_code, unreachable_code, unused_variables)]
+async fn _stored_handle_results_compile(c: &nadfun_sdk::Core) {
+    use alloy::primitives::{Address, U256};
+    // Future stored across the temporary v1()/v2() handle, awaited later.
+    let fut_v1 = c.v1().get_amount_out(Address::ZERO, U256::ZERO, true);
+    let _ = fut_v1.await;
+    let fut_v2 = c.v2().get_amount_out(Address::ZERO, U256::ZERO, true);
+    let _ = fut_v2.await;
+    // Escape-hatch reference stored, then used after another statement.
+    let lens = c.v1().lens();
+    let router = c.v2().router();
+    let _ = lens.address;
+    let _ = router.address;
+}
