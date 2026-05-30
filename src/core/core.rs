@@ -20,7 +20,8 @@ use crate::{
         BondingCurveRouter, BondingCurveV2, CreatorClient, DexRouter, Lens, NadFunFactory,
         NadFunRouter, ProtocolManagerV2, TokenInfoLens, TokenRegistryV2,
     },
-    core::v1::gas::{estimate_gas, GasEstimationParams},
+    core::v1::{gas::{estimate_gas, GasEstimationParams}, CoreV1},
+    core::v2::CoreV2,
     types::{v2::events::IBondingCurveV2Events, *},
     version::{SdkVersion, TokenInfo},
 };
@@ -44,19 +45,19 @@ use std::{sync::Arc, time::Duration};
 /// `Core::new` will fail loudly during address resolution instead of
 /// carrying a dead branch.
 pub struct Core {
-    v1: V1Contracts,
-    v2: V2Contracts,
-    provider: Arc<DynProvider>,
-    wallet_address: Address,
-    network: Network,
+    pub(crate) v1: V1Contracts,
+    pub(crate) v2: V2Contracts,
+    pub(crate) provider: Arc<DynProvider>,
+    pub(crate) wallet_address: Address,
+    pub(crate) network: Network,
 }
 
 /// v1 contract bindings — bonding-curve router, DEX (Capricorn CL) router,
 /// and the Lens used for auto-routing quotes.
-struct V1Contracts {
-    bonding_curve_router: BondingCurveRouter<DynProvider>,
-    dex_router: DexRouter<DynProvider>,
-    lens: Lens<DynProvider>,
+pub(crate) struct V1Contracts {
+    pub(crate) bonding_curve_router: BondingCurveRouter<DynProvider>,
+    pub(crate) dex_router: DexRouter<DynProvider>,
+    pub(crate) lens: Lens<DynProvider>,
 }
 
 /// v2 contract bindings — NadFunRouter + factory + bonding curve +
@@ -64,13 +65,13 @@ struct V1Contracts {
 /// on every supported network, so `Core::new` resolves it at construction
 /// (failing loudly if a future network ships without it) rather than
 /// carrying a fallback branch.
-struct V2Contracts {
-    router: NadFunRouter<DynProvider>,
-    factory: NadFunFactory<DynProvider>,
-    bonding_curve: BondingCurveV2<DynProvider>,
-    token_registry: TokenRegistryV2<DynProvider>,
-    token_info_lens: TokenInfoLens<DynProvider>,
-    protocol_manager: ProtocolManagerV2<DynProvider>,
+pub(crate) struct V2Contracts {
+    pub(crate) router: NadFunRouter<DynProvider>,
+    pub(crate) factory: NadFunFactory<DynProvider>,
+    pub(crate) bonding_curve: BondingCurveV2<DynProvider>,
+    pub(crate) token_registry: TokenRegistryV2<DynProvider>,
+    pub(crate) token_info_lens: TokenInfoLens<DynProvider>,
+    pub(crate) protocol_manager: ProtocolManagerV2<DynProvider>,
 }
 
 impl Core {
@@ -113,6 +114,18 @@ impl Core {
             wallet_address,
             network,
         })
+    }
+
+    /// v1 namespace handle (bonding curve + Capricorn CL DEX). Zero-cost —
+    /// borrows `&self`.
+    pub fn v1(&self) -> CoreV1<'_> {
+        CoreV1 { core: self }
+    }
+
+    /// v2 namespace handle (NadFunRouter + registry + vaults). Zero-cost —
+    /// borrows `&self`.
+    pub fn v2(&self) -> CoreV2<'_> {
+        CoreV2 { core: self }
     }
 
     // ========================================================================
@@ -879,7 +892,7 @@ fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V
 /// `provider.get_transaction_receipt` returns `Ok(None)` while the tx is
 /// still pending; without polling, that becomes a confusing "receipt not
 /// found" right after a successful broadcast.
-async fn wait_for_receipt(
+pub(crate) async fn wait_for_receipt(
     provider: &Arc<DynProvider>,
     tx_hash: B256,
     max_wait: Duration,
