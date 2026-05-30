@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     let wallet = core.wallet_address();
 
     // Get quote: how much ETH we'll receive
-    let (router, expected_eth) = core.get_amount_out(token, token_amount, false).await?;
+    let (router, expected_eth) = core.v1().get_amount_out(token, token_amount, false).await?;
 
     println!("📊 Quote:");
     println!("  Tokens to sell: {}", token_amount);
@@ -141,7 +141,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let estimated_gas = match core.estimate_gas(&router, gas_params).await {
+    let estimated_gas = match core.v1().estimate_gas(&router, gas_params).await {
         Ok(gas) => {
             println!("⛽ Estimated gas for sell: {}", gas);
             gas
@@ -181,7 +181,7 @@ async fn main() -> Result<()> {
     println!("🚀 Executing sell transaction...");
 
     // Execute sell transaction - returns tx_hash immediately
-    let tx_hash = core.sell(sell_params, router).await?;
+    let tx_hash = core.v1().sell(sell_params, router).await?;
     println!("✅ Transaction submitted!");
     println!("  Transaction hash: {}", tx_hash);
 

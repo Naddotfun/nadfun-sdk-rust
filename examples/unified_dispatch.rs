@@ -6,8 +6,8 @@
 //! (`api.get_token(token)` is the off-chain equivalent.) The SDK does not
 //! pick a trade method for you — this example shows the v2 quote-routing
 //! choice the caller makes (see MIGRATION.md §7 for the full matrix):
-//!   quote == wrapped native (WMON) -> buy_with_native_v2 (send MON)
-//!   quote == other ERC-20          -> buy_v2 (pre-approve the quote token)
+//!   quote == wrapped native (WMON) -> core.v2().buy_with_native (send MON)
+//!   quote == other ERC-20          -> core.v2().buy (pre-approve the quote token)
 //!
 //! Usage:
 //!   export PRIVATE_KEY="..." RPC_URL="..."
@@ -39,58 +39,61 @@ async fn auto_buy(
     println!("token info: {:?}", info);
     match info.version {
         SdkVersion::V1 => {
-            let (router, expected) = core.get_amount_out(token, value, true).await?;
+            let (router, expected) = core.v1().get_amount_out(token, value, true).await?;
             let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-            core.buy(
-                BuyParams {
-                    token,
-                    amount_in: value,
-                    amount_out_min: min_out,
-                    to,
-                    deadline,
-                    gas_limit: None,
-                    gas_price: Some(GasPricing::Legacy),
-                    nonce: None,
-                },
-                router,
-            )
-            .await
+            core.v1()
+                .buy(
+                    BuyParams {
+                        token,
+                        amount_in: value,
+                        amount_out_min: min_out,
+                        to,
+                        deadline,
+                        gas_limit: None,
+                        gas_price: Some(GasPricing::Legacy),
+                        nonce: None,
+                    },
+                    router,
+                )
+                .await
         }
         SdkVersion::V2 => {
-            // The quote token decides how the buy is funded. `get_amount_out_v2`
+            // The quote token decides how the buy is funded. `get_amount_out`
             // is quote-agnostic; the trade method is not.
-            let expected = core.get_amount_out_v2(token, value, true).await?;
+            let expected = core.v2().get_amount_out(token, value, true).await?;
             let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-            let wrapped_native = core.wrapped_native_v2().await?;
+            let wrapped_native = core.v2().wrapped_native().await?;
 
             if info.quote_token == wrapped_native {
                 // Native path: send `value` MON, the router wraps it.
-                core.buy_with_native_v2(V2BuyWithNativeParams {
-                    token,
-                    to,
-                    amount_out_min: min_out,
-                    deadline,
-                    value,
-                    gas_limit: None,
-                    gas_price: Some(GasPricing::Legacy),
-                    nonce: None,
-                })
-                .await
+                core.v2()
+                    .buy_with_native(V2BuyWithNativeParams {
+                        token,
+                        to,
+                        amount_out_min: min_out,
+                        deadline,
+                        value,
+                        gas_limit: None,
+                        gas_price: Some(GasPricing::Legacy),
+                        nonce: None,
+                    })
+                    .await
             } else {
                 // ERC-20 quote (e.g. USDT): `value` is the quote-token amount and
                 // must already be approved to the v2 router. (LvMON is a special
                 // case that mints from native on buy — see MIGRATION.md §7.)
-                core.buy_v2(V2BuyParams {
-                    token,
-                    to,
-                    amount_in: value,
-                    amount_out_min: min_out,
-                    deadline,
-                    gas_limit: None,
-                    gas_price: Some(GasPricing::Legacy),
-                    nonce: None,
-                })
-                .await
+                core.v2()
+                    .buy(V2BuyParams {
+                        token,
+                        to,
+                        amount_in: value,
+                        amount_out_min: min_out,
+                        deadline,
+                        gas_limit: None,
+                        gas_price: Some(GasPricing::Legacy),
+                        nonce: None,
+                    })
+                    .await
             }
         }
         SdkVersion::None => {
@@ -126,8 +129,8 @@ async fn main() -> Result<()> {
 
 /// Note: starting in 0.4.0 the unified `Core` handles v1 and v2 from a
 /// single instance — no need for two side-by-side clients. Use
-/// `core.buy(...)` for v1 paths and `core.buy_v2(...)` (or any other
-/// `*_v2` method) for v2-only paths.
+/// `core.v1().buy(...)` for v1 paths and `core.v2().buy(...)` (or any other
+/// `core.v2().*` method) for v2-only paths.
 #[cfg(test)]
 mod _shape_check {
     use super::*;

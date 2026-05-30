@@ -64,34 +64,35 @@ async fn main() -> Result<()> {
 
     // Read-only Core — wallet_address is ignored for view calls.
     let core = Core::with_provider(provider.clone(), Address::ZERO, config.network)?;
-    let registry = core.token_registry_v2();
+    let core_v2 = core.v2();
+    let registry = core_v2.token_registry();
 
-    match core.wrapped_native_v2().await {
+    match core.v2().wrapped_native().await {
         Ok(w) => println!("  router.wrappedNative   {}", w),
         Err(e) => println!("  router.wrappedNative   ERR: {}", e),
     }
 
-    match core.factory_v2().all_pairs_length().await {
+    match core.v2().factory().all_pairs_length().await {
         Ok(n) => println!("  factory.allPairs       {} pair(s)", n),
         Err(e) => println!("  factory.allPairs       ERR: {}", e),
     }
 
-    match core.factory_v2().implementation().await {
+    match core.v2().factory().implementation().await {
         Ok(i) => println!("  factory.impl           {}", i),
         Err(e) => println!("  factory.impl           ERR: {}", e),
     }
 
-    match core.factory_v2().fee_collector().await {
+    match core.v2().factory().fee_collector().await {
         Ok(c) => println!("  factory.feeCollector   {}", c),
         Err(e) => println!("  factory.feeCollector   ERR: {}", e),
     }
 
-    match core.bonding_curve_v2().is_halted().await {
+    match core.v2().bonding_curve().is_halted().await {
         Ok(h) => println!("  bondingCurve.isHalted  {}", h),
         Err(e) => println!("  bondingCurve.isHalted  ERR: {}", e),
     }
 
-    match core.bonding_curve_v2().version().await {
+    match core.v2().bonding_curve().version().await {
         Ok(v) => println!("  bondingCurve.VERSION   {}", v),
         Err(e) => println!("  bondingCurve.VERSION   ERR: {}", e),
     }
