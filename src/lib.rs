@@ -98,7 +98,7 @@ pub mod version;
 pub use api::{ApiClient, ALLOWED_IMAGE_TYPES};
 pub use constants::{get_creator_manager, get_creator_treasury, get_nadfun_router_v2, Network};
 pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PoolDiscovery};
-pub use core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
+pub use core::{estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils};
 pub use stream::{
     BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
     SwapEvent,
@@ -124,7 +124,7 @@ pub mod prelude {
     pub use crate::api::{ApiClient, ALLOWED_IMAGE_TYPES};
 
     // Core trading functionality
-    pub use crate::core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
+    pub use crate::core::{estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils};
 
     // Token operations
     pub use crate::token::TokenHelper;

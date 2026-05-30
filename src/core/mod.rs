@@ -36,10 +36,12 @@
 #[allow(clippy::module_inception)]
 pub mod core;
 pub mod v1;
+pub mod v2;
 
 pub use crate::types::Router;
 pub use core::Core;
 pub use v1::{
     estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas,
-    GasEstimationParams, SlippageUtils,
+    CoreV1, GasEstimationParams, SlippageUtils,
 };
+pub use v2::CoreV2;
