@@ -4,9 +4,9 @@
 //! A single `Core` instance binds to a `Network` and wires both the v1
 //! (`BondingCurveRouter` + `DexRouter` + `Lens`) and v2 (`NadFunRouter` +
 //! `NadFunFactory` + `BondingCurveV2` + `TokenRegistryV2`) contract
-//! surfaces. v1 trades use `buy` / `sell` and the auto-routing `Lens`
-//! quote; v2 trades use the `core.v2()` handle (different params shape,
-//! so auto-dispatch on `buy` / `sell` would erase information).
+//! surfaces. v1 trades are accessed via `core.v1()` ([`CoreV1`] handle,
+//! e.g. `core.v1().buy(...)`); v2 trades via `core.v2()` ([`CoreV2`]
+//! handle, e.g. `core.v2().buy(...)`; the `_v2` suffix is dropped).
 //!
 //! Use `Core::detect_version(token)` (or `detect_token_info` for the quote
 //! token too) to classify a token via the on-chain `TokenInfoLens` in one
@@ -14,7 +14,6 @@
 //! caching; cache results yourself if you need to.
 
 use crate::{
-    api::ApiClient,
     constants::*,
     contracts::{
         BondingCurveRouter, BondingCurveV2, DexRouter, Lens, NadFunFactory,
@@ -190,19 +189,8 @@ impl Core {
 
     // ========================================================================
     // Escape hatches: direct access to underlying contract bindings.
+    // v1 escape hatches are on CoreV1: use core.v1().bonding_curve_router() etc.
     // ========================================================================
-
-    pub fn bonding_curve_router(&self) -> &BondingCurveRouter<DynProvider> {
-        &self.v1.bonding_curve_router
-    }
-
-    pub fn dex_router(&self) -> &DexRouter<DynProvider> {
-        &self.v1.dex_router
-    }
-
-    pub fn lens(&self) -> &Lens<DynProvider> {
-        &self.v1.lens
-    }
 
     pub fn provider(&self) -> &Arc<DynProvider> {
         &self.provider
