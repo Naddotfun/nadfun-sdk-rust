@@ -35,7 +35,14 @@ plan: `docs/superpowers/plans/2026-05-30-v2-namespace-phase1.md`.
   `llms.txt`, `README.md`, `examples/EXAMPLES.md`, and module rustdoc
   (`core/core.rs`, `core/mod.rs`, `core/v1/mod.rs`, crate `lib.rs`) rewritten to
   the handle API.
-- **Format** (`75c61c4`): `cargo fmt` on the refactor-touched files.
+- **Format** (`2f7835a`, `e23261a`): `cargo fmt` on the refactor-touched files,
+  then a separate commit for the pre-existing `indexer.rs` debt.
+- **Codex review fix** (`4f9c2db`): `/codex review` GATE **PASS** (0 P1, 1 P2).
+  P2 AUTO-FIX — `core.v1()` / `core.v2()` methods now take `self` by value (the
+  handle is `Copy`) and escape hatches return `&'a _`, so a stored future
+  (`let f = core.v1().get_amount_out(..); f.await`) or a stored escape-hatch
+  ref (`let r = core.v2().router();`) compiles instead of failing E0716. Added
+  regression compile-test `_stored_handle_results_compile`.
 
 ## Verification
 
@@ -52,4 +59,5 @@ not this refactor.
 
 ## Outcome
 
-_(filled at PR / merge: final summary + PR link.)_
+Phase 1 complete and codex-reviewed (GATE PASS). Ready for PR
+`feat/v2-namespace → v2`. _(PR link filled at open.)_
