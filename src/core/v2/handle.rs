@@ -476,8 +476,11 @@ impl<'a> CoreV2<'a> {
     /// Returns `(available_tokens, required_quote)`. `available_tokens =
     /// virtual_token_reserve − min_token_reserve`; `required_quote` is the
     /// on-chain bonding-curve quote ([`Self::get_bonding_curve_amount_in`]) for
-    /// that output. A graduated token returns `(0, 0)`. v1 parity for
-    /// [`crate::CoreV1::available_buy_tokens`].
+    /// that output, and round-trips exactly at this boundary: feeding it back
+    /// through [`Self::get_bonding_curve_amount_out`] returns `available_tokens`
+    /// with no rounding gap, since the curve's `getAmountIn`/`getAmountOut`
+    /// converge at the `min_token_reserve` edge. A graduated token returns
+    /// `(0, 0)`. v1 parity for [`crate::CoreV1::available_buy_tokens`].
     pub async fn available_buy_tokens(self, token: Address) -> Result<(U256, U256)> {
         let curve = self.core.v2.bonding_curve.get_curve(token).await?;
         let available = crate::core::v2::calc::available_buy_tokens(&curve);
