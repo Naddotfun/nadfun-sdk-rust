@@ -160,6 +160,40 @@ End-to-end v2 token creation, exact-output, ERC-20 quote, permits, pool
 discovery, and event streaming are covered under
 [`examples/v2/`](examples/v2/).
 
+#### v2 view / query parity
+
+Thin `core.v2()` wrappers over the on-chain v2 views, mirroring the v1 query
+surface:
+
+```rust,ignore
+// State / config
+core.v2().is_halted().await?;                 // bool: protocol halted?
+core.v2().is_registered(token).await?;        // bool: in v2 TokenRegistry?
+core.v2().get_dex_type(token).await?;         // u8: DexType discriminator
+core.v2().quote_token(token).await?;          // Address: WMON / LvMON / ERC-20
+core.v2().get_sniping_penalty(token).await?;  // U256: anti-sniping bps now
+core.v2().get_curve(token).await?;            // V2Curve: full bonding-curve state
+core.v2().quote_config(quote_token).await?;   // V2QuoteConfig: genesis params + fees
+
+// Post-graduation pair views — Err before graduation (gated on is_graduated):
+core.v2().is_locked(token).await?;            // bool: DEX-pair lock (NOT the v1 curve lock)
+core.v2().get_reserves(token).await?;         // PairReserves of the graduated pair
+
+// Computed helpers (v1 Lens parity; no v2 on-chain fn — math from curve/config):
+core.v2().get_progress(token).await?;         // U256: curve progress in bps (0..=10000)
+core.v2().available_buy_tokens(token).await?; // (U256, U256): (tokens left, quote needed)
+core.v2().get_initial_buy_amount_out(quote_token, amount_in).await?; // U256
+```
+
+`get_initial_buy_amount_out` takes a `quote_token` (v2 genesis curves differ per
+quote token); v1's equivalent is parameterless. The computed helpers reproduce
+the on-chain bonding-curve math (fee + constant-product + supply cap), verified
+against on-chain quotes in `tests/v2_views_live.rs`.
+
+`is_locked` reflects the post-graduation `NadFunPair` lock, distinct from the v1
+bonding-curve `core.v1().is_locked`. New view types `V2Curve`, `V2QuoteConfig`,
+and `PairReserves` are re-exported from the crate root and `prelude`.
+
 ## Features
 
 ### 🔑 API Authentication

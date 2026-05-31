@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- v2 computed-helper parity on `core.v2()` (the v1 Lens utilities that have no
+  v2 on-chain equivalent): `get_progress`, `available_buy_tokens`, and
+  `get_initial_buy_amount_out(quote_token, amount_in)`. These reproduce the
+  on-chain bonding-curve math client-side from `get_curve` / `quote_config`
+  (fee + constant-product + supply cap, verified against on-chain quotes).
+  `get_initial_buy_amount_out` takes a `quote_token` (v2 genesis curves differ
+  per quote token) — unlike v1's parameterless version.
+- v2 passthrough parity on `core.v2()`: `is_halted`, `get_sniping_penalty`,
+  `quote_token`, `get_curve` (→ new `V2Curve`), `quote_config` (→ new
+  `V2QuoteConfig`), `get_dex_type`, `is_registered`, `is_locked`, and
+  `get_reserves` (→ `PairReserves`). `is_locked` / `get_reserves` gate on
+  `is_graduated` and error before graduation; `is_locked` reflects the
+  post-graduation DEX-pair lock, which is distinct from the v1 bonding-curve
+  `is_locked`. New types `V2Curve`, `V2QuoteConfig`, and `PairReserves` are
+  re-exported from the crate root and `prelude`.
+
 ### Changed
 
 - **BREAKING:** `Core` trading methods moved behind namespace handles

@@ -1,6 +1,7 @@
 //! `CoreV2` — v2 namespace handle. Borrows `&Core`; methods delegate to the
 //! v2 contract bindings. Construct via [`crate::Core::v2`].
 
+use crate::contracts::v2::{NadFunPair, PairReserves};
 use crate::core::core::wait_for_receipt;
 use crate::core::Core;
 use crate::{
@@ -408,6 +409,174 @@ impl<'a> CoreV2<'a> {
             .router
             .estimate_gas(params, self.core.wallet_address)
             .await
+    }
+
+    // ========================================================================
+    // v2: curve / config / registry views (passthrough parity)
+    // ========================================================================
+
+    /// Whether the v2 bonding-curve protocol is halted (no trading allowed).
+    pub async fn is_halted(self) -> Result<bool> {
+        self.core.v2.bonding_curve.is_halted().await
+    }
+
+    /// Anti-sniping penalty (basis points) for a buy on `token` at the current
+    /// block. Driven by `block.number - createdAtBlock` against the
+    /// ProtocolManager's penalty table.
+    pub async fn get_sniping_penalty(self, token: Address) -> Result<U256> {
+        self.core.v2.bonding_curve.get_sniping_penalty(token).await
+    }
+
+    /// Quote token configured for `token`'s curve (WMON, LvMON, or an ERC-20).
+    pub async fn quote_token(self, token: Address) -> Result<Address> {
+        self.core.v2.bonding_curve.get_quote_token(token).await
+    }
+
+    /// Full on-chain bonding-curve state for `token`. See [`V2Curve`].
+    pub async fn get_curve(self, token: Address) -> Result<V2Curve> {
+        self.core.v2.bonding_curve.get_curve(token).await
+    }
+
+    /// Per-quote-token protocol config (genesis curve params + fees +
+    /// graduation economics). See [`V2QuoteConfig`].
+    pub async fn quote_config(self, quote_token: Address) -> Result<V2QuoteConfig> {
+        self.core.v2.protocol_manager.get_config(quote_token).await
+    }
+
+    /// DexType discriminator registered for `token` (the post-graduation DEX).
+    pub async fn get_dex_type(self, token: Address) -> Result<u8> {
+        self.core.v2.token_registry.get_dex_type(token).await
+    }
+
+    /// Whether `token` is registered in the v2 `TokenRegistry`.
+    pub async fn is_registered(self, token: Address) -> Result<bool> {
+        self.core.v2.token_registry.is_registered(token).await
+    }
+
+    // ========================================================================
+    // v2: computed helpers (v1 Lens parity; v2 has no on-chain equivalent)
+    //
+    // Pure curve math reproducing the on-chain BondingCurve arithmetic — v2
+    // exposes no getProgress / availableBuyTokens / getInitialBuyAmountOut, so
+    // these compute client-side from get_curve / quote_config. See
+    // `crate::core::v2::calc` and the live drift tests.
+    // ========================================================================
+
+    /// Bonding-curve progress in basis points (0–10000 = 0–100%), computed from
+    /// the live curve. Graduated tokens read 10000. v1 parity for
+    /// [`crate::CoreV1::get_progress`].
+    pub async fn get_progress(self, token: Address) -> Result<U256> {
+        let curve = self.core.v2.bonding_curve.get_curve(token).await?;
+        Ok(crate::core::v2::calc::progress_bps(&curve))
+    }
+
+    /// Tokens still buyable on the curve before graduation, and the quote-token
+    /// amount required to buy them all.
+    ///
+    /// Returns `(available_tokens, required_quote)`. `available_tokens =
+    /// virtual_token_reserve − min_token_reserve`; `required_quote` is the
+    /// on-chain bonding-curve quote ([`Self::get_bonding_curve_amount_in`]) for
+    /// that output. A graduated token returns `(0, 0)`. v1 parity for
+    /// [`crate::CoreV1::available_buy_tokens`].
+    pub async fn available_buy_tokens(self, token: Address) -> Result<(U256, U256)> {
+        let curve = self.core.v2.bonding_curve.get_curve(token).await?;
+        let available = crate::core::v2::calc::available_buy_tokens(&curve);
+        if available.is_zero() {
+            return Ok((U256::ZERO, U256::ZERO));
+        }
+        let required_quote = self
+            .core
+            .v2
+            .router
+            .get_bonding_curve_amount_in(token, available, true)
+            .await?;
+        Ok((available, required_quote))
+    }
+
+    /// Tokens received for an initial buy of `amount_in` quote at token-creation
+    /// time, for a token quoted in `quote_token`.
+    ///
+    /// Computed from the quote token's genesis [`V2QuoteConfig`] — the curve a
+    /// freshly created token inherits. Reproduces the on-chain
+    /// `BondingCurve.getAmountOut` (fee, constant-product, supply cap).
+    ///
+    /// NOTE: unlike v1's parameterless [`crate::CoreV1::get_initial_buy_amount_out`]
+    /// (all v1 tokens share one genesis curve), v2 genesis params differ per
+    /// quote token, so this takes `quote_token`.
+    ///
+    /// This applies the curve protocol fee + constant-product math only — it
+    /// does NOT include the time-decaying anti-sniping penalty that the live
+    /// `getBondingCurveAmountOut` adds for an already-created token (a fresh
+    /// creation has no penalty window). It is a creation-time estimate, so it
+    /// won't exactly match an existing token's live quote.
+    pub async fn get_initial_buy_amount_out(
+        self,
+        quote_token: Address,
+        amount_in: U256,
+    ) -> Result<U256> {
+        let config = self
+            .core
+            .v2
+            .protocol_manager
+            .get_config(quote_token)
+            .await?;
+        Ok(crate::core::v2::calc::initial_buy_amount_out(
+            &config, amount_in,
+        ))
+    }
+
+    /// Whether `token`'s graduated DEX pair is locked.
+    ///
+    /// CAVEAT: this is the **post-graduation `NadFunPair` lock**, semantically
+    /// different from v1 [`crate::CoreV1::is_locked`] (a bonding-curve lock).
+    /// Errors before graduation: the registry assigns a pair at creation time,
+    /// so a non-zero pair does NOT imply graduation — this gates on the curve's
+    /// `graduated` flag (a pre-graduation pair has no meaningful lock state).
+    pub async fn is_locked(self, token: Address) -> Result<bool> {
+        let pair = self.resolve_graduated_pair(token, "is_locked").await?;
+        NadFunPair::new(pair, self.core.provider.clone())
+            .is_locked()
+            .await
+    }
+
+    /// Reserves of `token`'s graduated DEX pair. Errors before graduation
+    /// (gates on the curve's `graduated` flag, not merely a non-zero pair).
+    ///
+    /// `reserve0` / `reserve1` follow the pair's `token0` / `token1` ordering,
+    /// which is the address-sorted order of `(token, quote_token)` — NOT
+    /// necessarily token-then-quote. To map a reserve to a side, compare
+    /// against [`Self::quote_token`] or call `pair.token0()` via the
+    /// [`Self::router`]-style escape hatch.
+    pub async fn get_reserves(self, token: Address) -> Result<PairReserves> {
+        let pair = self.resolve_graduated_pair(token, "get_reserves").await?;
+        NadFunPair::new(pair, self.core.provider.clone())
+            .get_reserves()
+            .await
+    }
+
+    /// Resolve the DEX pair address for a token that has actually graduated.
+    ///
+    /// Gates on graduation because the registry assigns a pair at token creation
+    /// (so `pair != ZERO` is true pre-graduation too); only a graduated token
+    /// has a live pair with meaningful lock/reserve state.
+    ///
+    /// Uses a single `get_curve` call — it returns both `graduated` and `pair`,
+    /// so we avoid a separate `is_graduated` + `get_pair` round-trip (Codex P2).
+    /// For an unregistered token `get_curve` returns a zeroed curve
+    /// (`graduated == false`), which falls through to the not-graduated error.
+    async fn resolve_graduated_pair(self, token: Address, op: &str) -> Result<Address> {
+        let curve = self.core.v2.bonding_curve.get_curve(token).await?;
+        if !curve.graduated {
+            return Err(anyhow::anyhow!(
+                "{op}: token {token} has not graduated (no live v2 DEX pair)"
+            ));
+        }
+        if curve.pair == Address::ZERO {
+            return Err(anyhow::anyhow!(
+                "{op}: token {token} reports graduated but has no pair"
+            ));
+        }
+        Ok(curve.pair)
     }
 
     // ========================================================================
