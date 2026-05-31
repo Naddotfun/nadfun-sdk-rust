@@ -29,9 +29,8 @@
 //! let bonding_curve_addr = get_bonding_curve(Network::Mainnet).parse::<Address>()?;
 //! let wmon_addr = get_wmon(Network::Mainnet).parse::<Address>()?;
 //!
-//! // v2 helpers
+//! // v2 helpers (return `&str` directly — v2 is deployed on every network)
 //! let nadfun_router_v2 = get_nadfun_router_v2(Network::Mainnet)
-//!     .expect("v2 deployed")
 //!     .parse::<Address>()?;
 //! ```
 
@@ -230,10 +229,6 @@ pub mod addresses {
             /// trades land; surfaced for read-only inspection / auditing).
             pub const FEE_TO: &str = "0x2248217222bBfd42Ad9edf0689c4c096dCd4FFeE";
 
-            /// Liquid-staked MON used by `ILvMonMinter` flows on v2 (set
-            /// alongside the deployment that ships LvMON support).
-            pub const LV_MON: &str = "0xBe3fa50514D9617ce645a02B34F595541AF02b6b";
-
             /// `TokenInfoLens` — stateless view contract that classifies a
             /// token as v1 / v2 / none AND returns its on-chain `quoteToken`
             /// by simultaneously probing the v1 and v2 token registries in one
@@ -336,153 +331,142 @@ pub fn get_creator_manager(network: Network) -> &'static str {
 }
 
 // ============================================================================
-// v2 helpers — return `Some(&'static str)` when v2 is configured for the
-// given network, `None` otherwise. v2 is now deployed on both mainnet and
-// testnet, so all helpers (except those gated by deployment, e.g. LvMON,
-// FeeTo) return `Some` for either network.
+// v2 helpers — v2 is deployed on both mainnet and testnet, so each helper
+// returns `&'static str` directly. The one exception is `get_fee_to_v2`,
+// which stays `Option` because it is genuinely absent on Mainnet.
 // ============================================================================
 
 /// Get NadFun v2 unified router address for the given network.
-pub fn get_nadfun_router_v2(network: Network) -> Option<&'static str> {
+pub fn get_nadfun_router_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::NAD_FUN_ROUTER),
-        Network::Testnet => Some(addresses::testnet::v2::NAD_FUN_ROUTER),
+        Network::Mainnet => addresses::mainnet::v2::NAD_FUN_ROUTER,
+        Network::Testnet => addresses::testnet::v2::NAD_FUN_ROUTER,
     }
 }
 
 /// Get NadFun v2 pair factory address for the given network.
-pub fn get_nadfun_factory_v2(network: Network) -> Option<&'static str> {
+pub fn get_nadfun_factory_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::NAD_FUN_FACTORY),
-        Network::Testnet => Some(addresses::testnet::v2::NAD_FUN_FACTORY),
+        Network::Mainnet => addresses::mainnet::v2::NAD_FUN_FACTORY,
+        Network::Testnet => addresses::testnet::v2::NAD_FUN_FACTORY,
     }
 }
 
 /// Get NadFun v2 pair implementation address for the given network.
-pub fn get_nadfun_pair_impl_v2(network: Network) -> Option<&'static str> {
+pub fn get_nadfun_pair_impl_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::NAD_FUN_PAIR_IMPL),
-        Network::Testnet => Some(addresses::testnet::v2::NAD_FUN_PAIR_IMPL),
+        Network::Mainnet => addresses::mainnet::v2::NAD_FUN_PAIR_IMPL,
+        Network::Testnet => addresses::testnet::v2::NAD_FUN_PAIR_IMPL,
     }
 }
 
 /// Get NadFun v2 swap adapter (IDexAdapter) address for the given network.
-pub fn get_nad_swap_adapter_v2(network: Network) -> Option<&'static str> {
+pub fn get_nad_swap_adapter_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::NAD_SWAP_ADAPTER),
-        Network::Testnet => Some(addresses::testnet::v2::NAD_SWAP_ADAPTER),
+        Network::Mainnet => addresses::mainnet::v2::NAD_SWAP_ADAPTER,
+        Network::Testnet => addresses::testnet::v2::NAD_SWAP_ADAPTER,
     }
 }
 
 /// Get NadFun v2 token registry address for the given network.
-pub fn get_token_registry_v2(network: Network) -> Option<&'static str> {
+pub fn get_token_registry_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::TOKEN_REGISTRY),
-        Network::Testnet => Some(addresses::testnet::v2::TOKEN_REGISTRY),
+        Network::Mainnet => addresses::mainnet::v2::TOKEN_REGISTRY,
+        Network::Testnet => addresses::testnet::v2::TOKEN_REGISTRY,
     }
 }
 
 /// Get NadFun v2 token implementation address for the given network.
-pub fn get_token_impl_v2(network: Network) -> Option<&'static str> {
+pub fn get_token_impl_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::TOKEN_IMPL),
-        Network::Testnet => Some(addresses::testnet::v2::TOKEN_IMPL),
+        Network::Mainnet => addresses::mainnet::v2::TOKEN_IMPL,
+        Network::Testnet => addresses::testnet::v2::TOKEN_IMPL,
     }
 }
 
 /// Get NadFun v2 protocol manager address for the given network.
-pub fn get_protocol_manager_v2(network: Network) -> Option<&'static str> {
+pub fn get_protocol_manager_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::PROTOCOL_MANAGER),
-        Network::Testnet => Some(addresses::testnet::v2::PROTOCOL_MANAGER),
+        Network::Mainnet => addresses::mainnet::v2::PROTOCOL_MANAGER,
+        Network::Testnet => addresses::testnet::v2::PROTOCOL_MANAGER,
     }
 }
 
 /// Get NadFun v2 bonding curve address for the given network.
-pub fn get_bonding_curve_v2(network: Network) -> Option<&'static str> {
+pub fn get_bonding_curve_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::BONDING_CURVE),
-        Network::Testnet => Some(addresses::testnet::v2::BONDING_CURVE),
+        Network::Mainnet => addresses::mainnet::v2::BONDING_CURVE,
+        Network::Testnet => addresses::testnet::v2::BONDING_CURVE,
     }
 }
 
 /// Get NadFun v2 fee collector address for the given network.
-pub fn get_fee_collector_v2(network: Network) -> Option<&'static str> {
+pub fn get_fee_collector_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::FEE_COLLECTOR),
-        Network::Testnet => Some(addresses::testnet::v2::FEE_COLLECTOR),
+        Network::Mainnet => addresses::mainnet::v2::FEE_COLLECTOR,
+        Network::Testnet => addresses::testnet::v2::FEE_COLLECTOR,
     }
 }
 
 /// Get NadFun v2 creator fee processor address for the given network.
-pub fn get_creator_fee_processor_v2(network: Network) -> Option<&'static str> {
+pub fn get_creator_fee_processor_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::CREATOR_FEE_PROCESSOR),
-        Network::Testnet => Some(addresses::testnet::v2::CREATOR_FEE_PROCESSOR),
+        Network::Mainnet => addresses::mainnet::v2::CREATOR_FEE_PROCESSOR,
+        Network::Testnet => addresses::testnet::v2::CREATOR_FEE_PROCESSOR,
     }
 }
 
 /// Get NadFun v2 LP manager address for the given network.
-pub fn get_lp_manager_v2(network: Network) -> Option<&'static str> {
+pub fn get_lp_manager_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::LP_MANAGER),
-        Network::Testnet => Some(addresses::testnet::v2::LP_MANAGER),
+        Network::Mainnet => addresses::mainnet::v2::LP_MANAGER,
+        Network::Testnet => addresses::testnet::v2::LP_MANAGER,
     }
 }
 
 /// Get NadFun v2 vault registry address for the given network.
-pub fn get_vault_registry_v2(network: Network) -> Option<&'static str> {
+pub fn get_vault_registry_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::VAULT_REGISTRY),
-        Network::Testnet => Some(addresses::testnet::v2::VAULT_REGISTRY),
+        Network::Mainnet => addresses::mainnet::v2::VAULT_REGISTRY,
+        Network::Testnet => addresses::testnet::v2::VAULT_REGISTRY,
     }
 }
 
 /// Get NadFun v2 burn vault address for the given network.
-pub fn get_burn_vault_v2(network: Network) -> Option<&'static str> {
+pub fn get_burn_vault_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::BURN_VAULT),
-        Network::Testnet => Some(addresses::testnet::v2::BURN_VAULT),
+        Network::Mainnet => addresses::mainnet::v2::BURN_VAULT,
+        Network::Testnet => addresses::testnet::v2::BURN_VAULT,
     }
 }
 
 /// Get NadFun v2 LP vault address for the given network.
-pub fn get_lp_vault_v2(network: Network) -> Option<&'static str> {
+pub fn get_lp_vault_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::LP_VAULT),
-        Network::Testnet => Some(addresses::testnet::v2::LP_VAULT),
+        Network::Mainnet => addresses::mainnet::v2::LP_VAULT,
+        Network::Testnet => addresses::testnet::v2::LP_VAULT,
     }
 }
 
 /// Get NadFun v2 creator fee vault address for the given network.
-pub fn get_creator_fee_vault_v2(network: Network) -> Option<&'static str> {
+pub fn get_creator_fee_vault_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::CREATOR_FEE_VAULT),
-        Network::Testnet => Some(addresses::testnet::v2::CREATOR_FEE_VAULT),
+        Network::Mainnet => addresses::mainnet::v2::CREATOR_FEE_VAULT,
+        Network::Testnet => addresses::testnet::v2::CREATOR_FEE_VAULT,
     }
 }
 
 /// Get NadFun v2 gift vault address for the given network.
-pub fn get_gift_vault_v2(network: Network) -> Option<&'static str> {
+pub fn get_gift_vault_v2(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::GIFT_VAULT),
-        Network::Testnet => Some(addresses::testnet::v2::GIFT_VAULT),
-    }
-}
-
-/// Get the v2 liquid-staked MON (LvMON) address for the given network.
-///
-/// Used by `ILvMonMinter` flows on v2 when the router needs to wrap/unwrap
-/// against the liquid-staking version of MON instead of plain WMON. Returns
-/// `None` on networks where LvMON isn't deployed yet (currently Mainnet).
-pub fn get_lv_mon_v2(network: Network) -> Option<&'static str> {
-    match network {
-        Network::Mainnet => None,
-        Network::Testnet => Some(addresses::testnet::v2::LV_MON),
+        Network::Mainnet => addresses::mainnet::v2::GIFT_VAULT,
+        Network::Testnet => addresses::testnet::v2::GIFT_VAULT,
     }
 }
 
 /// Get the v2 protocol fee recipient (`feeTo`) address for the given network.
+///
+/// Stays `Option` — `feeTo` is genuinely absent on Mainnet.
 pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
     match network {
         Network::Mainnet => None,
@@ -496,13 +480,168 @@ pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
 /// to classify a token as `V1` / `V2` / `None` and return its `quoteToken`.
 /// `Core::detect_version` / `Core::detect_token_info` use it on every
 /// supported network — both mainnet and testnet have it deployed.
-pub fn get_token_info_lens(network: Network) -> Option<&'static str> {
+pub fn get_token_info_lens(network: Network) -> &'static str {
     match network {
-        Network::Mainnet => Some(addresses::mainnet::v2::TOKEN_INFO_LENS),
-        Network::Testnet => Some(addresses::testnet::v2::TOKEN_INFO_LENS),
+        Network::Mainnet => addresses::mainnet::v2::TOKEN_INFO_LENS,
+        Network::Testnet => addresses::testnet::v2::TOKEN_INFO_LENS,
+    }
+}
+
+// ============================================================================
+// v2 quote tokens — structured registry mirroring the api-server's
+// `GET /quote_token` source of truth (the authoritative list maintained in the
+// api-server DB). Replaces the previous single-token LvMON helper.
+// ============================================================================
+
+/// A v2 quote token (the pricing currency a token's curve trades against).
+///
+/// Mirrors a row of the api-server `quote_token` registry (`GET /quote_token`),
+/// which is the authoritative source of supported quote tokens. The SDK ships
+/// the known set as a compile-time list so callers can resolve a quote token's
+/// metadata (decimals, symbol) and whether it is native-funded — without an
+/// HTTP round-trip — when constructing trades or native-funded creates.
+///
+/// `is_native == true` means the token is MON-pegged and the router can wrap
+/// `msg.value` into it (its `wrappedNative`, or an LvMON-style minter token).
+/// Such an address is a valid `quote_token` for
+/// [`crate::V2CreatePayment::Native`] / `*_with_native` trades. `is_native ==
+/// false` tokens (e.g. a future USDC/USDT) must be funded as ERC-20.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuoteToken {
+    /// Quote-token contract address (EIP-55 checksummed string).
+    pub address: &'static str,
+    /// Ticker symbol (e.g. `"MON"`, `"LVMON"`).
+    pub symbol: &'static str,
+    /// Human-readable name (e.g. `"MONAD"`, `"LeverUpMon"`).
+    pub name: &'static str,
+    /// ERC-20 decimals of the quote token.
+    pub decimals: u8,
+    /// Whether the token is native-funded: the router can wrap native MON
+    /// (`msg.value`) into it. Native-equivalents (the canonical wrapped native
+    /// and any MON-pegged minter token, e.g. LVMON) are `true`; plain ERC-20
+    /// quotes are `false`.
+    pub is_native: bool,
+}
+
+/// Mainnet quote tokens (from the api-server DB / `GET /quote_token`).
+///
+/// `MON` here is the canonical wrapped native (WMON) on mainnet — the same
+/// address as [`addresses::mainnet::v1::WMON`]; the DB labels it `MON`/`MONAD`.
+const MAINNET_QUOTE_TOKENS: &[QuoteToken] = &[
+    QuoteToken {
+        address: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+        symbol: "MON",
+        name: "MONAD",
+        decimals: 18,
+        is_native: true,
+    },
+    QuoteToken {
+        address: "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56",
+        symbol: "LVMON",
+        name: "LeverUpMon",
+        decimals: 18,
+        is_native: true,
+    },
+];
+
+/// Testnet quote tokens (from the api-server DB / `GET /quote_token`).
+///
+/// `MON` here is the canonical wrapped native (WMON) on testnet — the same
+/// address as [`addresses::testnet::v1::WMON`]; the DB labels it `MON`/`MONAD`.
+const TESTNET_QUOTE_TOKENS: &[QuoteToken] = &[
+    QuoteToken {
+        address: "0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd",
+        symbol: "MON",
+        name: "MONAD",
+        decimals: 18,
+        is_native: true,
+    },
+    QuoteToken {
+        address: "0xBe3fa50514D9617ce645a02B34F595541AF02b6b",
+        symbol: "LVMON",
+        name: "LeverUpMon",
+        decimals: 18,
+        is_native: true,
+    },
+];
+
+/// Get the known v2 quote tokens for the given network.
+///
+/// Mirrors the api-server `GET /quote_token` registry (the authoritative
+/// source). Use this to look up a quote token's metadata or to enumerate the
+/// native-funded quote tokens (`is_native == true`) accepted by
+/// [`crate::V2CreatePayment::Native`] and the `*_with_native` trade methods —
+/// instead of hardcoding a single address. The list is a snapshot of the DB at
+/// SDK release; for the live set, call the api-server endpoint directly.
+pub fn quote_tokens(network: Network) -> &'static [QuoteToken] {
+    match network {
+        Network::Mainnet => MAINNET_QUOTE_TOKENS,
+        Network::Testnet => TESTNET_QUOTE_TOKENS,
     }
 }
 
 // Re-export commonly used constants for convenience.
 pub use addresses::*;
 pub use fees::DEFAULT_FEE_TIER;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::primitives::Address;
+
+    /// Every quote-token address must parse as a valid EIP-55 address, and the
+    /// list must be non-empty for both networks. Guards against a typo'd or
+    /// truncated literal slipping into the registry.
+    #[test]
+    fn quote_tokens_addresses_parse_and_lists_nonempty() {
+        for network in [Network::Mainnet, Network::Testnet] {
+            let tokens = quote_tokens(network);
+            assert!(
+                !tokens.is_empty(),
+                "quote_tokens({network:?}) must not be empty"
+            );
+            for qt in tokens {
+                qt.address.parse::<Address>().unwrap_or_else(|_| {
+                    panic!(
+                        "quote token {} ({:?}) has an invalid address",
+                        qt.symbol, network
+                    )
+                });
+                assert_eq!(qt.decimals, 18, "{} expected 18 decimals", qt.symbol);
+            }
+        }
+    }
+
+    /// The canonical wrapped native (the `MON` row, per the api-server DB) must
+    /// equal the v1 `WMON` constant for the same network — MON == WMON. This
+    /// pins the reconciliation: the DB's native quote token IS the SDK's WMON.
+    #[test]
+    fn mainnet_and_testnet_native_quote_equals_wmon() {
+        for network in [Network::Mainnet, Network::Testnet] {
+            let mon = quote_tokens(network)
+                .iter()
+                .find(|qt| qt.symbol == "MON")
+                .unwrap_or_else(|| panic!("{network:?} quote_tokens missing MON row"));
+            assert!(mon.is_native, "MON must be native on {network:?}");
+            let mon_addr = mon.address.parse::<Address>().unwrap();
+            let wmon_addr = get_wmon(network).parse::<Address>().unwrap();
+            assert_eq!(
+                mon_addr, wmon_addr,
+                "MON quote token must equal v1 WMON on {network:?} (MON == WMON)"
+            );
+        }
+    }
+
+    /// At least one native-funded quote token must exist per network so callers
+    /// always have a valid `quote_token` for `V2CreatePayment::Native` and the
+    /// `*_with_native` trade paths.
+    #[test]
+    fn each_network_has_a_native_quote_token() {
+        for network in [Network::Mainnet, Network::Testnet] {
+            assert!(
+                quote_tokens(network).iter().any(|qt| qt.is_native),
+                "{network:?} must expose at least one native quote token"
+            );
+        }
+    }
+}

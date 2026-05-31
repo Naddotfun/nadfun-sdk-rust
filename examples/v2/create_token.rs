@@ -22,11 +22,18 @@ async fn main() -> Result<()> {
 
     // Resolve vault addresses from constants (allows the example to run
     // against testnet or mainnet without re-typing addresses).
-    let burn_vault: Address = nadfun_sdk::constants::get_burn_vault_v2(config.network)
-        .ok_or_else(|| anyhow::anyhow!("BurnVault not configured for this network"))?
-        .parse()?;
-    let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2(config.network)
-        .ok_or_else(|| anyhow::anyhow!("LPVault not configured for this network"))?
+    let burn_vault: Address = nadfun_sdk::constants::get_burn_vault_v2(config.network).parse()?;
+    let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2(config.network).parse()?;
+
+    // Native create needs an explicit native-equivalent quote token. Resolve
+    // the wrapped native (MON / WMON) from the structured quote-token registry
+    // — any entry with `is_native == true` is valid (e.g. MON or LVMON). You
+    // could also use `core.v2().wrapped_native().await?`.
+    let wmon: Address = nadfun_sdk::quote_tokens(config.network)
+        .iter()
+        .find(|qt| qt.is_native && qt.symbol == "MON")
+        .ok_or_else(|| anyhow::anyhow!("no native MON quote token for this network"))?
+        .address
         .parse()?;
 
     let api = ApiClient::from_env(config.network);
@@ -63,7 +70,7 @@ async fn main() -> Result<()> {
         ],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: initial_buy,
-        payment: V2CreatePayment::Native,
+        payment: V2CreatePayment::Native { quote_token: wmon },
         deadline: U256::from(9_999_999_999_u64),
         gas_limit: None,
         gas_price: Some(GasPricing::Legacy),

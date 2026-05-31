@@ -31,9 +31,8 @@ fn constants_lookups_use_passed_network_not_global() {
 #[test]
 fn v2_helpers_return_correct_network() {
     // v2 is deployed on both mainnet and testnet; addresses should differ.
-    let mn =
-        nadfun_sdk::constants::get_nadfun_router_v2(Network::Mainnet).expect("mainnet v2 router");
-    let tn =
-        nadfun_sdk::constants::get_nadfun_router_v2(Network::Testnet).expect("testnet v2 router");
+    // Getters return `&str` directly (no `Option`) — v2 is always present.
+    let mn = nadfun_sdk::constants::get_nadfun_router_v2(Network::Mainnet);
+    let tn = nadfun_sdk::constants::get_nadfun_router_v2(Network::Testnet);
     assert_ne!(mn, tn);
 }

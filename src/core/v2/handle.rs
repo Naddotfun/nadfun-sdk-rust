@@ -6,7 +6,6 @@ use crate::core::core::wait_for_receipt;
 use crate::core::Core;
 use crate::{
     api::ApiClient,
-    constants::*,
     contracts::{BondingCurveV2, NadFunFactory, NadFunRouter, TokenInfoLens, TokenRegistryV2},
     types::{v2::events::IBondingCurveV2Events, *},
 };
@@ -107,14 +106,17 @@ impl<'a> CoreV2<'a> {
         let on_chain_symbol = prepared.symbol.clone();
 
         let tx_hash = match params.payment {
-            V2CreatePayment::Native => {
-                // Native create funds a WMON-quoted token: the on-chain
-                // `createWithNative` requires `quoteToken == wrappedNative`
-                // and `msg.value >= deployFee(quoteToken) + buyQuoteAmount`.
-                // Resolve both so the caller doesn't have to.
-                let quote_token: Address = get_wmon(self.core.network)
-                    .parse()
-                    .with_context(|| format!("invalid WMON address for {:?}", self.core.network))?;
+            V2CreatePayment::Native { quote_token } => {
+                // Native create funds a native-quoted token: the on-chain
+                // `createWithNative` requires `quoteToken` to be a
+                // native-equivalent the router honors (its `wrappedNative`
+                // or a configured LvMON-style minter token) and
+                // `msg.value >= deployFee(quoteToken) + buyQuoteAmount`.
+                //
+                // The SDK ships no baked allowlist and does not auto-resolve
+                // the native quote token — the caller supplies it explicitly
+                // (resolve via `constants::quote_tokens(network)` or
+                // `core.v2().wrapped_native()`).
                 let deploy_fee = v2.protocol_manager.deploy_fee(quote_token).await?;
                 let native_value = deploy_fee + params.buy_quote_amount;
                 let on_chain = V2CreateWithNativeParams {
