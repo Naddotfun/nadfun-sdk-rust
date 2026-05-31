@@ -210,19 +210,34 @@ async fn v2_lifecycle() {
         fresh_curve.quote_token, quote_token,
         "curve quote_token must match quote_token()"
     );
-    // Pre-graduation constant-product invariant. `k` is the genesis constant;
-    // the live `createWithNative` already applied this token's initial buy, so
-    // the virtual reserves have moved off genesis. The on-chain curve takes a
-    // fee on each buy, so the product GROWS past `k` (it is `>= k`, exactly `k`
-    // only at an untraded genesis). Assert the directionally-correct bound.
+    // k is the GENESIS-FIXED constant product: on-chain `_initCurve` sets
+    // `curve.k = virtualQuoteReserve * virtualTokenReserve` once at create, from
+    // the same genesis reserves stored as initialQuote/initialTokenReserve, and
+    // never reassigns it (BondingCurve.sol:225). So the true invariant is
+    //   k == initial_quote_reserve * initial_token_reserve
+    // exactly, and k stays constant for the curve's whole life (we re-check it
+    // pre-grad-after-buy and post-graduation below). NOT `vQuote*vToken == k`:
+    // the live reserves drift off genesis (the create-time initial buy already
+    // moved them) and the current product only satisfies `>= k` (ceil rounding
+    // dust); that `>= k` bound is the contract's own InvalidKValue guard
+    // (BondingCurve.sol:390), not the meaningful invariant.
+    let expected_k = fresh_curve.k;
+    assert_eq!(
+        expected_k,
+        fresh_curve.initial_quote_reserve * fresh_curve.initial_token_reserve,
+        "k must equal initial_quote_reserve * initial_token_reserve (genesis product)"
+    );
+    // The current-reserve product floats AT or ABOVE the fixed k: the contract's
+    // own post-trade guard is `if (vQuote*vToken < k) revert InvalidKValue()`
+    // (BondingCurve.sol:390), and ceil(mulDivUp) rounding nudges the product a
+    // hair above k. This is a different quantity from k (which is fixed); assert
+    // both.
     assert!(
-        fresh_curve.virtual_quote_reserve * fresh_curve.virtual_token_reserve
-            >= fresh_curve.k,
-        "fresh curve must satisfy vQuote * vToken >= k"
+        fresh_curve.virtual_quote_reserve * fresh_curve.virtual_token_reserve >= expected_k,
+        "vQuote * vToken must be >= k (contract InvalidKValue guard)"
     );
     println!(
-        "[v2] util get_curve ok -> k-invariant (vQuote*vToken >= k) holds (vToken {})",
-        fresh_curve.virtual_token_reserve
+        "[v2] util get_curve ok -> k == initialQ*initialT = {expected_k} (genesis-fixed), vQ*vT >= k"
     );
 
     let cfg = core
@@ -329,19 +344,30 @@ async fn v2_lifecycle() {
         "[v2] util available_buy_tokens ok -> available {avail_after_buy} (down from {avail_fresh})"
     );
 
-    // k-invariant still holds while pre-graduation (product grows with each
-    // fee-bearing buy, so vQuote * vToken >= genesis k).
+    // k is genesis-fixed: a buy moves the reserves but must NOT change k. Assert
+    // it is identical to the value captured at create (and still equals the
+    // initial-reserve product).
     let curve_after_buy = core.v2().get_curve(token).await.expect("get_curve");
     assert!(
         !curve_after_buy.graduated,
         "still pre-graduation after one bonding buy"
     );
+    assert_eq!(
+        curve_after_buy.k, expected_k,
+        "k must stay constant across a bonding buy (genesis-fixed)"
+    );
+    assert_eq!(
+        curve_after_buy.k,
+        curve_after_buy.initial_quote_reserve * curve_after_buy.initial_token_reserve,
+        "k must still equal initial_quote_reserve * initial_token_reserve after a buy"
+    );
+    // Current product still floats >= the fixed k (contract guard, ceil dust).
     assert!(
         curve_after_buy.virtual_quote_reserve * curve_after_buy.virtual_token_reserve
-            >= curve_after_buy.k,
-        "pre-graduation curve must satisfy vQuote * vToken >= k"
+            >= expected_k,
+        "vQuote * vToken must stay >= k after a buy"
     );
-    println!("[v2] util get_curve ok -> k-invariant (vQuote*vToken >= k) still holds pre-graduation");
+    println!("[v2] util get_curve ok -> k unchanged ({expected_k}) after bonding buy, vQ*vT >= k");
 
     // Still graduation-gated → must error pre-graduation.
     assert!(
@@ -395,6 +421,29 @@ async fn v2_lifecycle() {
         "progress must read 100% post-graduation"
     );
     println!("[v2] util get_progress ok -> 10000 bps (graduated)");
+    // k is genesis-fixed for the curve's ENTIRE life: even post-graduation the
+    // stored k is unchanged (the live reserves have moved far off genesis, so
+    // vQuote*vToken no longer relates to k — only the stored constant persists).
+    let graduated_curve = core.v2().get_curve(token).await.expect("get_curve");
+    assert!(graduated_curve.graduated, "curve must report graduated");
+    assert_eq!(
+        graduated_curve.k, expected_k,
+        "k must stay constant through graduation (genesis-fixed)"
+    );
+    assert_eq!(
+        graduated_curve.k,
+        graduated_curve.initial_quote_reserve * graduated_curve.initial_token_reserve,
+        "k must still equal initial_quote_reserve * initial_token_reserve post-graduation"
+    );
+    // Graduation freezes the curve's virtual reserves at their final bonding-curve
+    // values (BondingCurve.sol `_graduate` reads but never rewrites them), and that
+    // last state already passed the L390 `>= k` guard — so the product stays >= k.
+    assert!(
+        graduated_curve.virtual_quote_reserve * graduated_curve.virtual_token_reserve
+            >= expected_k,
+        "vQuote * vToken must stay >= k post-graduation (reserves frozen at curve end)"
+    );
+    println!("[v2] util get_curve ok -> k unchanged ({expected_k}) post-graduation, vQ*vT >= k");
     // Graduation-gated helpers now resolve (no longer error).
     let _is_locked = core.v2().is_locked(token).await.expect("is_locked post-grad");
     let reserves = core
