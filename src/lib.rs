@@ -97,7 +97,7 @@ pub mod version;
 // Pool discovery is still useful for advanced users
 pub use api::{ApiClient, ALLOWED_IMAGE_TYPES};
 pub use constants::{get_creator_manager, get_creator_treasury, get_nadfun_router_v2, Network};
-pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PoolDiscovery};
+pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PairReserves, PoolDiscovery};
 pub use core::{estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils};
 pub use stream::{
     BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
@@ -136,7 +136,7 @@ pub mod prelude {
     pub use crate::stream::{DexIndexer, DexStream, PoolMetadata, SwapEvent};
 
     // Pool discovery utilities
-    pub use crate::contracts::{get_pool_addresses_for_tokens, PoolDiscovery};
+    pub use crate::contracts::{get_pool_addresses_for_tokens, PairReserves, PoolDiscovery};
 
     // Constants and types
     pub use crate::constants::{get_nadfun_router_v2, Network};
