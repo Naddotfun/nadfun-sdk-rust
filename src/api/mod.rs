@@ -393,13 +393,14 @@ impl ApiClient {
             )
             .await?;
 
-        // Get salt and token address (v1: no version field on the wire)
+        // Get salt and token address. v1 is explicit; `is_v1` skip-serialize
+        // keeps the wire form field-absent, identical to the pre-v2 SDK.
         let salt_params = SaltParams {
             creator: format!("{:?}", params.creator_address),
             metadata_uri: metadata_result.metadata_uri.clone(),
             name: metadata_result.metadata.name.clone(),
             symbol: metadata_result.metadata.symbol.clone(),
-            version: None,
+            version: SdkVersion::V1,
         };
         let salt_result = self.post_salt(salt_params).await?;
 
@@ -446,7 +447,7 @@ impl ApiClient {
             metadata_uri: metadata_result.metadata_uri.clone(),
             name: metadata_result.metadata.name.clone(),
             symbol: metadata_result.metadata.symbol.clone(),
-            version: Some(SdkVersion::V2),
+            version: SdkVersion::V2,
         };
         let salt_result = self.post_salt(salt_params).await?;
 

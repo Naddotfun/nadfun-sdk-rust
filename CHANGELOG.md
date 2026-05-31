@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Structured v2 quote-token registry**: new `QuoteToken` struct and
+  `quote_tokens(Network) -> &'static [QuoteToken]`, re-exported from the crate
+  root and `prelude`. Each entry carries `address`, `symbol`, `name`,
+  `decimals`, and `is_native` and mirrors the api-server `GET /quote_token`
+  source of truth (the authoritative DB list). Use it to resolve a quote
+  token's metadata or to enumerate the native-funded quote tokens
+  (`is_native == true`) accepted by `V2CreatePayment::Native` and the
+  `*_with_native` trade methods — instead of a single hardcoded address. The
+  list is a release-time snapshot; call the api-server endpoint for the live
+  set. The `MON` row IS the wrapped native (WMON) per network — same address
+  as the v1 `WMON` constant; the DB labels it `MON`/`MONAD`.
 - v2 computed-helper parity on `core.v2()` (the v1 Lens utilities that have no
   v2 on-chain equivalent): `get_progress`, `available_buy_tokens`, and
   `get_initial_buy_amount_out(quote_token, amount_in, creator_fee_rate)`. These
@@ -34,6 +45,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** the 17 v2 address helpers now return `&'static str` directly
+  instead of `Option<&'static str>` — `get_nadfun_router_v2`,
+  `get_nadfun_factory_v2`, `get_nadfun_pair_impl_v2`, `get_nad_swap_adapter_v2`,
+  `get_token_registry_v2`, `get_token_impl_v2`, `get_protocol_manager_v2`,
+  `get_bonding_curve_v2`, `get_fee_collector_v2`, `get_creator_fee_processor_v2`,
+  `get_lp_manager_v2`, `get_vault_registry_v2`, `get_burn_vault_v2`,
+  `get_lp_vault_v2`, `get_creator_fee_vault_v2`, `get_gift_vault_v2`, and
+  `get_token_info_lens`. v2 is deployed on every supported network, so every arm
+  was already `Some(..)` and callers were forced into pointless `.expect()` /
+  `.ok_or_else()?`. Drop the unwrap: `get_nadfun_router_v2(net).parse()?`.
+  `get_fee_to_v2` keeps returning `Option` — `feeTo` is genuinely absent on
+  Mainnet.
+- **BREAKING:** `SaltParams.version` is now a required `SdkVersion` (was
+  `Option<SdkVersion>`). A missing `version` no longer silently means v1; the
+  field is always set explicitly (`SdkVersion::V1` / `SdkVersion::V2`). The wire
+  form is unchanged — `#[serde(skip_serializing_if = "SdkVersion::is_v1")]`
+  still omits the field for v1 requests (byte-identical to the pre-v2 SDK), and
+  a missing field still deserializes to `SdkVersion::V1`.
+- **BREAKING:** `V2CreatePayment::Native` now carries a required
+  `quote_token: Address` (was a unit variant). For native-funded v2 creates the
+  SDK no longer bakes in the wrapped-native address and does not auto-resolve
+  it — the caller supplies the native-equivalent quote token explicitly (WMON
+  or LVMON). Resolve it from `quote_tokens(network)` (any entry with
+  `is_native == true`) or `core.v2().wrapped_native()`. Anything the on-chain
+  `createWithNative` rejects reverts with `InvalidNativeQuoteToken`. Migration:
+  `V2CreatePayment::Native` → `V2CreatePayment::Native { quote_token: wmon }`
+  (with `wmon` resolved as above).
+- **BREAKING:** removed the baked LvMON quote-token constants — the
+  `constants::get_lv_mon_v2` helper and the `addresses::testnet::v2::LV_MON`
+  constant. The SDK no longer ships a single-token native-quote allowlist; use
+  the structured `quote_tokens(Network)` registry (which includes LVMON with
+  `is_native == true`) or pass the address explicitly via
+  `V2CreatePayment::Native { quote_token: Some(addr) }`. The v1 `get_wmon` /
+  `WMON` constants are unchanged (v1 DEX pool discovery still uses them).
 - **BREAKING:** `Core` trading methods moved behind namespace handles
   `core.v1()` / `core.v2()`. The flat `Core::buy`, `Core::get_amount_out`, …
   and all `*_v2` methods are removed; call `core.v1().buy(...)` /

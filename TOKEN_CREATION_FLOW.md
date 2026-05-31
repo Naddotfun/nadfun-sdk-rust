@@ -250,9 +250,14 @@ struct CreateParams {
 
 - **ERC-20 quote** → `NadFunRouter.create(params)` (approve `deployFee +
   buyQuoteAmount` of the quote token first).
-- **Native MON** (quote = WMON/LVMON) → `NadFunRouter.createWithNative{value:
-  deployFee + buyQuoteAmount}(params)`. The SDK derives
-  `native_value = deploy_fee + buy_quote_amount` automatically.
+- **Native MON** (quote = a native-equivalent — WMON or LVMON) →
+  `NadFunRouter.createWithNative{value: deployFee + buyQuoteAmount}(params)`. The
+  SDK derives `native_value = deploy_fee + buy_quote_amount` automatically. The
+  `quote_token` is supplied by the caller via
+  `V2CreatePayment::Native { quote_token: Address }` — there is no
+  auto-resolution. Resolve a valid native-equivalent from
+  `quote_tokens(network)` (any `is_native == true` entry, e.g. MON/WMON or
+  LVMON) or `core.v2().wrapped_native().await?`.
 
 ```rust
 let params = V2CreateTokenParams {
@@ -262,7 +267,10 @@ let params = V2CreateTokenParams {
     vaults,                      // bps total 10000
     dex_type: V2DexType::NadFun,
     buy_quote_amount: parse_ether("1")?,
-    payment: V2CreatePayment::Native,   // or Erc20 { quote_token }
+    // Caller-supplied native-equivalent (WMON or LVMON); resolve via
+    // quote_tokens(network) or core.v2().wrapped_native(). Or
+    // Erc20 { quote_token } for an ERC-20-funded create.
+    payment: V2CreatePayment::Native { quote_token: wmon },
     deadline: U256::from(deadline),
     ..Default::default()
 };

@@ -10,9 +10,8 @@ use anyhow::Result;
 use nadfun_sdk::{
     constants::{
         get_burn_vault_v2, get_creator_fee_vault_v2, get_fee_to_v2, get_gift_vault_v2,
-        get_lp_vault_v2, get_lv_mon_v2, get_nad_swap_adapter_v2, get_nadfun_factory_v2,
-        get_nadfun_pair_impl_v2, get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2,
-        get_token_registry_v2,
+        get_lp_vault_v2, get_nad_swap_adapter_v2, get_nadfun_factory_v2, get_nadfun_pair_impl_v2,
+        get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2, get_token_registry_v2,
     },
     Core, Network,
 };
@@ -29,12 +28,10 @@ async fn main() -> Result<()> {
     let net: Network = config.network;
 
     println!("\n=== Static address inventory ===");
+    // v2 address getters return `&str` directly (v2 deployed on every network).
     macro_rules! list {
         ($($name:literal => $getter:expr,)+) => {{
-            $(
-                let v = $getter;
-                println!("  {:<22} {}", $name, v.unwrap_or("(none)"));
-            )+
+            $( println!("  {:<22} {}", $name, $getter); )+
         }};
     }
     list! {
@@ -49,9 +46,13 @@ async fn main() -> Result<()> {
         "lp_vault"             => get_lp_vault_v2(net),
         "creator_fee_vault"    => get_creator_fee_vault_v2(net),
         "gift_vault"           => get_gift_vault_v2(net),
-        "fee_to"               => get_fee_to_v2(net),
-        "lv_mon"               => get_lv_mon_v2(net),
-    };
+    }
+    // fee_to stays Option — genuinely absent on Mainnet.
+    println!(
+        "  {:<22} {}",
+        "fee_to",
+        get_fee_to_v2(net).unwrap_or("(none)")
+    );
 
     println!("\n=== Live RPC view-method probe ===");
     let provider = Arc::new(DynProvider::new(

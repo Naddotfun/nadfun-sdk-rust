@@ -112,13 +112,50 @@ Constructor changes (every one now takes `Network` as a trailing arg):
 // Before
 V2CreatePayment::Native { value: parse_ether("0.1")? }
 
-// After — the native amount comes from V2CreateTokenParams.buy_quote_amount
-V2CreatePayment::Native
+// After — the native amount comes from V2CreateTokenParams.buy_quote_amount,
+// and the variant now carries a required `quote_token: Address` (see §9).
+V2CreatePayment::Native { quote_token: wmon }
 ```
 
-`Core::create_token_v2` sets `native_value = params.buy_quote_amount` on
-the on-chain call. Previously the two fields were settable independently
+`Core::create_token` (v2) sets `native_value = deployFee + params.buy_quote_amount`
+on the on-chain call. Previously the two fields were settable independently
 and could silently underfund the initial buy (Codex P1 #4).
+
+## 9. `V2CreatePayment::Native` now carries a required `quote_token: Address` (Unreleased)
+
+The SDK no longer bakes in the wrapped-native address (or a single LvMON
+constant) for native-funded v2 creates, and it does not auto-resolve one. The
+`Native` variant carries the native-equivalent quote token explicitly — the
+caller always supplies it:
+
+```rust
+use nadfun_sdk::{quote_tokens, Network};
+
+// Resolve the wrapped native (MON / WMON) from the structured registry…
+let wmon = quote_tokens(Network::Mainnet)
+    .iter()
+    .find(|qt| qt.is_native && qt.symbol == "MON")
+    .map(|qt| qt.address.parse().unwrap())
+    .unwrap();
+
+// Before (0.4.0)
+// V2CreatePayment::Native
+
+// After
+V2CreatePayment::Native { quote_token: wmon }
+
+// …or pass another native-equivalent the router honors (e.g. LVMON), or
+// resolve on-chain with `core.v2().wrapped_native().await?`.
+```
+
+The caller-supplied address is used verbatim; anything the on-chain
+`createWithNative` rejects reverts with `InvalidNativeQuoteToken`.
+
+Also removed: `constants::get_lv_mon_v2` and `addresses::testnet::v2::LV_MON`.
+Use the structured `quote_tokens(Network)` registry instead — it lists every
+native-equivalent (`is_native == true`), including LVMON, mirroring the
+api-server `GET /quote_token` source of truth. The v1 `get_wmon` / `WMON`
+constants are unchanged.
 
 ## 4. `V2BuyWithNativeParams.value` is now a struct field
 

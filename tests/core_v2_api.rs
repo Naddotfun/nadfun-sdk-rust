@@ -77,20 +77,29 @@ fn v2_dex_type_enum() {
 
 #[test]
 fn v2_create_payment_native_and_erc20() {
-    let native = V2CreatePayment::Native;
+    // Native carries a REQUIRED `quote_token: Address` — the caller-supplied
+    // native-equivalent (WMON or LVMON). The SDK ships no baked native-quote
+    // allowlist and does not auto-resolve it; resolve via
+    // `constants::quote_tokens(network)` or `core.v2().wrapped_native()`.
+    let native = V2CreatePayment::Native {
+        quote_token: SAMPLE_QUOTE,
+    };
     let erc20 = V2CreatePayment::Erc20 {
         quote_token: SAMPLE_QUOTE,
     };
     // Both variants are constructible — the actual routing happens inside
     // Core::create_token_v2 based on the variant. For Native, msg.value is
-    // derived from V2CreateTokenParams.buy_quote_amount (Codex P1 #4).
+    // derived from V2CreateTokenParams.buy_quote_amount (Codex P1 #4) plus the
+    // on-chain deploy fee for `quote_token`.
     match native {
-        V2CreatePayment::Native => {}
+        // The variant's `quote_token` is used verbatim as the native-funded
+        // quote token (no auto-resolution).
+        V2CreatePayment::Native { quote_token } => assert_eq!(quote_token, SAMPLE_QUOTE),
         V2CreatePayment::Erc20 { .. } => panic!("native should be Native"),
     }
     match erc20 {
         V2CreatePayment::Erc20 { .. } => {}
-        V2CreatePayment::Native => panic!("erc20 should be Erc20"),
+        V2CreatePayment::Native { .. } => panic!("erc20 should be Erc20"),
     }
 }
 
@@ -113,7 +122,9 @@ fn v2_create_token_params_carries_all_fields() {
         }],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: U256::from(1u64),
-        payment: V2CreatePayment::Native,
+        payment: V2CreatePayment::Native {
+            quote_token: SAMPLE_QUOTE,
+        },
         deadline: U256::from(1_900_000_000u64),
         gas_limit: None,
         gas_price: None,

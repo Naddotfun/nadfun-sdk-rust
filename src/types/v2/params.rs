@@ -239,9 +239,22 @@ pub type V2ExactOutSellToNativeParams = V2ExactOutSellParams;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum V2CreatePayment {
     /// Pay with the native chain currency (MON). `msg.value` equals
-    /// `params.buy_quote_amount`. Routes to
+    /// `deployFee(quote_token) + params.buy_quote_amount`. Routes to
     /// `NadFunRouter::createWithNative`.
-    Native,
+    ///
+    /// `quote_token` is the native-equivalent the router wraps the `msg.value`
+    /// into. The SDK ships no baked allowlist and does not auto-resolve it —
+    /// the caller supplies it explicitly. Get a valid native quote token from
+    /// `constants::quote_tokens(network)` (any entry with `is_native == true`,
+    /// e.g. the `MON`/WMON or `LVMON` row) or from
+    /// `core.v2().wrapped_native()`. Anything the on-chain `createWithNative`
+    /// rejects reverts with `InvalidNativeQuoteToken`.
+    Native {
+        /// Native-equivalent quote token to fund the create with (WMON or
+        /// LVMON). Resolve it via `constants::quote_tokens(network)` or
+        /// `core.v2().wrapped_native()`.
+        quote_token: Address,
+    },
     /// Pay with an ERC-20 quote token (e.g. WMON, USDT, ...). The caller must
     /// have approved the router for at least `buy_quote_amount` worth of
     /// `quote_token` beforehand. Routes to `NadFunRouter::create`.
