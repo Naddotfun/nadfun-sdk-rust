@@ -1,4 +1,4 @@
-//! v2 sell tokens for native MON via the unified `Core` (`*_v2` surface).
+//! v2 sell tokens for native MON via the unified `Core` (`core.v2()` handle).
 
 use alloy::primitives::{Address, U256};
 use anyhow::Result;
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     // Sell 100 tokens (assumes 18 decimals).
     let amount_in: U256 = U256::from(100u64) * U256::from(10).pow(U256::from(18u64));
 
-    let expected = core.get_amount_out_v2(token, amount_in, false).await?;
+    let expected = core.v2().get_amount_out(token, amount_in, false).await?;
     println!("expected MON out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("zero quote — token not sellable on v2 surface");
@@ -37,7 +37,8 @@ async fn main() -> Result<()> {
     // beforehand (e.g. via TokenHelper). Use `sell_to_native_with_permit` for
     // a gasless approval flow.
     let tx_hash = core
-        .sell_to_native_v2(V2SellToNativeParams {
+        .v2()
+        .sell_to_native(V2SellToNativeParams {
             token,
             to: core.wallet_address(),
             amount_in,

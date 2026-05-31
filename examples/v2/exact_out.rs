@@ -27,14 +27,15 @@ async fn main() -> Result<()> {
     let max_in = parse_ether("1")?; // willing to spend up to 1 MON
 
     // Optional sanity-check via inverse quote.
-    let required = core.get_amount_in_v2(token, amount_out, true).await?;
+    let required = core.v2().get_amount_in(token, amount_out, true).await?;
     println!("required MON for exactly 1 token: {}", required);
     if required > max_in {
         anyhow::bail!("would cost more than max_in ({} > {})", required, max_in);
     }
 
     let tx_hash = core
-        .exact_out_buy_with_native_v2(V2ExactOutBuyWithNativeParams {
+        .v2()
+        .exact_out_buy_with_native(V2ExactOutBuyWithNativeParams {
             token,
             to: core.wallet_address(),
             amount_out,

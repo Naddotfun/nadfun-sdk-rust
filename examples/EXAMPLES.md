@@ -2,7 +2,7 @@
 
 This directory contains comprehensive examples demonstrating how to use the Nad.fun SDK for token creation, trading, and real-time event streaming.
 
-> 🔀 **v1 vs v2 — you choose the method.** As of `0.4.0` a single `Core` instance serves both bonding-curve generations. The SDK does **not** auto-route trades: call `core.buy(...)` / `core.sell(...)` for v1 and the `*_v2` surface (`core.buy_v2(...)`, `core.buy_with_native_v2(...)`, `core.sell_to_native_v2(...)`, ...) for v2. To pick at runtime, ask the chain which generation a token belongs to with `core.detect_version(token)` (version only) or `core.detect_token_info(token)` (version **and** the v2 quote token). The [`unified_dispatch`](#mixed-version-dispatch) example shows the full pattern. Sections are grouped **v1 first, then v2**.
+> 🔀 **v1 vs v2 — you choose the method.** As of `0.4.0` a single `Core` instance serves both bonding-curve generations. The SDK does **not** auto-route trades: call `core.v1().buy(...)` / `core.v1().sell(...)` for v1 and the v2 handle (`core.v2().buy(...)`, `core.v2().buy_with_native(...)`, `core.v2().sell_to_native(...)`, ...) for v2. To pick at runtime, ask the chain which generation a token belongs to with `core.detect_version(token)` (version only) or `core.detect_token_info(token)` (version **and** the v2 quote token). The [`unified_dispatch`](#mixed-version-dispatch) example shows the full pattern. Sections are grouped **v1 first, then v2**.
 
 ## 🎨 Token Creation Examples
 
@@ -93,7 +93,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 ```
 
 **Features:**
-- ⛽ **Unified Gas Estimation**: Uses `core.estimate_gas()` for BUY, SELL, and SELL PERMIT operations
+- ⛽ **Unified Gas Estimation**: Uses `core.v1().estimate_gas()` for BUY, SELL, and SELL PERMIT operations
 - 🔧 **Automatic Problem Solving**: Handles token approval and EIP-2612 permit signatures automatically
 - 📊 **Buffer Strategies**: Demonstrates different buffer calculation methods (fixed +50k, percentage 20%-25%)
 - 💰 **Cost Analysis**: Shows estimated transaction costs at different gas prices
@@ -275,7 +275,7 @@ The examples below target the **v2** bonding curve + NadFunRouter surface, all e
 ## 🎨 v2 Token Creation
 
 ### v2 Token Creation (`v2/create_token.rs`)
-Deploy a v2 token through `NadFunRouter` — image upload + IPFS metadata + salt + on-chain create with a creator-fee vault split and an initial buy, in one call (`core.create_token_v2`).
+Deploy a v2 token through `NadFunRouter` — image upload + IPFS metadata + salt + on-chain create with a creator-fee vault split and an initial buy, in one call (`core.v2().create_token`).
 
 ```bash
 export PRIVATE_KEY="your_private_key_here"
@@ -295,7 +295,7 @@ cargo run --example v2_create_token -- \
 **Optional:** `--website`, `--twitter`, `--telegram` (same validation rules as v1). Defaults are baked in for `--name` / `--symbol` / `--description` / `--image-uri` if omitted.
 
 **Features:**
-- 🏭 **NadFunRouter Deploy**: Single `create_token_v2` call performs deploy + initial buy
+- 🏭 **NadFunRouter Deploy**: Single `core.v2().create_token` call performs deploy + initial buy
 - 🔥 **Vault Split**: Sample 50/50 creator-fee allocation between BurnVault and LPVault (`V2VaultAllocation`, BPS-based; vault addresses resolved from `constants` per network)
 - 💸 **Creator Fee Rate**: `creator_fee_rate` in BPS (example uses 100 = 1.00%)
 - 💰 **Initial Buy**: Fixed at 1.5 MON in the example (`buy_quote_amount`); `--initial-buy` is **not** wired into this example — edit the source to change it
@@ -305,7 +305,7 @@ cargo run --example v2_create_token -- \
 ## 💰 v2 Trading
 
 ### v2 Buy with Native MON (`v2/buy.rs`)
-Buy a v2 token by sending native MON; the router auto-routes bonding-curve vs DEX based on graduation and wraps MON for you (`core.buy_with_native_v2`).
+Buy a v2 token by sending native MON; the router auto-routes bonding-curve vs DEX based on graduation and wraps MON for you (`core.v2().buy_with_native`).
 
 ```bash
 export PRIVATE_KEY="your_private_key_here"
@@ -319,13 +319,13 @@ cargo run --example v2_buy -- --private-key your_private_key_here --rpc-url http
 
 **Features:**
 - 🪙 **Native Funding**: Sends 0.01 MON (hardcoded `value`); router wraps to the native quote
-- 📊 **Quote First**: `core.get_amount_out_v2(token, amount, true)` with a zero-quote guard
+- 📊 **Quote First**: `core.v2().get_amount_out(token, amount, true)` with a zero-quote guard
 - 🛡️ **Slippage**: `SlippageUtils::calculate_amount_out_min(expected, 5.0)` (5%)
-- ⛽ **v2 Gas Estimation**: `core.estimate_gas_v2(V2GasEstimationParams::BuyWithNative(..))` + 20% buffer, falls back to 400k
+- ⛽ **v2 Gas Estimation**: `core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(..))` + 20% buffer, falls back to 400k
 - 📝 **Receipt Check**: `core.get_receipt(tx_hash)` status/block reporting
 
 ### v2 Buy with ERC-20 Quote (`v2/buy_erc20_quote.rs`)
-Buy a v2 token paying with an **ERC-20 quote token** (e.g. USDT) instead of native MON — a v2-only capability (`core.buy_v2`).
+Buy a v2 token paying with an **ERC-20 quote token** (e.g. USDT) instead of native MON — a v2-only capability (`core.v2().buy`).
 
 ```bash
 export PRIVATE_KEY="your_private_key_here"
@@ -340,11 +340,11 @@ cargo run --example v2_buy_erc20_quote -- --private-key your_private_key_here --
 **Features:**
 - 🪙 **ERC-20 Quote**: `amount_in` is denominated in the quote token (example assumes 18 decimals; adjust for USDT's 6)
 - 🔐 **Pre-approval Required**: Caller must approve the v2 router for `amount_in` of the quote token beforehand (use `TokenHelper`)
-- 📊 **Quote + Slippage**: `get_amount_out_v2` then 5% `amount_out_min`
+- 📊 **Quote + Slippage**: `core.v2().get_amount_out` then 5% `amount_out_min`
 - 📝 **Receipt Check**: Status/block reporting
 
 ### v2 Sell to Native (`v2/sell.rs`)
-Sell v2 tokens back to native MON (`core.sell_to_native_v2`).
+Sell v2 tokens back to native MON (`core.v2().sell_to_native`).
 
 ```bash
 export PRIVATE_KEY="your_private_key_here"
@@ -359,11 +359,11 @@ cargo run --example v2_sell -- --private-key your_private_key_here --rpc-url htt
 **Features:**
 - 💱 **Sell to Native**: Sells 100 tokens (hardcoded, 18 decimals) for MON
 - 🔐 **Approval Required**: Caller must approve the router for `amount_in` of the token first (or use the permit flow below)
-- 📊 **Reverse Quote**: `core.get_amount_out_v2(token, amount, false)` + 5% slippage
+- 📊 **Reverse Quote**: `core.v2().get_amount_out(token, amount, false)` + 5% slippage
 - 📝 **Receipt Check**: Status/block reporting
 
 ### v2 Exact-Output Buy (`v2/exact_out.rs`)
-"I want exactly N tokens; spend at most M MON" — exact-output buy with native MON (`core.exact_out_buy_with_native_v2`).
+"I want exactly N tokens; spend at most M MON" — exact-output buy with native MON (`core.v2().exact_out_buy_with_native`).
 
 ```bash
 export PRIVATE_KEY="your_private_key_here"
@@ -377,12 +377,12 @@ cargo run --example v2_exact_out -- --private-key your_private_key_here --rpc-ur
 
 **Features:**
 - 🎯 **Exact Output**: Targets exactly 1 token out (`amount_out`), capping spend at `amount_in_max` (1 MON)
-- 🔁 **Inverse Quote Guard**: `core.get_amount_in_v2(token, amount_out, true)` sanity-checks cost before sending
+- 🔁 **Inverse Quote Guard**: `core.v2().get_amount_in(token, amount_out, true)` sanity-checks cost before sending
 - 🪙 **Native Funding**: Spends MON up to the cap; refunds the remainder
 - 📝 **Receipt Check**: Status/block reporting
 
 ### Permit-based v2 trades (no standalone example yet)
-The gasless EIP-2612 permit variants — `core.buy_with_permit_v2`, `core.sell_with_permit_v2`, and `core.sell_to_native_with_permit_v2` — are available on the `Core` API but are **not** yet shown as standalone examples. See `v2/sell.rs` (which notes the permit flow) and the v1 `sell_permit` example for the permit pattern.
+The gasless EIP-2612 permit variants — `core.v2().buy_with_permit`, `core.v2().sell_with_permit`, and `core.v2().sell_to_native_with_permit` — are available via the `core.v2()` handle but are **not** yet shown as standalone examples. See `v2/sell.rs` (which notes the permit flow) and the v1 `sell_permit` example for the permit pattern.
 
 ## 📡 v2 Event Streaming
 
@@ -414,10 +414,10 @@ Subscribe to `NadFunPair` swap events for a token's pair, resolving pair address
 cargo run --example v2_dex_stream -- --ws-url wss://your-ws-endpoint --rpc-url https://your-rpc-endpoint --tokens 0xToken1,0xToken2 --network testnet
 ```
 
-**Required:** `--tokens` / `TOKENS` (the example resolves each token's pair via `core.pool_address_v2`). Provide an RPC URL (`--rpc-url` / `RPC_URL`) for the registry lookup in addition to `--ws-url` / `WS_URL` for the stream. No private key needed — it uses a dummy key for the read-only `Core`.
+**Required:** `--tokens` / `TOKENS` (the example resolves each token's pair via `core.v2().pool_address`). Provide an RPC URL (`--rpc-url` / `RPC_URL`) for the registry lookup in addition to `--ws-url` / `WS_URL` for the stream. No private key needed — it uses a dummy key for the read-only `Core`.
 
 **Features:**
-- 🔍 **Pair Resolution**: `core.pool_address_v2(token)` per token (skips unregistered tokens)
+- 🔍 **Pair Resolution**: `core.v2().pool_address(token)` per token (skips unregistered tokens)
 - ⚡ **Real-time Swaps**: `NadFunSwapStream` over the resolved pairs
 - 📊 **Swap Details**: `pair_address`, `sender`, `to`, `amount0_in/1_in/0_out/1_out`, `block_number`
 
@@ -453,10 +453,10 @@ cargo run --example unified_dispatch -- --token 0xV2Token
 
 **How it routes:**
 - `core.detect_token_info(token)` does one on-chain `TokenInfoLens` call returning both the **version** (`SdkVersion::V1` / `V2` / `None`) and the v2 **quote token**.
-- `SdkVersion::V1` → `core.buy(BuyParams, router)` (router from `get_amount_out`).
-- `SdkVersion::V2` → compares `info.quote_token` to `core.wrapped_native_v2()`:
-  - quote == wrapped native (WMON) → `core.buy_with_native_v2(..)` (send MON).
-  - quote == other ERC-20 → `core.buy_v2(..)` (pre-approve the quote token).
+- `SdkVersion::V1` → `core.v1().buy(BuyParams, router)` (router from `core.v1().get_amount_out`).
+- `SdkVersion::V2` → compares `info.quote_token` to `core.v2().wrapped_native()`:
+  - quote == wrapped native (WMON) → `core.v2().buy_with_native(..)` (send MON).
+  - quote == other ERC-20 → `core.v2().buy(..)` (pre-approve the quote token).
 - `SdkVersion::None` → refuses to trade.
 
 **Features:**
@@ -488,7 +488,7 @@ cargo run --example v2_smoke -- --rpc-url https://your-rpc-endpoint --network te
 All trading examples now use the new unified gas estimation system:
 
 ### New Gas Estimation System
-- **Real-time Network Estimation**: Uses `core.estimate_gas()` for live gas calculations
+- **Real-time Network Estimation**: Uses `core.v1().estimate_gas()` for live gas calculations
 - **Automatic Problem Solving**: Handles token approval and permit signatures automatically
 - **Network-based Calculation**: No more static fallback constants - all estimates from actual network conditions
 - **Smart Buffer Strategies**: Multiple buffer calculation methods (fixed amounts, percentages)
@@ -514,7 +514,7 @@ use nadfun_sdk::{Core, GasEstimationParams};
 
 // Unified gas estimation for any operation
 let gas_params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
-let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
 let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer

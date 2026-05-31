@@ -158,17 +158,18 @@ fn v2_gas_estimation_params_enum_constructs_each_variant() {
     });
 }
 
-/// Compile-time guarantee that every v2-surface method on `Core` exists
-/// with the expected shape. Calls are only ever reached at runtime if the
-/// constructor succeeds, which it won't without a real RPC — but the
+/// Compile-time guarantee that every v2-surface method on `Core`'s v2 handle
+/// exists with the expected shape. Calls are only ever reached at runtime if
+/// the constructor succeeds, which it won't without a real RPC — but the
 /// compile is the assertion.
 #[allow(unreachable_code, dead_code, unused_variables)]
 async fn _core_v2_methods_compile(c: &Core) {
     let token = Address::ZERO;
     let amount = U256::from(1u64);
-    let _: Result<B256, _> = c.buy_v2(sample_buy_params()).await;
+    let _: Result<B256, _> = c.v2().buy(sample_buy_params()).await;
     let _: Result<B256, _> = c
-        .buy_with_native_v2(V2BuyWithNativeParams {
+        .v2()
+        .buy_with_native(V2BuyWithNativeParams {
             token,
             to: token,
             amount_out_min: amount,
@@ -180,7 +181,8 @@ async fn _core_v2_methods_compile(c: &Core) {
         })
         .await;
     let _: Result<B256, _> = c
-        .buy_with_permit_v2(V2BuyWithPermitParams {
+        .v2()
+        .buy_with_permit(V2BuyWithPermitParams {
             token,
             to: token,
             amount_in: amount,
@@ -198,7 +200,8 @@ async fn _core_v2_methods_compile(c: &Core) {
         })
         .await;
     let _: Result<B256, _> = c
-        .sell_v2(V2SellParams {
+        .v2()
+        .sell(V2SellParams {
             token,
             to: token,
             amount_in: amount,
@@ -209,23 +212,31 @@ async fn _core_v2_methods_compile(c: &Core) {
             nonce: None,
         })
         .await;
-    let _: Result<U256, _> = c.get_amount_out_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.get_amount_in_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.get_bonding_curve_amount_out_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.get_bonding_curve_amount_in_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.get_dex_amount_out_v2(token, amount, true).await;
-    let _: Result<U256, _> = c.get_dex_amount_in_v2(token, amount, true).await;
-    let _: Result<bool, _> = c.is_graduated_v2(token).await;
-    let _: Result<Address, _> = c.pool_address_v2(token).await;
-    let _: Result<Address, _> = c.wrapped_native_v2().await;
+    let _: Result<U256, _> = c.v2().get_amount_out(token, amount, true).await;
+    let _: Result<U256, _> = c.v2().get_amount_in(token, amount, true).await;
+    let _: Result<U256, _> = c
+        .v2()
+        .get_bonding_curve_amount_out(token, amount, true)
+        .await;
+    let _: Result<U256, _> = c
+        .v2()
+        .get_bonding_curve_amount_in(token, amount, true)
+        .await;
+    let _: Result<U256, _> = c.v2().get_dex_amount_out(token, amount, true).await;
+    let _: Result<U256, _> = c.v2().get_dex_amount_in(token, amount, true).await;
+    let _: Result<bool, _> = c.v2().is_graduated(token).await;
+    let _: Result<Address, _> = c.v2().pool_address(token).await;
+    let _: Result<Address, _> = c.v2().wrapped_native().await;
     let _: Result<u64, _> = c
-        .estimate_gas_v2(V2GasEstimationParams::Buy(sample_buy_params()))
+        .v2()
+        .estimate_gas(V2GasEstimationParams::Buy(sample_buy_params()))
         .await;
     // escape hatches — return &_ directly since v2 is always wired.
-    let _r = c.router_v2();
-    let _f = c.factory_v2();
-    let _bc = c.bonding_curve_v2();
-    let _tr = c.token_registry_v2();
+    let _r = c.v2().router();
+    let _f = c.v2().factory();
+    let _bc = c.v2().bonding_curve();
+    let _tr = c.v2().token_registry();
+    // cross-cutting methods stay on Core directly
     let _p = c.provider();
     let _w: Address = c.wallet_address();
     let _n: Network = c.network();

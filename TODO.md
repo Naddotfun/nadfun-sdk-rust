@@ -1,4 +1,35 @@
-# TODO — v2 branch wrap-up
+# TODO
+
+## ▶ CURRENT — v2 namespace refactor + v1↔v2 parity
+Spec: `docs/superpowers/specs/2026-05-30-v2-namespace-refactor-design.md` · 3 PRs off `v2`.
+
+### Phase 1 — namespace refactor (breaking) — `feat/v2-namespace` ✅ PR #4 OPEN
+- [x] `CoreV1<'a>` / `CoreV2<'a>` handles + `core.v1()` / `core.v2()` accessors (by-value, Copy)
+- [x] Move v1 → `src/core/v1/handle.rs`; v2 → `src/core/v2/handle.rs` (drop `_v2`)
+- [x] Cross-cutting (`detect_*`, `get_receipt`, accessors) stay on `Core`
+- [x] `lib.rs` + `prelude` re-export `CoreV1`, `CoreV2`
+- [x] call sites: examples + tests + README + EXAMPLES.md + llms.txt + CHANGELOG
+- [x] Dispatch tests (TDD) + `cargo build --examples` + clippy gate + `/codex review` (GATE PASS) → PR #4
+- [ ] merge `feat/v2-namespace → v2`
+
+### Phase 2 — v2 passthrough parity (additive) — `feat/v2-passthrough-parity`
+- [ ] **R1: pin deployed contract variant via live testnet `eth_call`** (blocker)
+- [ ] `V2Curve`, `V2QuoteConfig` types; add `getCurve` wrapper; extend ProtocolManager binding
+- [ ] `is_halted`, `get_sniping_penalty`, `get_curve`, `quote_token`, `quote_config`, `is_locked` (caveat), `get_reserves`, `get_dex_type`, `is_registered`
+- [ ] Tests + docs (additive) + `/codex review` → PR
+
+### Phase 3 — v2 computed helpers (additive) — `feat/v2-computed-parity`
+- [ ] **R2: pin exact fee basis from `BondingCurveLibrary`/`_initialBuy`**
+- [ ] `get_progress`, `available_buy_tokens`, `get_initial_buy_amount_out(quote_token, amount_in)`
+- [ ] Drift tests: SDK math vs on-chain at pinned testnet block (Rule 9) + `/codex review` → PR
+
+---
+
+## (superseded) v2 branch wrap-up
+> Below predates the unified-core merge (PR #2). Unified `Core` + `with_provider`
+> + `set_network` removal + Codex P1/P2/P3 are **done** (see
+> `docs/superpowers/plans/2026-05-30-unified-core-refactor.md`). Kept for the
+> live-env reference at the bottom; the open items here are largely obsolete.
 
 > **Branch**: `v2` (14 commits ahead of `main`, last commit `5fc1275`)
 > **Status**: 동작/테스트/스모크 통과, **머지 불가** — Codex P1 미처리 + 통합 Core 리팩터 필요

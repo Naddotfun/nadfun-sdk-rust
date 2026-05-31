@@ -116,3 +116,45 @@ async fn detect_version_classifies_via_lens() {
         assert_eq!(core.detect_version(token).await.unwrap(), info.version);
     }
 }
+
+/// Surface check — the v1 namespace handle exposes the v1 query/escape surface.
+#[allow(dead_code, unreachable_code, unused_variables)]
+async fn _core_v1_methods_compile(c: &nadfun_sdk::Core) {
+    use alloy::primitives::{Address, U256};
+    let t = Address::ZERO;
+    let a = U256::ZERO;
+    let _: anyhow::Result<(nadfun_sdk::Router, U256)> = c.v1().get_amount_out(t, a, true).await;
+    let _: anyhow::Result<(nadfun_sdk::Router, U256)> = c.v1().get_amount_in(t, a, true).await;
+    let _: anyhow::Result<(U256, U256)> = c.v1().available_buy_tokens(t).await;
+    let _: anyhow::Result<bool> = c.v1().is_locked(t).await;
+    let _: anyhow::Result<bool> = c.v1().is_graduated(t).await;
+    let _: anyhow::Result<U256> = c.v1().get_initial_buy_amount_out(a).await;
+    let _: anyhow::Result<U256> = c.v1().get_deploy_fee().await;
+    let _: anyhow::Result<U256> = c.v1().get_progress(t).await;
+    let _bcr = c.v1().bonding_curve_router();
+    let _dxr = c.v1().dex_router();
+    let _lens = c.v1().lens();
+}
+
+/// Regression (Codex review [P2], 2026-05-31): namespace handles must support
+/// the common pattern where a future or an escape-hatch reference outlives the
+/// temporary `core.v1()` / `core.v2()` handle that produced it. The handles are
+/// `Copy` and take `self` by value, and escape hatches return `&'a _` tied to
+/// the underlying `&Core`, so storing a result across the temporary compiles.
+/// Before the fix these lines failed with E0716 (temporary dropped while
+/// borrowed). The earlier surface checks never *use* the stored value after a
+/// subsequent statement, so they did not catch this.
+#[allow(dead_code, unreachable_code, unused_variables)]
+async fn _stored_handle_results_compile(c: &nadfun_sdk::Core) {
+    use alloy::primitives::{Address, U256};
+    // Future stored across the temporary v1()/v2() handle, awaited later.
+    let fut_v1 = c.v1().get_amount_out(Address::ZERO, U256::ZERO, true);
+    let _ = fut_v1.await;
+    let fut_v2 = c.v2().get_amount_out(Address::ZERO, U256::ZERO, true);
+    let _ = fut_v2.await;
+    // Escape-hatch reference stored, then used after another statement.
+    let lens = c.v1().lens();
+    let router = c.v2().router();
+    let _ = lens.address;
+    let _ = router.address;
+}

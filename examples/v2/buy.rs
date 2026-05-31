@@ -1,4 +1,4 @@
-//! v2 buy with native MON via the unified `Core` (`*_v2` surface).
+//! v2 buy with native MON via the unified `Core` (`core.v2()` handle).
 //!
 //! Usage:
 //!   export PRIVATE_KEY="..." RPC_URL="..." TOKEN="0x..."
@@ -30,10 +30,10 @@ async fn main() -> Result<()> {
 
     let core = Core::new(config.rpc_url, private_key, config.network).await?;
     let wallet = core.wallet_address();
-    println!("wallet: {}, router: {}", wallet, core.router_v2().address);
+    println!("wallet: {}, router: {}", wallet, core.v2().router().address);
 
     // Quote: router auto-routes BC vs DEX based on graduation.
-    let expected = core.get_amount_out_v2(token, mon_amount, true).await?;
+    let expected = core.v2().get_amount_out(token, mon_amount, true).await?;
     println!("expected tokens out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("Zero quote — token may not be tradeable on v2");
@@ -54,7 +54,8 @@ async fn main() -> Result<()> {
 
     // Estimate gas with the same params we'll send.
     let gas_estimate = core
-        .estimate_gas_v2(V2GasEstimationParams::BuyWithNative(params.clone()))
+        .v2()
+        .estimate_gas(V2GasEstimationParams::BuyWithNative(params.clone()))
         .await
         .unwrap_or(400_000);
     let gas_with_buffer = gas_estimate * 120 / 100;
@@ -66,7 +67,7 @@ async fn main() -> Result<()> {
     let mut params = params;
     params.gas_limit = Some(gas_with_buffer);
 
-    let tx_hash = core.buy_with_native_v2(params).await?;
+    let tx_hash = core.v2().buy_with_native(params).await?;
     println!("tx: {}", tx_hash);
 
     let receipt = core.get_receipt(tx_hash).await?;
