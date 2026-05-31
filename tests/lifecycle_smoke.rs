@@ -178,12 +178,181 @@ async fn v2_lifecycle() {
         "fresh token must be pre-graduation"
     );
 
+    // ── 1b. view utils on a FRESH curve (post-create, pre-buy) ─────────
+    // Exercise every v2 computed/view helper while the curve is untouched,
+    // and capture the create-time baselines we re-assert after the buy.
+    let quote_token = core.v2().quote_token(token).await.expect("quote_token");
+    println!("[v2] util quote_token ok -> {quote_token}");
+    assert!(
+        !core.v2().is_halted().await.expect("is_halted"),
+        "protocol must not be halted at create"
+    );
+    println!("[v2] util is_halted ok -> false");
+    assert!(
+        core.v2().is_registered(token).await.expect("is_registered"),
+        "freshly created token must be registered"
+    );
+    println!("[v2] util is_registered ok -> true");
+    let dex_type = core.v2().get_dex_type(token).await.expect("get_dex_type");
+    println!("[v2] util get_dex_type ok -> {dex_type}");
+    // Penalty window is active right after creation; just assert it resolves.
+    let penalty = core
+        .v2()
+        .get_sniping_penalty(token)
+        .await
+        .expect("get_sniping_penalty");
+    println!("[v2] util get_sniping_penalty ok -> {penalty} bps");
+
+    let fresh_curve = core.v2().get_curve(token).await.expect("get_curve");
+    assert!(!fresh_curve.graduated, "fresh curve must be pre-graduation");
+    assert_eq!(fresh_curve.creator, wallet, "creator must be the signer");
+    assert_eq!(
+        fresh_curve.quote_token, quote_token,
+        "curve quote_token must match quote_token()"
+    );
+    // Pre-graduation constant-product invariant. `k` is the genesis constant;
+    // the live `createWithNative` already applied this token's initial buy, so
+    // the virtual reserves have moved off genesis. The on-chain curve takes a
+    // fee on each buy, so the product GROWS past `k` (it is `>= k`, exactly `k`
+    // only at an untraded genesis). Assert the directionally-correct bound.
+    assert!(
+        fresh_curve.virtual_quote_reserve * fresh_curve.virtual_token_reserve
+            >= fresh_curve.k,
+        "fresh curve must satisfy vQuote * vToken >= k"
+    );
+    println!(
+        "[v2] util get_curve ok -> k-invariant (vQuote*vToken >= k) holds (vToken {})",
+        fresh_curve.virtual_token_reserve
+    );
+
+    let cfg = core
+        .v2()
+        .quote_config(quote_token)
+        .await
+        .expect("quote_config");
+    assert!(cfg.active, "quote token config must be active");
+    assert!(
+        cfg.virtual_token_reserve > U256::ZERO,
+        "genesis token reserve must be > 0"
+    );
+    println!(
+        "[v2] util quote_config ok -> active, genesis vToken {}",
+        cfg.virtual_token_reserve
+    );
+
+    // get_progress: ~0 on a fresh curve (one tiny initial buy may nudge it).
+    let progress_fresh = core.v2().get_progress(token).await.expect("get_progress");
+    assert!(
+        progress_fresh < U256::from(10_000u64),
+        "fresh progress must be < 100% (got {progress_fresh})"
+    );
+    println!("[v2] util get_progress ok -> {progress_fresh} bps (fresh)");
+
+    // available_buy_tokens: both legs positive on a fresh, non-graduated curve.
+    let (avail_fresh, required_fresh) = core
+        .v2()
+        .available_buy_tokens(token)
+        .await
+        .expect("available_buy_tokens");
+    assert!(
+        avail_fresh > U256::ZERO && required_fresh > U256::ZERO,
+        "fresh curve must have buyable tokens and a non-zero quote cost"
+    );
+    println!(
+        "[v2] util available_buy_tokens ok -> available {avail_fresh}, required {} MON",
+        format_ether(required_fresh)
+    );
+
+    // get_initial_buy_amount_out: creation-time estimate (EXCLUDES anti-sniping
+    // penalty), so only a loose sanity bound — >0 and <= genesis token supply.
+    let initial_out = core
+        .v2()
+        .get_initial_buy_amount_out(quote_token, parse_ether("1").unwrap())
+        .await
+        .expect("get_initial_buy_amount_out");
+    assert!(initial_out > U256::ZERO, "initial buy estimate must be > 0");
+    assert!(
+        initial_out <= fresh_curve.initial_token_reserve,
+        "initial buy estimate must not exceed genesis token supply"
+    );
+    println!("[v2] util get_initial_buy_amount_out ok -> {initial_out} (estimate)");
+
+    // is_locked / get_reserves are graduation-gated: a pair is assigned at
+    // creation, so they must ERROR (not return ZERO) before graduation.
+    assert!(
+        core.v2().is_locked(token).await.is_err(),
+        "is_locked must error pre-graduation"
+    );
+    assert!(
+        core.v2().get_reserves(token).await.is_err(),
+        "get_reserves must error pre-graduation"
+    );
+    println!("[v2] util is_locked/get_reserves ok -> error pre-graduation");
+
     // ── 2. bonding-curve buy ───────────────────────────────────────────
     let buy_amt = parse_ether("1").unwrap();
     buy_v2_native(&core, token, buy_amt).await;
     let bal_tok = balance_of(&core, token, wallet).await;
     println!("[v2] token balance after bonding buy: {bal_tok}");
     assert!(bal_tok > U256::ZERO, "should hold tokens after buy");
+
+    // ── 2b. view utils AFTER the bonding buy (pre-graduation) ──────────
+    // Progress is non-decreasing after a buy and still < 100%. It can stay
+    // numerically flat here: graduation needs ~229k MON, so a single 1 MON buy
+    // moves progress by <0.001% which rounds to 0 in integer basis points. The
+    // strict-monotonic signal is asserted on available_buy_tokens (token
+    // granularity) just below.
+    let progress_after_buy = core.v2().get_progress(token).await.expect("get_progress");
+    assert!(
+        progress_after_buy >= progress_fresh,
+        "progress must not decrease after a buy ({progress_after_buy} < {progress_fresh})"
+    );
+    assert!(
+        progress_after_buy < U256::from(10_000u64),
+        "pre-graduation progress must stay < 100%"
+    );
+    println!(
+        "[v2] util get_progress ok -> {progress_after_buy} bps (>= fresh {progress_fresh})"
+    );
+
+    // available_buy_tokens is strictly monotonic: buying consumed supply.
+    let (avail_after_buy, _req_after_buy) = core
+        .v2()
+        .available_buy_tokens(token)
+        .await
+        .expect("available_buy_tokens");
+    assert!(
+        avail_after_buy < avail_fresh,
+        "available tokens must decrease after a buy ({avail_after_buy} >= {avail_fresh})"
+    );
+    println!(
+        "[v2] util available_buy_tokens ok -> available {avail_after_buy} (down from {avail_fresh})"
+    );
+
+    // k-invariant still holds while pre-graduation (product grows with each
+    // fee-bearing buy, so vQuote * vToken >= genesis k).
+    let curve_after_buy = core.v2().get_curve(token).await.expect("get_curve");
+    assert!(
+        !curve_after_buy.graduated,
+        "still pre-graduation after one bonding buy"
+    );
+    assert!(
+        curve_after_buy.virtual_quote_reserve * curve_after_buy.virtual_token_reserve
+            >= curve_after_buy.k,
+        "pre-graduation curve must satisfy vQuote * vToken >= k"
+    );
+    println!("[v2] util get_curve ok -> k-invariant (vQuote*vToken >= k) still holds pre-graduation");
+
+    // Still graduation-gated → must error pre-graduation.
+    assert!(
+        core.v2().is_locked(token).await.is_err(),
+        "is_locked must error pre-graduation"
+    );
+    assert!(
+        core.v2().get_reserves(token).await.is_err(),
+        "get_reserves must error pre-graduation"
+    );
+    println!("[v2] util is_locked/get_reserves ok -> still error pre-graduation");
 
     // ── 3. bonding-curve sell (approve then sell — full balance) ───────
     let sell_amt = bal_tok; // sell entire holding
@@ -213,6 +382,33 @@ async fn v2_lifecycle() {
         graduated,
         "token did not graduate within {} MON",
         format_ether(cap)
+    );
+
+    // ── 4b. view utils AFTER graduation ────────────────────────────────
+    assert!(
+        core.v2().is_graduated(token).await.expect("is_graduated"),
+        "is_graduated must be true post-graduation"
+    );
+    assert_eq!(
+        core.v2().get_progress(token).await.expect("get_progress"),
+        U256::from(10_000u64),
+        "progress must read 100% post-graduation"
+    );
+    println!("[v2] util get_progress ok -> 10000 bps (graduated)");
+    // Graduation-gated helpers now resolve (no longer error).
+    let _is_locked = core.v2().is_locked(token).await.expect("is_locked post-grad");
+    let reserves = core
+        .v2()
+        .get_reserves(token)
+        .await
+        .expect("get_reserves post-grad");
+    assert!(
+        reserves.reserve0 > 0 && reserves.reserve1 > 0,
+        "graduated pair must have non-zero reserves"
+    );
+    println!(
+        "[v2] util is_locked/get_reserves ok -> resolve post-graduation (r0 {}, r1 {})",
+        reserves.reserve0, reserves.reserve1
     );
 
     // ── 5. DEX buy (post-graduation, same auto-routed method) ──────────
@@ -406,11 +602,80 @@ async fn v1_lifecycle() {
         "fresh v1 token is pre-graduation"
     );
 
+    // ── 1b. view utils on a FRESH v1 curve (post-create, pre-buy) ──────
+    // v1 Lens parity surface: get_deploy_fee, get_initial_buy_amount_out,
+    // get_progress, available_buy_tokens, is_locked. (v1 has no get_curve /
+    // quote_config / quote_token / sniping_penalty / get_reserves.)
+    let deploy_fee = core.v1().get_deploy_fee().await.expect("get_deploy_fee");
+    println!("[v1] util get_deploy_fee ok -> {} MON", format_ether(deploy_fee));
+    let v1_initial_out = core
+        .v1()
+        .get_initial_buy_amount_out(parse_ether("1").unwrap())
+        .await
+        .expect("get_initial_buy_amount_out");
+    assert!(v1_initial_out > U256::ZERO, "v1 initial buy estimate must be > 0");
+    println!("[v1] util get_initial_buy_amount_out ok -> {v1_initial_out}");
+
+    let v1_progress_fresh = core.v1().get_progress(token).await.expect("get_progress");
+    assert!(
+        v1_progress_fresh < U256::from(10_000u64),
+        "fresh v1 progress must be < 100% (got {v1_progress_fresh})"
+    );
+    println!("[v1] util get_progress ok -> {v1_progress_fresh} bps (fresh)");
+
+    let (v1_avail_fresh, v1_req_fresh) = core
+        .v1()
+        .available_buy_tokens(token)
+        .await
+        .expect("available_buy_tokens");
+    assert!(
+        v1_avail_fresh > U256::ZERO && v1_req_fresh > U256::ZERO,
+        "fresh v1 curve must have buyable tokens and a non-zero quote cost"
+    );
+    println!(
+        "[v1] util available_buy_tokens ok -> available {v1_avail_fresh}, required {} MON",
+        format_ether(v1_req_fresh)
+    );
+
+    // v1 is_locked is a bonding-curve lock (semantically unlike v2's pair lock):
+    // a fresh, unlocked curve reads false.
+    assert!(
+        !core.v1().is_locked(token).await.expect("is_locked"),
+        "fresh v1 curve must not be locked"
+    );
+    println!("[v1] util is_locked ok -> false (fresh)");
+
     // ── 2. bonding buy ─────────────────────────────────────────────────
     v1_buy(&core, token, parse_ether("1").unwrap()).await;
     let bal_tok = balance_of(&core, token, wallet).await;
     println!("[v1] token balance after bonding buy: {bal_tok}");
     assert!(bal_tok > U256::ZERO, "should hold tokens after v1 buy");
+
+    // ── 2b. view utils AFTER the v1 bonding buy (pre-graduation) ───────
+    let v1_progress_after_buy = core.v1().get_progress(token).await.expect("get_progress");
+    assert!(
+        v1_progress_after_buy > v1_progress_fresh,
+        "v1 progress must increase after a buy ({v1_progress_after_buy} <= {v1_progress_fresh})"
+    );
+    assert!(
+        v1_progress_after_buy < U256::from(10_000u64),
+        "pre-graduation v1 progress must stay < 100%"
+    );
+    println!(
+        "[v1] util get_progress ok -> {v1_progress_after_buy} bps (up from {v1_progress_fresh})"
+    );
+    let (v1_avail_after_buy, _v1_req_after_buy) = core
+        .v1()
+        .available_buy_tokens(token)
+        .await
+        .expect("available_buy_tokens");
+    assert!(
+        v1_avail_after_buy < v1_avail_fresh,
+        "v1 available tokens must decrease after a buy ({v1_avail_after_buy} >= {v1_avail_fresh})"
+    );
+    println!(
+        "[v1] util available_buy_tokens ok -> available {v1_avail_after_buy} (down from {v1_avail_fresh})"
+    );
 
     // ── 3. bonding sell (full balance) ─────────────────────────────────
     v1_sell(&core, token, bal_tok).await;
@@ -472,6 +737,32 @@ async fn v1_lifecycle() {
         "v1 graduation (keeper) did not complete within 120s"
     );
     println!("[v1] graduated");
+
+    // ── 4b. view utils AFTER v1 graduation ─────────────────────────────
+    assert!(
+        core.v1().is_graduated(token).await.expect("is_graduated"),
+        "v1 is_graduated must be true post-graduation"
+    );
+    assert_eq!(
+        core.v1().get_progress(token).await.expect("get_progress"),
+        U256::from(10_000u64),
+        "v1 progress must read 100% post-graduation"
+    );
+    println!("[v1] util get_progress ok -> 10000 bps (graduated)");
+    // available_buy_tokens still resolves post-graduation; the drained curve's
+    // required-MON cannot exceed the fresh-curve baseline (weaker than "== 0":
+    // the Lens passthrough's exact post-grad return is not contractually 0).
+    let (_v1_avail_grad, v1_req_grad) = core
+        .v1()
+        .available_buy_tokens(token)
+        .await
+        .expect("available_buy_tokens");
+    assert!(
+        v1_req_grad <= v1_req_fresh,
+        "graduated v1 required-MON must not exceed the fresh baseline \
+         ({v1_req_grad} > {v1_req_fresh})"
+    );
+    println!("[v1] util available_buy_tokens ok -> required {v1_req_grad} (graduated, <= fresh)");
 
     // ── 5. DEX buy (auto-routed to Capricorn CL post-graduation) ───────
     let pre = balance_of(&core, token, wallet).await;
