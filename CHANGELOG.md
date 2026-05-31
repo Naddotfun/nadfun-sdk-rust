@@ -11,11 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - v2 computed-helper parity on `core.v2()` (the v1 Lens utilities that have no
   v2 on-chain equivalent): `get_progress`, `available_buy_tokens`, and
-  `get_initial_buy_amount_out(quote_token, amount_in)`. These reproduce the
-  on-chain bonding-curve math client-side from `get_curve` / `quote_config`
-  (fee + constant-product + supply cap, verified against on-chain quotes).
-  `get_initial_buy_amount_out` takes a `quote_token` (v2 genesis curves differ
-  per quote token) — unlike v1's parameterless version.
+  `get_initial_buy_amount_out(quote_token, amount_in, creator_fee_rate)`. These
+  reproduce the on-chain bonding-curve math client-side from `get_curve` /
+  `quote_config` (fee + constant-product + supply cap, verified against on-chain
+  quotes). `get_initial_buy_amount_out` takes a `quote_token` (v2 genesis curves
+  differ per quote token) and the token's `creator_fee_rate` (u16 bps, a
+  per-token parameter not in the genesis config) — unlike v1's parameterless
+  version. It returns the **exact** create-time `_initialBuy` output to the wei:
+  the combined protocol + creator fee (one ceil `mulDivUp`) is deducted, then the
+  constant-product / supply-cap math; the create-time buy is anti-sniping exempt.
 - v2 passthrough parity on `core.v2()`: `is_halted`, `get_sniping_penalty`,
   `quote_token`, `get_curve` (→ new `V2Curve`), `quote_config` (→ new
   `V2QuoteConfig`), `get_dex_type`, `is_registered`, `is_locked`, and
