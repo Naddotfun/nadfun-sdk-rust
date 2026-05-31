@@ -59,11 +59,7 @@ impl CurveStreamV2 {
     pub async fn subscribe(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<V2BondingCurveEvent>> + Send>>> {
-        let bonding_curve_address: Address = get_bonding_curve_v2(self.network)
-            .ok_or_else(|| {
-                anyhow::anyhow!("BondingCurveV2 is not configured for {:?}", self.network)
-            })?
-            .parse()?;
+        let bonding_curve_address: Address = get_bonding_curve_v2(self.network).parse()?;
         let event_types = self.event_types.clone().unwrap_or_else(V2EventType::all);
         let signatures: Vec<B256> = event_types.iter().map(|et| et.signature()).collect();
 

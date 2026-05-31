@@ -120,11 +120,9 @@ async fn v2_lifecycle() {
     let n = unique_suffix(&core).await;
     let burn_vault: Address =
         nadfun_sdk::constants::get_burn_vault_v2(nadfun_sdk::Network::Testnet)
-            .unwrap()
             .parse()
             .unwrap();
     let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2(nadfun_sdk::Network::Testnet)
-        .unwrap()
         .parse()
         .unwrap();
     let initial_buy = parse_ether("1").unwrap();

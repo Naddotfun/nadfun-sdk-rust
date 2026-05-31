@@ -59,18 +59,20 @@ pub struct MetadataInfo {
 
 /// Salt request parameters.
 ///
-/// `version` is `None` for v1 callers (server treats absence as `"V1"`) and
-/// `Some(SdkVersion::V2)` for the v2 token-creation flow. The field is
-/// `skip_serializing_if = "Option::is_none"` so legacy v1 requests are
-/// byte-identical on the wire to the pre-v2 SDK.
+/// `version` is required and explicit: [`SdkVersion::V1`] for the v1 flow and
+/// [`SdkVersion::V2`] for the v2 token-creation flow. It is
+/// `skip_serializing_if = "SdkVersion::is_v1"` so v1 requests stay
+/// byte-identical on the wire to the pre-v2 SDK (the server treats the absent
+/// field as `"V1"`), while v2 requests send `"version":"V2"`. On deserialize a
+/// missing field defaults to [`SdkVersion::V1`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaltParams {
     pub creator: String,
     pub metadata_uri: String,
     pub name: String,
     pub symbol: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version: Option<SdkVersion>,
+    #[serde(default, skip_serializing_if = "SdkVersion::is_v1")]
+    pub version: SdkVersion,
 }
 
 /// Salt response

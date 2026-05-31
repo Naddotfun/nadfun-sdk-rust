@@ -165,8 +165,9 @@ async fn get_token_vaults_parses_mixed_vaults() {
     assert_eq!(state.vaults[1].bps, 2000);
 }
 
-/// `SaltParams` with `version: None` does NOT include the field on the wire —
-/// preserving wire-level backward compat for v1 callers.
+/// `SaltParams` with the (required, explicit) `version: SdkVersion::V1` does
+/// NOT include the field on the wire — `skip_serializing_if = "is_v1"`
+/// preserves wire-level backward compat for v1 callers.
 #[tokio::test]
 async fn salt_params_v1_omits_version_field() {
     let p = SaltParams {
@@ -174,7 +175,7 @@ async fn salt_params_v1_omits_version_field() {
         metadata_uri: "ipfs://meta".into(),
         name: "X".into(),
         symbol: "Y".into(),
-        version: None,
+        version: SdkVersion::V1,
     };
     let body = serde_json::to_value(&p).unwrap();
     assert!(
@@ -184,7 +185,7 @@ async fn salt_params_v1_omits_version_field() {
     );
 }
 
-/// `SaltParams` with `version: Some(V2)` serializes `"version": "V2"`.
+/// `SaltParams` with `version: SdkVersion::V2` serializes `"version": "V2"`.
 #[tokio::test]
 async fn salt_params_v2_serializes_version_uppercase() {
     let p = SaltParams {
@@ -192,7 +193,7 @@ async fn salt_params_v2_serializes_version_uppercase() {
         metadata_uri: "ipfs://meta".into(),
         name: "X".into(),
         symbol: "Y".into(),
-        version: Some(SdkVersion::V2),
+        version: SdkVersion::V2,
     };
     let body = serde_json::to_value(&p).unwrap();
     assert_eq!(body.get("version").and_then(|v| v.as_str()), Some("V2"));
@@ -320,7 +321,7 @@ async fn post_salt_sends_version_v2_and_parses_response() {
             metadata_uri: "ipfs://meta".into(),
             name: "Test".into(),
             symbol: "TST".into(),
-            version: Some(SdkVersion::V2),
+            version: SdkVersion::V2,
         })
         .await
         .expect("post_salt");

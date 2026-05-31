@@ -222,19 +222,14 @@ fn build_v1_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V
     })
 }
 
-/// Build v2 contract bindings for `network`. Errors if any v2 address
-/// helper returns `None` (no v2 deployment) or fails to parse. Currently
-/// every supported `Network` variant has v2 wired, so this only fires
-/// for genuinely misconfigured deployments.
+/// Build v2 contract bindings for `network`. Errors only if a v2 address
+/// constant fails to parse. v2 is deployed on every supported `Network`,
+/// so the address helpers return `&str` directly (no `None` arm).
 fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V2Contracts> {
-    let router_s = get_nadfun_router_v2(network)
-        .ok_or_else(|| anyhow::anyhow!("NadFunRouter v2 not configured for {network:?}"))?;
-    let factory_s = get_nadfun_factory_v2(network)
-        .ok_or_else(|| anyhow::anyhow!("NadFunFactory v2 not configured for {network:?}"))?;
-    let bc_s = get_bonding_curve_v2(network)
-        .ok_or_else(|| anyhow::anyhow!("BondingCurve v2 not configured for {network:?}"))?;
-    let reg_s = get_token_registry_v2(network)
-        .ok_or_else(|| anyhow::anyhow!("TokenRegistry v2 not configured for {network:?}"))?;
+    let router_s = get_nadfun_router_v2(network);
+    let factory_s = get_nadfun_factory_v2(network);
+    let bc_s = get_bonding_curve_v2(network);
+    let reg_s = get_token_registry_v2(network);
 
     let router_addr: Address = router_s
         .parse()
@@ -250,15 +245,13 @@ fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V
         .with_context(|| format!("invalid TokenRegistryV2 address {reg_s:?} for {network:?}"))?;
 
     // TokenInfoLens is required — it's deployed on every supported network.
-    let lens_s = get_token_info_lens(network)
-        .ok_or_else(|| anyhow::anyhow!("TokenInfoLens not configured for {network:?}"))?;
+    let lens_s = get_token_info_lens(network);
     let lens_addr: Address = lens_s
         .parse()
         .with_context(|| format!("invalid TokenInfoLens address {lens_s:?} for {network:?}"))?;
     let token_info_lens = TokenInfoLens::new(lens_addr, provider.clone());
 
-    let pm_s = get_protocol_manager_v2(network)
-        .ok_or_else(|| anyhow::anyhow!("ProtocolManager v2 not configured for {network:?}"))?;
+    let pm_s = get_protocol_manager_v2(network);
     let pm_addr: Address = pm_s
         .parse()
         .with_context(|| format!("invalid ProtocolManager address {pm_s:?} for {network:?}"))?;
