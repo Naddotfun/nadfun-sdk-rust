@@ -170,7 +170,7 @@ surface:
 core.v2().is_halted().await?;                 // bool: protocol halted?
 core.v2().is_registered(token).await?;        // bool: in v2 TokenRegistry?
 core.v2().get_dex_type(token).await?;         // u8: DexType discriminator
-core.v2().quote_token(token).await?;          // Address: WMON / LvMON / ERC-20
+core.v2().quote_token(token).await?;          // Address: MON(WMON) / LVMON / ERC-20
 core.v2().get_sniping_penalty(token).await?;  // U256: anti-sniping bps now
 core.v2().get_curve(token).await?;            // V2Curve: full bonding-curve state
 core.v2().quote_config(quote_token).await?;   // V2QuoteConfig: genesis params + fees
@@ -1205,6 +1205,38 @@ listed below.
 - Token Registry: `0x2Bc127be900aD290E703Cd2C71eB0EDCa162C898`
 - Bonding Curve (v2): `0x27063a38eC0D3281D354090EB92e669Ed1eB956C`
 - TokenInfoLens (v1/v2 classifier): `0xFC635B7A09cac1A643F5148F8e05Bcd979A8bcC4`
+
+### Supported quote tokens (v2)
+
+`quote_tokens(Network)` returns the known v2 quote tokens — the pricing
+currencies a v2 curve can trade against — mirroring the api-server
+`GET /quote_token` registry (the authoritative DB source). `is_native == true`
+means the router can wrap native MON (`msg.value`) into it, so it is a valid
+`quote_token` for `V2CreatePayment::Native { quote_token }` and the
+`*_with_native` trades. `MON` is the wrapped native (WMON) per network — same
+address as the v1 `WMON` constant; the DB labels it `MON`/`MONAD`.
+
+```rust
+use nadfun_sdk::{quote_tokens, Network};
+
+for qt in quote_tokens(Network::Mainnet) {
+    println!("{} ({}) {} decimals, native={}", qt.symbol, qt.address, qt.decimals, qt.is_native);
+}
+```
+
+#### Mainnet
+
+| Symbol | Name | Address | Decimals | Native |
+|--------|------|---------|----------|--------|
+| MON | MONAD | `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A` | 18 | yes |
+| LVMON | LeverUpMon | `0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56` | 18 | yes |
+
+#### Testnet
+
+| Symbol | Name | Address | Decimals | Native |
+|--------|------|---------|----------|--------|
+| MON | MONAD | `0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd` | 18 | yes |
+| LVMON | LeverUpMon | `0xBe3fa50514D9617ce645a02B34F595541AF02b6b` | 18 | yes |
 
 ## Error Handling
 

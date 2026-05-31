@@ -103,6 +103,25 @@ let wmon = get_wmon(Network::Mainnet);
 let router_v2 = get_nadfun_router_v2(Network::Testnet).expect("v2 deployed");
 ```
 
+### v2 quote tokens
+
+`quote_tokens(Network) -> &'static [QuoteToken]` mirrors the api-server
+`GET /quote_token` registry (the authoritative DB source). Each `QuoteToken`
+carries `address`, `symbol`, `name`, `decimals`, and `is_native`. Use it to
+enumerate the native-funded quote tokens (`is_native == true`) accepted by
+`V2CreatePayment::Native` and the `*_with_native` trades — the SDK ships no
+single hardcoded native-quote address. `MON` is the wrapped native (WMON) per
+network; `LVMON` is a MON-pegged native-equivalent.
+
+```rust
+use nadfun_sdk::{quote_tokens, QuoteToken, Network};
+
+for qt in quote_tokens(Network::Mainnet) {
+    // QuoteToken { address, symbol, name, decimals, is_native }
+    if qt.is_native { /* valid quote_token for V2CreatePayment::Native { quote_token } */ }
+}
+```
+
 ## Trading
 
 | Function | Description |
@@ -651,7 +670,7 @@ core.v2().wrapped_native()
 core.v2().is_halted()                       // -> bool: protocol halted?
 core.v2().is_registered(token)              // -> bool: in v2 TokenRegistry?
 core.v2().get_dex_type(token)              // -> u8: DexType discriminator
-core.v2().quote_token(token)              // -> Address: WMON/LvMON/ERC-20
+core.v2().quote_token(token)              // -> Address: MON(WMON)/LVMON/ERC-20
 core.v2().get_sniping_penalty(token)     // -> U256: anti-sniping bps now
 core.v2().get_curve(token)               // -> V2Curve: full curve state
 core.v2().quote_config(quote_token)      // -> V2QuoteConfig: genesis + fees
@@ -703,7 +722,10 @@ let result = core.v2().create_token(V2CreateTokenParams {
     vaults: vec![V2VaultAllocation { vault: burn_vault, bps: 5000, setup_data: Bytes::default() }, ...],
     dex_type: V2DexType::NadFun,
     buy_quote_amount: initial_buy,    // also used as msg.value for Native payment
-    payment: V2CreatePayment::Native, // or Erc20 { quote_token }
+    // Native { quote_token: Address } — caller supplies the native-equivalent
+    //   (WMON or LVMON); resolve via quote_tokens(network) or
+    //   core.v2().wrapped_native(). Or Erc20 { quote_token } for ERC-20 funding.
+    payment: V2CreatePayment::Native { quote_token: wmon },
     deadline,
     gas_limit: None, gas_price: None, nonce: None,
 }, &api).await?;
