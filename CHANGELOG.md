@@ -45,6 +45,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** the 17 v2 address helpers now return `&'static str` directly
+  instead of `Option<&'static str>` — `get_nadfun_router_v2`,
+  `get_nadfun_factory_v2`, `get_nadfun_pair_impl_v2`, `get_nad_swap_adapter_v2`,
+  `get_token_registry_v2`, `get_token_impl_v2`, `get_protocol_manager_v2`,
+  `get_bonding_curve_v2`, `get_fee_collector_v2`, `get_creator_fee_processor_v2`,
+  `get_lp_manager_v2`, `get_vault_registry_v2`, `get_burn_vault_v2`,
+  `get_lp_vault_v2`, `get_creator_fee_vault_v2`, `get_gift_vault_v2`, and
+  `get_token_info_lens`. v2 is deployed on every supported network, so every arm
+  was already `Some(..)` and callers were forced into pointless `.expect()` /
+  `.ok_or_else()?`. Drop the unwrap: `get_nadfun_router_v2(net).parse()?`.
+  `get_fee_to_v2` keeps returning `Option` — `feeTo` is genuinely absent on
+  Mainnet.
+- **BREAKING:** `SaltParams.version` is now a required `SdkVersion` (was
+  `Option<SdkVersion>`). A missing `version` no longer silently means v1; the
+  field is always set explicitly (`SdkVersion::V1` / `SdkVersion::V2`). The wire
+  form is unchanged — `#[serde(skip_serializing_if = "SdkVersion::is_v1")]`
+  still omits the field for v1 requests (byte-identical to the pre-v2 SDK), and
+  a missing field still deserializes to `SdkVersion::V1`.
 - **BREAKING:** `V2CreatePayment::Native` now carries a required
   `quote_token: Address` (was a unit variant). For native-funded v2 creates the
   SDK no longer bakes in the wrapped-native address and does not auto-resolve

@@ -30,11 +30,7 @@ impl<P: Provider + Clone> CurveIndexerV2<P> {
     }
 
     fn bonding_curve_address(&self) -> Result<Address> {
-        Ok(get_bonding_curve_v2(self.network)
-            .ok_or_else(|| {
-                anyhow::anyhow!("BondingCurveV2 is not configured for {:?}", self.network)
-            })?
-            .parse()?)
+        Ok(get_bonding_curve_v2(self.network).parse()?)
     }
 
     /// Fetch events for a specific block range. Events are returned in

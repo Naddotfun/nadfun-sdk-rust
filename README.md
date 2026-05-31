@@ -1168,7 +1168,8 @@ cargo run --example pool_discovery -- \
 All contract addresses are defined in `constants.rs` (the source of truth),
 organized by network and version (`addresses::{mainnet,testnet}::{v1,v2}`).
 Access them via the typed helpers — `get_bonding_curve(network)`,
-`get_nadfun_router_v2(network)` (returns `Option`), etc. The v2 set has many
+`get_nadfun_router_v2(network)` (returns `&str` directly — v2 is deployed on
+every network; only `get_fee_to_v2` returns `Option`), etc. The v2 set has many
 more contracts (vaults, registry, bonding curve, lens); the most useful are
 listed below.
 

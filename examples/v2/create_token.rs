@@ -22,12 +22,8 @@ async fn main() -> Result<()> {
 
     // Resolve vault addresses from constants (allows the example to run
     // against testnet or mainnet without re-typing addresses).
-    let burn_vault: Address = nadfun_sdk::constants::get_burn_vault_v2(config.network)
-        .ok_or_else(|| anyhow::anyhow!("BurnVault not configured for this network"))?
-        .parse()?;
-    let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2(config.network)
-        .ok_or_else(|| anyhow::anyhow!("LPVault not configured for this network"))?
-        .parse()?;
+    let burn_vault: Address = nadfun_sdk::constants::get_burn_vault_v2(config.network).parse()?;
+    let lp_vault: Address = nadfun_sdk::constants::get_lp_vault_v2(config.network).parse()?;
 
     // Native create needs an explicit native-equivalent quote token. Resolve
     // the wrapped native (MON / WMON) from the structured quote-token registry
