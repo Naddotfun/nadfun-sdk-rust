@@ -185,8 +185,8 @@ async fn v2_lifecycle() {
     println!("[v2] token balance after bonding buy: {bal_tok}");
     assert!(bal_tok > U256::ZERO, "should hold tokens after buy");
 
-    // ── 3. bonding-curve sell (approve then sell) ──────────────────────
-    let sell_amt = bal_tok / U256::from(4u64); // sell 25%
+    // ── 3. bonding-curve sell (approve then sell — full balance) ───────
+    let sell_amt = bal_tok; // sell entire holding
     approve_if_needed(&core, token, router_v2, sell_amt).await;
     sell_v2_native(&core, token, sell_amt).await;
     println!("[v2] bonding sell ok");
@@ -225,8 +225,8 @@ async fn v2_lifecycle() {
     );
     println!("[v2] DEX buy ok (+{} tokens)", post_dex_tok - pre_dex_tok);
 
-    // ── 6. DEX sell ────────────────────────────────────────────────────
-    let dex_sell = (post_dex_tok - pre_dex_tok) / U256::from(2u64);
+    // ── 6. DEX sell (full balance) ─────────────────────────────────────
+    let dex_sell = post_dex_tok; // sell entire holding
     approve_if_needed(&core, token, router_v2, dex_sell).await;
     sell_v2_native(&core, token, dex_sell).await;
     println!("[v2] DEX sell ok");
@@ -412,8 +412,8 @@ async fn v1_lifecycle() {
     println!("[v1] token balance after bonding buy: {bal_tok}");
     assert!(bal_tok > U256::ZERO, "should hold tokens after v1 buy");
 
-    // ── 3. bonding sell ────────────────────────────────────────────────
-    v1_sell(&core, token, bal_tok / U256::from(4u64)).await;
+    // ── 3. bonding sell (full balance) ─────────────────────────────────
+    v1_sell(&core, token, bal_tok).await;
     println!("[v1] bonding sell ok");
 
     // ── 4. graduate (adaptive on balance) ──────────────────────────────
@@ -480,8 +480,8 @@ async fn v1_lifecycle() {
     assert!(post > pre, "v1 DEX buy should increase balance");
     println!("[v1] DEX buy ok (+{} tokens)", post - pre);
 
-    // ── 6. DEX sell ────────────────────────────────────────────────────
-    v1_sell(&core, token, (post - pre) / U256::from(2u64)).await;
+    // ── 6. DEX sell (full balance) ─────────────────────────────────────
+    v1_sell(&core, token, post).await;
     println!("[v1] full v1 lifecycle PASSED for {token}");
 }
 
