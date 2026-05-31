@@ -35,8 +35,7 @@ async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
 
-    // Set network before creating stream
-    nadfun_sdk::constants::set_network(config.network);
+    let network = config.network;
 
     // Parse command line arguments for filtering
     let mut event_filter: Option<Vec<EventType>> = None;
@@ -62,18 +61,18 @@ async fn main() -> Result<()> {
     match (&event_filter, &token_filter) {
         (None, None) => {
             println!("🌟 SCENARIO 1: All bonding curve events (all types, all tokens)");
-            run_all_events_scenario(&config.ws_url).await?;
+            run_all_events_scenario(&config.ws_url, network).await?;
         }
         (Some(events), None) => {
             println!("🎯 SCENARIO 2: Specific event types only: {:?}", events);
-            run_specific_events_scenario(&config.ws_url, events.clone()).await?;
+            run_specific_events_scenario(&config.ws_url, events.clone(), network).await?;
         }
         (None, Some(tokens)) => {
             println!(
                 "🏷️ SCENARIO 3: Specific tokens only: {} tokens",
                 tokens.len()
             );
-            run_specific_tokens_scenario(&config.ws_url, tokens.clone()).await?;
+            run_specific_tokens_scenario(&config.ws_url, tokens.clone(), network).await?;
         }
         (Some(events), Some(tokens)) => {
             println!(
@@ -81,7 +80,7 @@ async fn main() -> Result<()> {
                 events,
                 tokens.len()
             );
-            run_combined_scenario(&config.ws_url, events.clone(), tokens.clone()).await?;
+            run_combined_scenario(&config.ws_url, events.clone(), tokens.clone(), network).await?;
         }
     }
 
@@ -89,11 +88,11 @@ async fn main() -> Result<()> {
 }
 
 /// Scenario 1: All bonding curve events
-async fn run_all_events_scenario(ws_url: &str) -> Result<()> {
+async fn run_all_events_scenario(ws_url: &str, network: nadfun_sdk::Network) -> Result<()> {
     println!("📡 Creating CurveStream for all events...");
     println!("   WebSocket URL: {}", ws_url);
 
-    let curve_stream = CurveStream::new(ws_url.to_string()).await?;
+    let curve_stream = CurveStream::new(ws_url.to_string(), network).await?;
     println!("✅ WebSocket connected successfully");
 
     let stream = curve_stream.subscribe().await?;
@@ -120,10 +119,14 @@ async fn run_all_events_scenario(ws_url: &str) -> Result<()> {
 }
 
 /// Scenario 2: Specific event types only
-async fn run_specific_events_scenario(ws_url: &str, event_types: Vec<EventType>) -> Result<()> {
+async fn run_specific_events_scenario(
+    ws_url: &str,
+    event_types: Vec<EventType>,
+    network: nadfun_sdk::Network,
+) -> Result<()> {
     println!("📡 Creating CurveStream for specific events...");
 
-    let curve_stream = CurveStream::new(ws_url.to_string())
+    let curve_stream = CurveStream::new(ws_url.to_string(), network)
         .await?
         .subscribe_events(event_types.clone());
 
@@ -150,11 +153,12 @@ async fn run_specific_events_scenario(ws_url: &str, event_types: Vec<EventType>)
 async fn run_specific_tokens_scenario(
     ws_url: &str,
     monitored_tokens: Vec<alloy::primitives::Address>,
+    network: nadfun_sdk::Network,
 ) -> Result<()> {
     println!("📡 Creating CurveStream for specific tokens...");
     println!("   WebSocket URL: {}", ws_url);
 
-    let curve_stream = CurveStream::new(ws_url.to_string())
+    let curve_stream = CurveStream::new(ws_url.to_string(), network)
         .await?
         .filter_tokens(monitored_tokens.clone());
 
@@ -199,10 +203,11 @@ async fn run_combined_scenario(
     ws_url: &str,
     event_types: Vec<EventType>,
     monitored_tokens: Vec<alloy::primitives::Address>,
+    network: nadfun_sdk::Network,
 ) -> Result<()> {
     println!("📡 Creating CurveStream for specific events AND tokens...");
 
-    let curve_stream = CurveStream::new(ws_url.to_string())
+    let curve_stream = CurveStream::new(ws_url.to_string(), network)
         .await?
         .subscribe_events(event_types.clone())
         .filter_tokens(monitored_tokens.clone());

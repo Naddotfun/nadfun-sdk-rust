@@ -17,21 +17,21 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     // Initialize Core - set network once, used everywhere
+//!     // Initialize Core - binds to a Network at construction
 //!     let core = Core::new(
 //!         "https://your-rpc-url".to_string(),
 //!         "your-private-key".to_string(),
 //!         Network::Mainnet
 //!     ).await?;
 //!
-//!     // Get quote and execute trade
-//!     let (router, amount_out) = core.get_amount_out(token, mon_amount, true).await?;
+//!     // v1 trading: access through core.v1() handle
+//!     let (router, amount_out) = core.v1().get_amount_out(token, mon_amount, true).await?;
 //!
 //!     // Execute buy - returns tx_hash immediately (fast!)
-//!     let tx_hash = core.buy(buy_params, router).await?;
+//!     let tx_hash = core.v1().buy(buy_params, router).await?;
 //!     println!("Transaction submitted: {}", tx_hash);
 //!
-//!     // Optionally check receipt later
+//!     // Cross-cutting: get_receipt stays on Core
 //!     let receipt = core.get_receipt(tx_hash).await?;
 //!     println!("Confirmed: {}", receipt.status);
 //!
@@ -90,19 +90,22 @@ pub mod types;
 /// internally by the public API but hidden from end users for simplicity.
 pub(crate) mod contracts;
 
+/// Token version discriminator (`SdkVersion`) and on-chain classification
+/// (`TokenInfo` = version + quote token) used for user-side v1/v2 dispatch.
+pub mod version;
+
 // Pool discovery is still useful for advanced users
 pub use api::{ApiClient, ALLOWED_IMAGE_TYPES};
-pub use constants::{
-    get_creator_manager, get_creator_treasury, get_current_network, set_network, Network,
-};
-pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PoolDiscovery};
-pub use core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
+pub use constants::{get_creator_manager, get_creator_treasury, get_nadfun_router_v2, Network};
+pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PairReserves, PoolDiscovery};
+pub use core::{estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils};
 pub use stream::{
     BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
     SwapEvent,
 };
 pub use token::TokenHelper;
 pub use types::*;
+pub use version::{SdkVersion, TokenInfo};
 
 /// Convenient prelude module for importing commonly used types and functions
 ///
@@ -121,7 +124,9 @@ pub mod prelude {
     pub use crate::api::{ApiClient, ALLOWED_IMAGE_TYPES};
 
     // Core trading functionality
-    pub use crate::core::{estimate_gas, Core, GasEstimationParams, Router, SlippageUtils};
+    pub use crate::core::{
+        estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils,
+    };
 
     // Token operations
     pub use crate::token::TokenHelper;
@@ -131,11 +136,12 @@ pub mod prelude {
     pub use crate::stream::{DexIndexer, DexStream, PoolMetadata, SwapEvent};
 
     // Pool discovery utilities
-    pub use crate::contracts::{get_pool_addresses_for_tokens, PoolDiscovery};
+    pub use crate::contracts::{get_pool_addresses_for_tokens, PairReserves, PoolDiscovery};
 
     // Constants and types
-    pub use crate::constants::{get_current_network, set_network, Network};
+    pub use crate::constants::{get_nadfun_router_v2, Network};
     pub use crate::types::*;
+    pub use crate::version::{SdkVersion, TokenInfo};
 
     // Creator reward claiming
     pub use crate::contracts::CreatorClient;

@@ -144,13 +144,6 @@ pub struct TokenMetadata {
 }
 
 #[derive(Debug, Clone)]
-pub struct TokenInfo {
-    pub metadata: TokenMetadata,
-    pub balance: U256,
-    pub nonce: U256,
-}
-
-#[derive(Debug, Clone)]
 pub struct AllowanceStatus {
     pub allowance: U256,
     pub balance: U256,
@@ -309,7 +302,7 @@ mod tests {
         };
 
         assert_eq!(tx_result.block_number, Some(12345));
-        assert_eq!(tx_result.status, true);
+        assert!(tx_result.status);
         assert_eq!(tx_result.gas_used, Some(U256::from(21000)));
     }
 }

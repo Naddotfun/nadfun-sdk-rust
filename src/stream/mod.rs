@@ -1,18 +1,24 @@
-//! Event streaming and indexing module
+//! Event streaming and indexing module.
 //!
-//! This module is organized by functionality:
-//! - `curve`: Bonding curve event streaming and indexing
-//! - `dex`: DEX (Capricorn CL) event streaming and indexing
+//! Organized by version:
+//! - `v1`: bonding curve + Capricorn CL DEX (legacy, supplied by `nadfun-contract` v1)
+//! - `v2`: NadFunRouter / BondingCurveV2 / NadFunPair (added with v2 contracts)
 //!
-//! Both support real-time streaming and historical indexing with
-//! 2-stage filtering capabilities.
+//! Both versions support real-time WebSocket streaming and historical HTTP
+//! indexing with 2-stage filtering.
 
-pub mod curve;
-pub mod dex;
+pub mod v1;
+pub mod v2;
 
-// Re-export main functionality
-pub use curve::{CurveIndexer, CurveStream};
-pub use dex::{DexIndexer, DexStream};
+// Re-export v1 streaming surface at the legacy `crate::stream::*` paths.
+pub use v1::{CurveIndexer, CurveStream, DexIndexer, DexStream};
+
+// v2 surface re-exported at the top of `crate::stream::*` with v2-prefixed
+// names so v1 callers' wildcard imports keep working without surprise.
+pub use v2::{
+    discover_pools_unified, CurveIndexerV2, CurveStreamV2, NadFunSwapEvent, NadFunSwapIndexer,
+    NadFunSwapStream, PoolLocation, PoolSurface,
+};
 
 // Re-export types from the types module
 pub use crate::types::{
@@ -61,7 +67,6 @@ pub use crate::types::{
 ///     Ok(())
 /// }
 /// ```
-
 #[cfg(test)]
 mod tests {
     use crate::types::*;
@@ -72,17 +77,18 @@ mod tests {
 
     #[test]
     fn test_event_type_signatures() {
+        use crate::types::v1::bonding_curve::IBondingCurve;
         assert_eq!(
             EventType::Create.signature(),
-            bonding_curve::IBondingCurve::CurveCreate::SIGNATURE_HASH
+            IBondingCurve::CurveCreate::SIGNATURE_HASH
         );
         assert_eq!(
             EventType::Buy.signature(),
-            bonding_curve::IBondingCurve::CurveBuy::SIGNATURE_HASH
+            IBondingCurve::CurveBuy::SIGNATURE_HASH
         );
         assert_eq!(
             EventType::Sell.signature(),
-            bonding_curve::IBondingCurve::CurveSell::SIGNATURE_HASH
+            IBondingCurve::CurveSell::SIGNATURE_HASH
         );
     }
 

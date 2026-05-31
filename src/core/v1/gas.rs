@@ -60,6 +60,20 @@ pub async fn estimate_gas<P: Provider>(
     router: &Router,
     params: GasEstimationParams,
 ) -> Result<u64> {
+    // Reject Address::ZERO as the from-derived `to` field — providers will
+    // happily return numbers that skip allowance / balance checks, which
+    // is misleading. review P2 #9.
+    let to_field = match &params {
+        GasEstimationParams::Buy { to, .. }
+        | GasEstimationParams::Sell { to, .. }
+        | GasEstimationParams::SellPermit { to, .. } => *to,
+    };
+    if to_field == Address::ZERO {
+        return Err(anyhow::anyhow!(
+            "estimate_gas: `to` (used as from-address) must not be Address::ZERO"
+        ));
+    }
+
     match params {
         GasEstimationParams::Buy {
             token,
@@ -138,7 +152,7 @@ pub async fn estimate_buy_gas<P: Provider>(
 ) -> Result<u64> {
     match router {
         Router::BondingCurve(router_addr) => {
-            use crate::contracts::bonding_curve::IBondingCurveRouter;
+            use crate::contracts::v1::bonding_curve::IBondingCurveRouter;
 
             let contract_params = IBondingCurveRouter::BuyParams {
                 amountOutMin: amount_out_min,
@@ -164,7 +178,7 @@ pub async fn estimate_buy_gas<P: Provider>(
             Ok(gas)
         }
         Router::Dex(router_addr) => {
-            use crate::contracts::dex::IDexRouter;
+            use crate::contracts::v1::dex::IDexRouter;
 
             let contract_params = IDexRouter::BuyParams {
                 amountOutMin: amount_out_min,
@@ -204,7 +218,7 @@ pub async fn estimate_sell_gas<P: Provider>(
 ) -> Result<u64> {
     match router {
         Router::BondingCurve(router_addr) => {
-            use crate::contracts::bonding_curve::IBondingCurveRouter;
+            use crate::contracts::v1::bonding_curve::IBondingCurveRouter;
 
             let contract_params = IBondingCurveRouter::SellParams {
                 amountIn: amount_in,
@@ -230,7 +244,7 @@ pub async fn estimate_sell_gas<P: Provider>(
             Ok(gas)
         }
         Router::Dex(router_addr) => {
-            use crate::contracts::dex::IDexRouter;
+            use crate::contracts::v1::dex::IDexRouter;
 
             let contract_params = IDexRouter::SellParams {
                 amountIn: amount_in,
@@ -274,7 +288,7 @@ pub async fn estimate_sell_permit_gas<P: Provider>(
 ) -> Result<u64> {
     match router {
         Router::BondingCurve(router_addr) => {
-            use crate::contracts::bonding_curve::IBondingCurveRouter;
+            use crate::contracts::v1::bonding_curve::IBondingCurveRouter;
 
             let contract_params = IBondingCurveRouter::SellPermitParams {
                 amountIn: amount_in,
@@ -304,7 +318,7 @@ pub async fn estimate_sell_permit_gas<P: Provider>(
             Ok(gas)
         }
         Router::Dex(router_addr) => {
-            use crate::contracts::dex::IDexRouter;
+            use crate::contracts::v1::dex::IDexRouter;
 
             let contract_params = IDexRouter::SellPermitParams {
                 amountIn: amount_in,
