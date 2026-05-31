@@ -47,12 +47,10 @@ async fn main() -> Result<()> {
     println!("Network: {:?}", core.network());
 
     // 1. Get created tokens and their reward info from API
-    let api = ApiClient::new();
+    let api = ApiClient::new(network);
     // Or with API key for higher rate limits:
-    // let api = ApiClient::new().with_api_key("your-api-key".to_string());
-    let response = api
-        .get_created_tokens(core.wallet_address(), 1, 10)
-        .await?;
+    // let api = ApiClient::new(network).with_api_key("your-api-key".to_string());
+    let response = api.get_created_tokens(core.wallet_address(), 1, 10).await?;
 
     println!("\nFound {} tokens", response.total_count);
 
@@ -84,7 +82,7 @@ async fn main() -> Result<()> {
         if let Some(params) = ApiClient::build_claim_params(token) {
             println!("Claiming reward for: {}", token.token_info.name);
 
-            let tx_hash = core.claim_creator_reward(params).await?;
+            let tx_hash = core.v1().claim_creator_reward(params).await?;
             println!("TX submitted: {}", tx_hash);
 
             // Wait for transaction to be mined
@@ -109,7 +107,7 @@ async fn main() -> Result<()> {
     // Alternative: Batch claim all rewards at once (more gas efficient)
     // if let Some(batch_params) = ApiClient::build_batch_claim_params(&response.tokens) {
     //     println!("Batch claiming {} tokens", batch_params.tokens.len());
-    //     let tx_hash = core.claim_creator_rewards_batch(batch_params).await?;
+    //     let tx_hash = core.v1().claim_creator_rewards_batch(batch_params).await?;
     //     println!("Batch claim TX: {}", tx_hash);
     //
     //     let receipt = core.get_receipt(tx_hash).await?;
