@@ -647,6 +647,25 @@ core.v2().is_graduated(token)
 core.v2().pool_address(token)      // via TokenRegistry
 core.v2().wrapped_native()
 
+// View / passthrough parity (thin wrappers over on-chain views):
+core.v2().is_halted()                       // -> bool: protocol halted?
+core.v2().is_registered(token)              // -> bool: in v2 TokenRegistry?
+core.v2().get_dex_type(token)              // -> u8: DexType discriminator
+core.v2().quote_token(token)              // -> Address: WMON/LvMON/ERC-20
+core.v2().get_sniping_penalty(token)     // -> U256: anti-sniping bps now
+core.v2().get_curve(token)               // -> V2Curve: full curve state
+core.v2().quote_config(quote_token)      // -> V2QuoteConfig: genesis + fees
+// Post-graduation pair views (Err before graduation, gated on is_graduated):
+core.v2().is_locked(token)               // -> bool: DEX-pair lock (NOT v1 curve lock)
+core.v2().get_reserves(token)            // -> PairReserves: graduated pair reserves
+
+// Computed helpers (v1 Lens parity; v2 has no on-chain fn — math from curve/config):
+core.v2().get_progress(token)            // -> U256: curve progress bps (0..10000)
+core.v2().available_buy_tokens(token)    // -> (U256,U256): (tokens left, quote needed)
+core.v2().get_initial_buy_amount_out(quote_token, amount_in) // -> U256: genesis buy out
+// NOTE: v2 get_initial_buy_amount_out takes quote_token (genesis differs per quote);
+// v1's is parameterless.
+
 // Gas estimation:
 core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(params)).await?
 
@@ -654,6 +673,20 @@ core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(params)).await?
 core.v2().router(), core.v2().factory(), core.v2().bonding_curve(),
 core.v2().token_registry(), core.provider()
 ```
+
+New public view types (re-exported from crate root + prelude):
+- `V2Curve` — full bonding-curve state from `get_curve` (token, creator,
+  quote_token, virtual_quote_reserve, virtual_token_reserve, k,
+  min_token_reserve, initial_quote_reserve, initial_token_reserve,
+  created_at_block, graduated, creator_fee_rate, version, dex_type, pair,
+  graduate_fee). Invariant: `k == virtual_quote_reserve * virtual_token_reserve`.
+- `V2QuoteConfig` — per-quote-token config from `quote_config` (decimals,
+  virtual_reserve, virtual_token_reserve, min_token_reserve, deploy_fee,
+  graduate_fee, curve_protocol_fee_rate, dex_protocol_fee_rate,
+  settlement_threshold, active).
+- `PairReserves` — `reserve0` / `reserve1` / `block_timestamp_last`; reserve
+  sides follow the pair's address-sorted `token0` / `token1`, not
+  token-then-quote.
 
 ### v2 Token Creation
 
