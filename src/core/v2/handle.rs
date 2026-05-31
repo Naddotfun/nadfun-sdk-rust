@@ -529,11 +529,7 @@ impl<'a> CoreV2<'a> {
             .protocol_manager
             .get_config(quote_token)
             .await?;
-        Ok(crate::core::v2::calc::initial_buy_amount_out(
-            &config,
-            amount_in,
-            creator_fee_rate,
-        ))
+        crate::core::v2::calc::initial_buy_amount_out(&config, amount_in, creator_fee_rate)
     }
 
     /// Whether `token`'s graduated DEX pair is locked.

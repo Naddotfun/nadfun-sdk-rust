@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version. It returns the **exact** create-time `_initialBuy` output to the wei:
   the combined protocol + creator fee (one ceil `mulDivUp`) is deducted, then the
   constant-product / supply-cap math; the create-time buy is anti-sniping exempt.
+  It errors (rather than returning `0`) when a positive buy's ceil-rounded fees
+  consume the entire quote — the on-chain `_initialBuy` would revert in that
+  case, so a `0` result would mislead callers.
 - v2 passthrough parity on `core.v2()`: `is_halted`, `get_sniping_penalty`,
   `quote_token`, `get_curve` (→ new `V2Curve`), `quote_config` (→ new
   `V2QuoteConfig`), `get_dex_type`, `is_registered`, `is_locked`, and
