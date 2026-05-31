@@ -9,6 +9,7 @@
 
 use crate::types::v2::{V2Curve, V2QuoteConfig};
 use alloy::primitives::{U256, U512};
+use anyhow::Result;
 
 /// Basis-points denominator (`BPS` in the contracts).
 const BPS: u64 = 10_000;
@@ -75,15 +76,32 @@ pub fn available_buy_tokens(curve: &V2Curve) -> U256 {
 /// `creator_fee_rate` is a per-token parameter (chosen at create, stored on the
 /// curve) and is NOT part of the genesis [`V2QuoteConfig`] — pass the value used
 /// in `V2CreateTokenParams` / read from [`V2Curve::creator_fee_rate`].
+///
+/// Returns `Err` when the create-time buy would REVERT on-chain rather than mint:
+/// a positive `amount_in` whose ceil-rounded fees consume the entire quote
+/// (e.g. a dust input, or `total_rate >= BPS`) hits `_initialBuy`'s
+/// `BondingCurveLibrary.getAmountOut` `require(amountIn > 0)`. A zero
+/// `amount_in` is `Ok(0)` (the contract skips the buy when `quoteIn == 0`).
+/// A degenerate genesis config (zero reserves) with a positive buy is also an
+/// error (Codex P2).
 pub fn initial_buy_amount_out(
     config: &V2QuoteConfig,
     amount_in: U256,
     creator_fee_rate: u16,
-) -> U256 {
+) -> Result<U256> {
+    // A zero quote buy is a no-op on-chain (`if (quoteIn > 0)` guards the buy),
+    // so it mints nothing without reverting.
+    if amount_in.is_zero() {
+        return Ok(U256::ZERO);
+    }
+
     let reserve_in = config.virtual_reserve;
     let reserve_out = config.virtual_token_reserve;
     if reserve_in.is_zero() || reserve_out.is_zero() {
-        return U256::ZERO;
+        return Err(anyhow::anyhow!(
+            "initial_buy_amount_out: degenerate genesis config (zero reserve) cannot \
+             quote a positive buy"
+        ));
     }
     let k = reserve_in.saturating_mul(reserve_out);
 
@@ -98,6 +116,16 @@ pub fn initial_buy_amount_out(
         amount_in.saturating_sub(fee)
     };
 
+    // If ceil-rounded fees consume the whole quote, the on-chain `_initialBuy`
+    // calls `getAmountOut(0, ...)` which reverts (`require(amountIn > 0)`).
+    // Mirror that revert so callers don't treat an invalid buy as a 0-token mint.
+    if amount_in_after_fee.is_zero() {
+        return Err(anyhow::anyhow!(
+            "initial_buy_amount_out: fees consume the entire quote ({amount_in} wei at \
+             {total_rate} bps); the on-chain initial buy would revert"
+        ));
+    }
+
     // out = reserve_out - ceil(k / (reserve_in + amount_in_after_fee))
     let new_reserve_in = reserve_in.saturating_add(amount_in_after_fee);
     let new_reserve_out = ceil_div(k, new_reserve_in);
@@ -108,7 +136,7 @@ pub fn initial_buy_amount_out(
     if out > available {
         out = available;
     }
-    out
+    Ok(out)
 }
 
 /// Ceiling division `ceil(a / b)` for `U256` (the contract's `mulDivUp(a, 1, b)`).
@@ -225,8 +253,12 @@ mod tests {
 
     #[test]
     fn initial_buy_zero_in_zero_out() {
+        // A zero quote buy is a no-op on-chain (`if (quoteIn > 0)`), so Ok(0).
         let c = cfg(1_000, 1_000, 200, 100);
-        assert_eq!(initial_buy_amount_out(&c, U256::ZERO, 0), U256::ZERO);
+        assert_eq!(
+            initial_buy_amount_out(&c, U256::ZERO, 0).unwrap(),
+            U256::ZERO
+        );
     }
 
     #[test]
@@ -236,7 +268,7 @@ mod tests {
         // => out = 1000 - 500 = 500.
         let c = cfg(1_000, 1_000, 0, 0);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000u64), 0),
+            initial_buy_amount_out(&c, U256::from(1_000u64), 0).unwrap(),
             U256::from(500u64)
         );
     }
@@ -248,7 +280,7 @@ mod tests {
         // out = 1000 - 527 = 473.
         let c = cfg(1_000, 1_000, 0, 1_000);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000u64), 0),
+            initial_buy_amount_out(&c, U256::from(1_000u64), 0).unwrap(),
             U256::from(473u64)
         );
     }
@@ -262,7 +294,7 @@ mod tests {
         // out = 1000 - 556 = 444.
         let c = cfg(1_000, 1_000, 0, 1_000);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000u64), 1_000),
+            initial_buy_amount_out(&c, U256::from(1_000u64), 1_000).unwrap(),
             U256::from(444u64)
         );
     }
@@ -275,8 +307,31 @@ mod tests {
         // => out = 500. (A floor fee would give after-fee 1001 and out 501.)
         let c = cfg(1_000, 1_000, 0, 1);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_001u64), 0),
+            initial_buy_amount_out(&c, U256::from(1_001u64), 0).unwrap(),
             U256::from(500u64)
+        );
+    }
+
+    #[test]
+    fn initial_buy_errors_when_fees_consume_quote() {
+        // 1 wei with any non-zero fee: ceil fee = 1 => after-fee 0 => on-chain
+        // `getAmountOut(0,..)` reverts. The helper must mirror that with an Err,
+        // not a 0-token "valid" quote (Codex P2).
+        let c = cfg(1_000, 1_000, 0, 100);
+        assert!(initial_buy_amount_out(&c, U256::from(1u64), 0).is_err());
+        // total_rate >= BPS also consumes everything for any positive input.
+        assert!(initial_buy_amount_out(&c, U256::from(1_000u64), 10_000).is_err());
+    }
+
+    #[test]
+    fn initial_buy_errors_on_degenerate_config() {
+        // Zero genesis reserve with a positive buy cannot quote — error, not 0.
+        let c = cfg(0, 1_000, 0, 0);
+        assert!(initial_buy_amount_out(&c, U256::from(1_000u64), 0).is_err());
+        // ...but a zero buy is still Ok(0) even on a degenerate config.
+        assert_eq!(
+            initial_buy_amount_out(&c, U256::ZERO, 0).unwrap(),
+            U256::ZERO
         );
     }
 
@@ -285,7 +340,7 @@ mod tests {
         // min=900 => available = 1000-900 = 100. A huge buy caps at 100.
         let c = cfg(1_000, 1_000, 900, 0);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000_000_000u64), 0),
+            initial_buy_amount_out(&c, U256::from(1_000_000_000u64), 0).unwrap(),
             U256::from(100u64)
         );
     }
@@ -315,7 +370,7 @@ mod tests {
         let c = wmon_genesis_cfg();
         let one_mon = U256::from(10u64).pow(U256::from(18u64));
         assert_eq!(
-            initial_buy_amount_out(&c, one_mon, 100),
+            initial_buy_amount_out(&c, one_mon, 100).unwrap(),
             U256::from_str_radix("14847758131386160593751", 10).unwrap()
         );
     }
@@ -327,7 +382,7 @@ mod tests {
         let c = wmon_genesis_cfg();
         let one_mon = U256::from(10u64).pow(U256::from(18u64));
         assert_eq!(
-            initial_buy_amount_out(&c, one_mon, 0),
+            initial_buy_amount_out(&c, one_mon, 0).unwrap(),
             U256::from_str_radix("14999263724698750689097", 10).unwrap()
         );
     }

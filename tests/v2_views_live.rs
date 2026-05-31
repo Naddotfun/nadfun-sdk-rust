@@ -56,16 +56,25 @@ async fn get_curve_holds_constant_product_invariant() {
 
     let curve = core.v2().get_curve(token).await.unwrap();
 
-    // The invariant that catches any getCurve field-order regression.
-    // Pre-graduation only (post-graduation k is frozen at genesis); the default
-    // fixture token is not graduated.
-    if !curve.graduated {
-        assert_eq!(
-            curve.k,
-            curve.virtual_quote_reserve * curve.virtual_token_reserve,
-            "k must equal virtualQuoteReserve * virtualTokenReserve pre-graduation"
-        );
-    }
+    // The invariant that catches any getCurve field-order regression. `k` is the
+    // genesis-fixed product the contract sets once at create and never updates,
+    // so it must equal the stored initial-reserve product at EVERY stage — this
+    // holds for traded and graduated curves alike, unlike `k == vQuote*vToken`
+    // which only holds on an untraded genesis curve (a traded curve's current
+    // product floats >= k by ceil dust). See the lifecycle smoke for the same
+    // corrected invariant (Codex P2).
+    assert_eq!(
+        curve.k,
+        curve.initial_quote_reserve * curve.initial_token_reserve,
+        "k must equal initial_quote_reserve * initial_token_reserve (genesis-fixed)"
+    );
+    // Pre-graduation, the contract's own InvalidKValue guard keeps the current
+    // reserve product at or above k; post-graduation the reserves are frozen at
+    // their final curve state, which also satisfied that guard.
+    assert!(
+        curve.virtual_quote_reserve * curve.virtual_token_reserve >= curve.k,
+        "vQuote * vToken must stay >= k"
+    );
     assert_eq!(curve.token, token, "curve.token must echo the input");
     assert_ne!(
         curve.quote_token,
