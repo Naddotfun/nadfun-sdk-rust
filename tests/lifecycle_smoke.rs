@@ -178,6 +178,16 @@ async fn v2_lifecycle() {
         "fresh token must be pre-graduation"
     );
 
+    // `create_token` already performed the create-time initial buy of
+    // `initial_buy` (= `buy_quote_amount`). The wallet held 0 of this brand-new
+    // token, so its balance now IS exactly that initial-buy output — captured
+    // before any further trade so it reflects only the create-time buy.
+    let bal_after_create = balance_of(&core, token, wallet).await;
+    assert!(
+        bal_after_create > U256::ZERO,
+        "create-time initial buy must have minted tokens"
+    );
+
     // ── 1b. view utils on a FRESH curve (post-create, pre-buy) ─────────
     // Exercise every v2 computed/view helper while the curve is untouched,
     // and capture the create-time baselines we re-assert after the buy.
@@ -278,19 +288,24 @@ async fn v2_lifecycle() {
         format_ether(required_fresh)
     );
 
-    // get_initial_buy_amount_out: creation-time estimate (EXCLUDES anti-sniping
-    // penalty), so only a loose sanity bound — >0 and <= genesis token supply.
+    // get_initial_buy_amount_out is computed from the quote token's genesis
+    // getConfig + the token's creator_fee_rate (deterministic, independent of
+    // current curve state). The create-time initial buy is anti-sniping EXEMPT,
+    // so it must match the tokens actually minted by that initial buy EXACTLY
+    // (not just a bound). Read the creator fee back from the curve — it must be
+    // the 100 bps we created with.
+    let creator_fee_rate = fresh_curve.creator_fee_rate;
+    assert_eq!(creator_fee_rate, 100, "curve must store the 1% creator fee");
     let initial_out = core
         .v2()
-        .get_initial_buy_amount_out(quote_token, parse_ether("1").unwrap())
+        .get_initial_buy_amount_out(quote_token, initial_buy, creator_fee_rate)
         .await
         .expect("get_initial_buy_amount_out");
-    assert!(initial_out > U256::ZERO, "initial buy estimate must be > 0");
-    assert!(
-        initial_out <= fresh_curve.initial_token_reserve,
-        "initial buy estimate must not exceed genesis token supply"
+    assert_eq!(
+        initial_out, bal_after_create,
+        "initial buy must match get_initial_buy_amount_out exactly (penalty-exempt at create)"
     );
-    println!("[v2] util get_initial_buy_amount_out ok -> {initial_out} (estimate)");
+    println!("[v2] util get_initial_buy_amount_out EXACT == initial buy ok ({bal_after_create})");
 
     // is_locked / get_reserves are graduation-gated: a pair is assigned at
     // creation, so they must ERROR (not return ZERO) before graduation.
@@ -326,9 +341,7 @@ async fn v2_lifecycle() {
         progress_after_buy < U256::from(10_000u64),
         "pre-graduation progress must stay < 100%"
     );
-    println!(
-        "[v2] util get_progress ok -> {progress_after_buy} bps (>= fresh {progress_fresh})"
-    );
+    println!("[v2] util get_progress ok -> {progress_after_buy} bps (>= fresh {progress_fresh})");
 
     // available_buy_tokens is strictly monotonic: buying consumed supply.
     let (avail_after_buy, _req_after_buy) = core
@@ -363,8 +376,7 @@ async fn v2_lifecycle() {
     );
     // Current product still floats >= the fixed k (contract guard, ceil dust).
     assert!(
-        curve_after_buy.virtual_quote_reserve * curve_after_buy.virtual_token_reserve
-            >= expected_k,
+        curve_after_buy.virtual_quote_reserve * curve_after_buy.virtual_token_reserve >= expected_k,
         "vQuote * vToken must stay >= k after a buy"
     );
     println!("[v2] util get_curve ok -> k unchanged ({expected_k}) after bonding buy, vQ*vT >= k");
@@ -439,13 +451,16 @@ async fn v2_lifecycle() {
     // values (BondingCurve.sol `_graduate` reads but never rewrites them), and that
     // last state already passed the L390 `>= k` guard — so the product stays >= k.
     assert!(
-        graduated_curve.virtual_quote_reserve * graduated_curve.virtual_token_reserve
-            >= expected_k,
+        graduated_curve.virtual_quote_reserve * graduated_curve.virtual_token_reserve >= expected_k,
         "vQuote * vToken must stay >= k post-graduation (reserves frozen at curve end)"
     );
     println!("[v2] util get_curve ok -> k unchanged ({expected_k}) post-graduation, vQ*vT >= k");
     // Graduation-gated helpers now resolve (no longer error).
-    let _is_locked = core.v2().is_locked(token).await.expect("is_locked post-grad");
+    let _is_locked = core
+        .v2()
+        .is_locked(token)
+        .await
+        .expect("is_locked post-grad");
     let reserves = core
         .v2()
         .get_reserves(token)
@@ -656,13 +671,19 @@ async fn v1_lifecycle() {
     // get_progress, available_buy_tokens, is_locked. (v1 has no get_curve /
     // quote_config / quote_token / sniping_penalty / get_reserves.)
     let deploy_fee = core.v1().get_deploy_fee().await.expect("get_deploy_fee");
-    println!("[v1] util get_deploy_fee ok -> {} MON", format_ether(deploy_fee));
+    println!(
+        "[v1] util get_deploy_fee ok -> {} MON",
+        format_ether(deploy_fee)
+    );
     let v1_initial_out = core
         .v1()
         .get_initial_buy_amount_out(parse_ether("1").unwrap())
         .await
         .expect("get_initial_buy_amount_out");
-    assert!(v1_initial_out > U256::ZERO, "v1 initial buy estimate must be > 0");
+    assert!(
+        v1_initial_out > U256::ZERO,
+        "v1 initial buy estimate must be > 0"
+    );
     println!("[v1] util get_initial_buy_amount_out ok -> {v1_initial_out}");
 
     let v1_progress_fresh = core.v1().get_progress(token).await.expect("get_progress");

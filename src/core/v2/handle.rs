@@ -496,26 +496,32 @@ impl<'a> CoreV2<'a> {
         Ok((available, required_quote))
     }
 
-    /// Tokens received for an initial buy of `amount_in` quote at token-creation
-    /// time, for a token quoted in `quote_token`.
+    /// Tokens received for the create-time initial buy of `amount_in` quote, for
+    /// a token quoted in `quote_token` and created with `creator_fee_rate` (bps).
     ///
-    /// Computed from the quote token's genesis [`V2QuoteConfig`] — the curve a
-    /// freshly created token inherits. Reproduces the on-chain
-    /// `BondingCurve.getAmountOut` (fee, constant-product, supply cap).
+    /// Returns the EXACT output the on-chain `BondingCurve._initialBuy` mints —
+    /// computed from the quote token's genesis [`V2QuoteConfig`] (the curve a
+    /// freshly created token inherits) plus the token's per-token creator fee.
+    /// The create-time buy is anti-sniping EXEMPT, so this reproduces it to the
+    /// wei: it deducts the combined protocol + creator fee (one ceil `mulDivUp`)
+    /// then applies the constant-product / supply-cap math.
+    ///
+    /// `creator_fee_rate` is the value passed in `V2CreateTokenParams` (or read
+    /// from [`crate::V2Curve::creator_fee_rate`]); it is a per-token parameter,
+    /// not part of the genesis config, so the caller must supply it.
     ///
     /// NOTE: unlike v1's parameterless [`crate::CoreV1::get_initial_buy_amount_out`]
     /// (all v1 tokens share one genesis curve), v2 genesis params differ per
     /// quote token, so this takes `quote_token`.
     ///
-    /// This applies the curve protocol fee + constant-product math only — it
-    /// does NOT include the time-decaying anti-sniping penalty that the live
-    /// `getBondingCurveAmountOut` adds for an already-created token (a fresh
-    /// creation has no penalty window). It is a creation-time estimate, so it
-    /// won't exactly match an existing token's live quote.
+    /// This models only the create-time buy. A later buy on the same curve still
+    /// differs by design: it carries the time-decaying anti-sniping penalty that
+    /// the create-time buy is exempt from.
     pub async fn get_initial_buy_amount_out(
         self,
         quote_token: Address,
         amount_in: U256,
+        creator_fee_rate: u16,
     ) -> Result<U256> {
         let config = self
             .core
@@ -524,7 +530,9 @@ impl<'a> CoreV2<'a> {
             .get_config(quote_token)
             .await?;
         Ok(crate::core::v2::calc::initial_buy_amount_out(
-            &config, amount_in,
+            &config,
+            amount_in,
+            creator_fee_rate,
         ))
     }
 

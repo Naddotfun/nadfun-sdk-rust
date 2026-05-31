@@ -59,14 +59,27 @@ pub fn available_buy_tokens(curve: &V2Curve) -> U256 {
 }
 
 /// Tokens received for an initial buy of `amount_in` quote at token-creation
-/// time, given the quote token's genesis [`V2QuoteConfig`].
+/// time, given the quote token's genesis [`V2QuoteConfig`] and the token's
+/// `creator_fee_rate` (basis points).
 ///
-/// Reproduces `BondingCurve.getAmountOut(token, amountIn, isBuy=true)` applied
-/// to the genesis curve (`k = virtual_reserve * virtual_token_reserve`):
-/// 1. fee: `amountInAfterFee = amount_in − amount_in*curveProtocolFeeRate/BPS`
-/// 2. constant product: `out = virtualTokenReserve − ceil(k / (virtualReserve + amountInAfterFee))`
+/// Reproduces the on-chain `BondingCurve._initialBuy` exactly (anti-sniping
+/// EXEMPT — `_calculateFees(withSniping=false)`):
+/// 1. fee: one combined rate `totalRate = curveProtocolFeeRate + creator_fee_rate`,
+///    deducted as `amountAfterFees = amount_in − ceil(amount_in * totalRate / BPS)`
+///    (the contract sums the rates into a single `mulDivUp`, so it ceils the
+///    *combined* fee, not each leg separately; `totalRate >= BPS` consumes all).
+/// 2. constant product: `out = virtualTokenReserve − ceil(k / (virtualReserve + amountAfterFees))`
+///    with `k = virtual_reserve * virtual_token_reserve`.
 /// 3. cap at `virtualTokenReserve − minTokenReserve`.
-pub fn initial_buy_amount_out(config: &V2QuoteConfig, amount_in: U256) -> U256 {
+///
+/// `creator_fee_rate` is a per-token parameter (chosen at create, stored on the
+/// curve) and is NOT part of the genesis [`V2QuoteConfig`] — pass the value used
+/// in `V2CreateTokenParams` / read from [`V2Curve::creator_fee_rate`].
+pub fn initial_buy_amount_out(
+    config: &V2QuoteConfig,
+    amount_in: U256,
+    creator_fee_rate: u16,
+) -> U256 {
     let reserve_in = config.virtual_reserve;
     let reserve_out = config.virtual_token_reserve;
     if reserve_in.is_zero() || reserve_out.is_zero() {
@@ -74,10 +87,16 @@ pub fn initial_buy_amount_out(config: &V2QuoteConfig, amount_in: U256) -> U256 {
     }
     let k = reserve_in.saturating_mul(reserve_out);
 
-    // Protocol fee on the way in (BPS).
-    let fee =
-        amount_in.saturating_mul(U256::from(config.curve_protocol_fee_rate)) / U256::from(BPS);
-    let amount_in_after_fee = amount_in.saturating_sub(fee);
+    // Combined fee on the way in: protocol + creator, summed into one rate and
+    // ceil-rounded as a single mulDivUp (matches `_calculateFees`). A combined
+    // rate at or above BPS consumes the entire input.
+    let total_rate = u64::from(config.curve_protocol_fee_rate) + u64::from(creator_fee_rate);
+    let amount_in_after_fee = if total_rate >= BPS {
+        U256::ZERO
+    } else {
+        let fee = mul_div_up(amount_in, U256::from(total_rate), U256::from(BPS));
+        amount_in.saturating_sub(fee)
+    };
 
     // out = reserve_out - ceil(k / (reserve_in + amount_in_after_fee))
     let new_reserve_in = reserve_in.saturating_add(amount_in_after_fee);
@@ -102,6 +121,20 @@ fn ceil_div(a: U256, b: U256) -> U256 {
         return U256::ZERO;
     }
     (a - U256::from(1u64)) / b + U256::from(1u64)
+}
+
+/// Ceiling `mulDivUp(a, b, d)` = `ceil(a * b / d)` (Solady `FixedPointMathLib`).
+/// Widens to `U512` for the `a * b` product so it never overflows for in-range
+/// fee inputs, matching the contract's overflow-free intermediate. Returns 0
+/// when any operand making the result 0 (`a==0`, `b==0`) or `d==0`.
+fn mul_div_up(a: U256, b: U256, d: U256) -> U256 {
+    if a.is_zero() || b.is_zero() || d.is_zero() {
+        return U256::ZERO;
+    }
+    let prod = U512::from(a) * U512::from(b);
+    let d512 = U512::from(d);
+    let up = (prod - U512::from(1u64)) / d512 + U512::from(1u64);
+    U256::from(up)
 }
 
 #[cfg(test)]
@@ -193,30 +226,57 @@ mod tests {
     #[test]
     fn initial_buy_zero_in_zero_out() {
         let c = cfg(1_000, 1_000, 200, 100);
-        assert_eq!(initial_buy_amount_out(&c, U256::ZERO), U256::ZERO);
+        assert_eq!(initial_buy_amount_out(&c, U256::ZERO, 0), U256::ZERO);
     }
 
     #[test]
     fn initial_buy_matches_constant_product_no_fee() {
-        // No fee. reserve_in=1000, reserve_out=1000, k=1_000_000.
+        // No fee (protocol 0, creator 0). reserve_in=1000, reserve_out=1000, k=1_000_000.
         // amount_in=1000 => new_reserve_in=2000 => ceil(1_000_000/2000)=500
         // => out = 1000 - 500 = 500.
         let c = cfg(1_000, 1_000, 0, 0);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000u64)),
+            initial_buy_amount_out(&c, U256::from(1_000u64), 0),
             U256::from(500u64)
         );
     }
 
     #[test]
     fn initial_buy_applies_fee_before_curve() {
-        // fee 10% (1000 bps). amount_in=1000 => after fee 900.
+        // Protocol fee 10% (1000 bps), no creator fee. amount_in=1000 => after fee 900.
         // new_reserve_in = 1000+900 = 1900 => ceil(1_000_000/1900)=527 (526.31..->527)
         // out = 1000 - 527 = 473.
         let c = cfg(1_000, 1_000, 0, 1_000);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000u64)),
+            initial_buy_amount_out(&c, U256::from(1_000u64), 0),
             U256::from(473u64)
+        );
+    }
+
+    #[test]
+    fn initial_buy_sums_protocol_and_creator_fee() {
+        // Protocol 1000 bps + creator 1000 bps => combined 2000 bps via ONE
+        // ceil(amount*totalRate/BPS) (matches the contract's single mulDivUp).
+        // amount_in=1000 => fee ceil(1000*2000/10000)=200 => after fee 800.
+        // new_reserve_in=1800 => ceil(1_000_000/1800)=556 (555.55..->556)
+        // out = 1000 - 556 = 444.
+        let c = cfg(1_000, 1_000, 0, 1_000);
+        assert_eq!(
+            initial_buy_amount_out(&c, U256::from(1_000u64), 1_000),
+            U256::from(444u64)
+        );
+    }
+
+    #[test]
+    fn initial_buy_fee_is_ceiled() {
+        // 1 bps on 1001 => floor=0 but contract mulDivUp ceils to 1.
+        // protocol 1 bps, creator 0. amount_in=1001 => fee ceil(1001*1/10000)=1
+        // => after fee 1000 => new_reserve_in=2000 => ceil(1_000_000/2000)=500
+        // => out = 500. (A floor fee would give after-fee 1001 and out 501.)
+        let c = cfg(1_000, 1_000, 0, 1);
+        assert_eq!(
+            initial_buy_amount_out(&c, U256::from(1_001u64), 0),
+            U256::from(500u64)
         );
     }
 
@@ -225,8 +285,50 @@ mod tests {
         // min=900 => available = 1000-900 = 100. A huge buy caps at 100.
         let c = cfg(1_000, 1_000, 900, 0);
         assert_eq!(
-            initial_buy_amount_out(&c, U256::from(1_000_000_000u64)),
+            initial_buy_amount_out(&c, U256::from(1_000_000_000u64), 0),
             U256::from(100u64)
+        );
+    }
+
+    /// Golden values proven to the wei on testnet against the live `_initialBuy`
+    /// for the WMON genesis config (vReserve=70_000e18, vTokenReserve=1_060_569e21,
+    /// protocol fee 100 bps), amount_in = 1 MON.
+    fn wmon_genesis_cfg() -> V2QuoteConfig {
+        V2QuoteConfig {
+            decimals: 18,
+            virtual_reserve: U256::from(70_000u64) * U256::from(10u64).pow(U256::from(18u64)),
+            virtual_token_reserve: U256::from(1_060_569u64)
+                * U256::from(10u64).pow(U256::from(21u64)),
+            min_token_reserve: U256::ZERO,
+            deploy_fee: U256::ZERO,
+            graduate_fee: U256::ZERO,
+            curve_protocol_fee_rate: 100,
+            dex_protocol_fee_rate: 0,
+            settlement_threshold: U256::ZERO,
+            active: true,
+        }
+    }
+
+    #[test]
+    fn initial_buy_golden_with_creator_fee() {
+        // creator_fee_rate = 100 (1%) => protocol+creator = 200 bps total.
+        let c = wmon_genesis_cfg();
+        let one_mon = U256::from(10u64).pow(U256::from(18u64));
+        assert_eq!(
+            initial_buy_amount_out(&c, one_mon, 100),
+            U256::from_str_radix("14847758131386160593751", 10).unwrap()
+        );
+    }
+
+    #[test]
+    fn initial_buy_golden_no_creator_fee() {
+        // creator_fee_rate = 0 => protocol-only (100 bps); must equal the prior
+        // protocol-only value so the zero-creator case is unchanged.
+        let c = wmon_genesis_cfg();
+        let one_mon = U256::from(10u64).pow(U256::from(18u64));
+        assert_eq!(
+            initial_buy_amount_out(&c, one_mon, 0),
+            U256::from_str_radix("14999263724698750689097", 10).unwrap()
         );
     }
 

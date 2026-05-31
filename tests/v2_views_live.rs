@@ -207,14 +207,13 @@ async fn graduation_signals_agree() {
     }
 }
 
-/// `get_initial_buy_amount_out(quote, amt)` is a genesis-config estimate: it
-/// applies the curve protocol fee + constant-product math, but NOT the
-/// time-decaying anti-sniping penalty that the live `getBondingCurveAmountOut`
-/// adds for an already-created token. So it is bounded above by the genesis
-/// sellable supply and must be a positive, sensible number — but is not
-/// expected to equal an existing token's live quote. The exact fee + ceil-div
-/// arithmetic is pinned by the `calc` unit tests; this guards that the live
-/// config feeds through sanely.
+/// `get_initial_buy_amount_out(quote, amt, creator_fee_rate)` returns the exact
+/// create-time initial-buy output (combined protocol + creator fee, then the
+/// constant-product / supply-cap math; anti-sniping exempt). The exact fee +
+/// ceil-div arithmetic — including the create-time golden values proven on
+/// testnet — is pinned by the `calc` unit tests; this live test only guards that
+/// the genesis config feeds through sanely (with `creator_fee_rate = 0`, the
+/// protocol-only case), staying positive and below the genesis sellable supply.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore] // requires live testnet RPC
 async fn initial_buy_is_bounded_by_genesis_supply() {
@@ -223,7 +222,10 @@ async fn initial_buy_is_bounded_by_genesis_supply() {
     let wmon: Address = get_wmon(Network::Testnet).parse().unwrap();
     let amount = U256::from(1_000_000_000_000_000_000u64); // 1e18
 
-    let computed = v2.get_initial_buy_amount_out(wmon, amount).await.unwrap();
+    let computed = v2
+        .get_initial_buy_amount_out(wmon, amount, 0)
+        .await
+        .unwrap();
     assert!(computed > U256::ZERO, "initial buy must yield tokens");
 
     let cfg = v2.quote_config(wmon).await.unwrap();

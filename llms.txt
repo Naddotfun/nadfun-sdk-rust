@@ -662,9 +662,10 @@ core.v2().get_reserves(token)            // -> PairReserves: graduated pair rese
 // Computed helpers (v1 Lens parity; v2 has no on-chain fn — math from curve/config):
 core.v2().get_progress(token)            // -> U256: curve progress bps (0..10000)
 core.v2().available_buy_tokens(token)    // -> (U256,U256): (tokens left, quote needed)
-core.v2().get_initial_buy_amount_out(quote_token, amount_in) // -> U256: genesis buy out
-// NOTE: v2 get_initial_buy_amount_out takes quote_token (genesis differs per quote);
-// v1's is parameterless.
+core.v2().get_initial_buy_amount_out(quote_token, amount_in, creator_fee_rate) // -> U256: EXACT create-time buy out
+// NOTE: v2 get_initial_buy_amount_out takes quote_token (genesis differs per quote)
+// AND creator_fee_rate (u16 bps, per-token, not in genesis config) — it returns the
+// exact _initialBuy output (protocol+creator fee, anti-sniping exempt). v1's is parameterless.
 
 // Gas estimation:
 core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(params)).await?

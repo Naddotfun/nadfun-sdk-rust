@@ -182,13 +182,16 @@ core.v2().get_reserves(token).await?;         // PairReserves of the graduated p
 // Computed helpers (v1 Lens parity; no v2 on-chain fn — math from curve/config):
 core.v2().get_progress(token).await?;         // U256: curve progress in bps (0..=10000)
 core.v2().available_buy_tokens(token).await?; // (U256, U256): (tokens left, quote needed)
-core.v2().get_initial_buy_amount_out(quote_token, amount_in).await?; // U256
+core.v2().get_initial_buy_amount_out(quote_token, amount_in, creator_fee_rate).await?; // U256
 ```
 
 `get_initial_buy_amount_out` takes a `quote_token` (v2 genesis curves differ per
-quote token); v1's equivalent is parameterless. The computed helpers reproduce
-the on-chain bonding-curve math (fee + constant-product + supply cap), verified
-against on-chain quotes in `tests/v2_views_live.rs`.
+quote token) and the token's `creator_fee_rate` (u16 bps, a per-token parameter
+not present in the genesis config); v1's equivalent is parameterless. It returns
+the **exact** create-time initial-buy output — the on-chain `_initialBuy` mints
+this to the wei (combined protocol + creator fee, then constant-product + supply
+cap; anti-sniping exempt). The computed helpers reproduce the on-chain
+bonding-curve math, verified against on-chain quotes in `tests/v2_views_live.rs`.
 
 `is_locked` reflects the post-graduation `NadFunPair` lock, distinct from the v1
 bonding-curve `core.v1().is_locked`. New view types `V2Curve`, `V2QuoteConfig`,
