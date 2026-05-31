@@ -128,6 +128,13 @@ async fn v2_lifecycle() {
         .parse()
         .unwrap();
     let initial_buy = parse_ether("1").unwrap();
+    // Native create requires an explicit native-equivalent quote token. Resolve
+    // the canonical wrapped native (WMON) from the router on-chain.
+    let wmon = core
+        .v2()
+        .wrapped_native()
+        .await
+        .expect("resolve wrapped_native for native create");
     let params = V2CreateTokenParams {
         name: format!("Lifecycle V2 {n}"),
         symbol: format!("LCV2{n}"),
@@ -152,7 +159,7 @@ async fn v2_lifecycle() {
         ],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: initial_buy,
-        payment: V2CreatePayment::Native,
+        payment: V2CreatePayment::Native { quote_token: wmon },
         deadline: U256::from(DEADLINE),
         gas_limit: None,
         gas_price: Some(GasPricing::Legacy),

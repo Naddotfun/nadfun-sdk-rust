@@ -29,6 +29,17 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("LPVault not configured for this network"))?
         .parse()?;
 
+    // Native create needs an explicit native-equivalent quote token. Resolve
+    // the wrapped native (MON / WMON) from the structured quote-token registry
+    // — any entry with `is_native == true` is valid (e.g. MON or LVMON). You
+    // could also use `core.v2().wrapped_native().await?`.
+    let wmon: Address = nadfun_sdk::quote_tokens(config.network)
+        .iter()
+        .find(|qt| qt.is_native && qt.symbol == "MON")
+        .ok_or_else(|| anyhow::anyhow!("no native MON quote token for this network"))?
+        .address
+        .parse()?;
+
     let api = ApiClient::from_env(config.network);
 
     let initial_buy = parse_ether("1.5")?; // 1.5 MON for the creator's initial buy
@@ -63,7 +74,7 @@ async fn main() -> Result<()> {
         ],
         dex_type: V2DexType::NadFun,
         buy_quote_amount: initial_buy,
-        payment: V2CreatePayment::Native,
+        payment: V2CreatePayment::Native { quote_token: wmon },
         deadline: U256::from(9_999_999_999_u64),
         gas_limit: None,
         gas_price: Some(GasPricing::Legacy),

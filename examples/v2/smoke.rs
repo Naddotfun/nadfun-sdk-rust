@@ -10,9 +10,8 @@ use anyhow::Result;
 use nadfun_sdk::{
     constants::{
         get_burn_vault_v2, get_creator_fee_vault_v2, get_fee_to_v2, get_gift_vault_v2,
-        get_lp_vault_v2, get_lv_mon_v2, get_nad_swap_adapter_v2, get_nadfun_factory_v2,
-        get_nadfun_pair_impl_v2, get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2,
-        get_token_registry_v2,
+        get_lp_vault_v2, get_nad_swap_adapter_v2, get_nadfun_factory_v2, get_nadfun_pair_impl_v2,
+        get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2, get_token_registry_v2,
     },
     Core, Network,
 };
@@ -50,7 +49,6 @@ async fn main() -> Result<()> {
         "creator_fee_vault"    => get_creator_fee_vault_v2(net),
         "gift_vault"           => get_gift_vault_v2(net),
         "fee_to"               => get_fee_to_v2(net),
-        "lv_mon"               => get_lv_mon_v2(net),
     };
 
     println!("\n=== Live RPC view-method probe ===");
