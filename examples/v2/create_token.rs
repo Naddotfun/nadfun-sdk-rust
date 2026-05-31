@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
         nonce: None,
     };
 
-    let result = core.create_token_v2(params, &api).await?;
+    let result = core.v2().create_token(params, &api).await?;
     println!("✅ token deployed: {}", result.token_address);
     println!("metadata_uri: {}", result.metadata_uri);
     println!("image_uri:    {}", result.image_uri);

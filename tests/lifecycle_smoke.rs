@@ -101,7 +101,7 @@ async fn v2_lifecycle() {
         .expect("core");
     let wallet = core.wallet_address();
     let api = ApiClient::from_env(nadfun_sdk::Network::Testnet);
-    let router_v2 = core.router_v2().address;
+    let router_v2 = core.v2().router().address;
 
     let start_block = core.provider().get_block_number().await.unwrap();
     let bal0 = core.provider().get_balance(wallet).await.unwrap();
@@ -159,7 +159,8 @@ async fn v2_lifecycle() {
         nonce: None,
     };
     let created = core
-        .create_token_v2(params, &api)
+        .v2()
+        .create_token(params, &api)
         .await
         .expect("create_token_v2");
     let token = created.token_address;
@@ -173,7 +174,7 @@ async fn v2_lifecycle() {
         nadfun_sdk::SdkVersion::V2
     );
     assert!(
-        !core.is_graduated_v2(token).await.unwrap(),
+        !core.v2().is_graduated(token).await.unwrap(),
         "fresh token must be pre-graduation"
     );
 
@@ -195,14 +196,14 @@ async fn v2_lifecycle() {
     // testnet curve config) needs the quote reserve to reach ~295k MON — so
     // ~225k MON of real buys. Large chunks: the curve refunds the excess on
     // the buy that crosses the threshold.
-    let mut graduated = core.is_graduated_v2(token).await.unwrap();
+    let mut graduated = core.v2().is_graduated(token).await.unwrap();
     let mut spent = U256::ZERO;
     let chunk = parse_ether("80000").unwrap();
     let cap = parse_ether("400000").unwrap();
     while !graduated && spent < cap {
         buy_v2_native(&core, token, chunk).await;
         spent += chunk;
-        graduated = core.is_graduated_v2(token).await.unwrap();
+        graduated = core.v2().is_graduated(token).await.unwrap();
         println!(
             "[v2] graduate progress: spent {} MON, graduated={graduated}",
             format_ether(spent)
@@ -260,7 +261,7 @@ async fn v2_lifecycle() {
         "curve indexer should decode our buys + sells"
     );
 
-    let pair = core.pool_address_v2(token).await.unwrap();
+    let pair = core.v2().pool_address(token).await.unwrap();
     let swap_idx = NadFunSwapIndexer::new(
         core.provider().clone(),
         vec![pair],
@@ -293,13 +294,15 @@ async fn wait_receipt(core: &Core, tx: B256) -> bool {
 
 async fn buy_v2_native(core: &Core, token: Address, value: U256) {
     let expected = core
-        .get_amount_out_v2(token, value, true)
+        .v2()
+        .get_amount_out(token, value, true)
         .await
         .expect("quote");
     assert!(expected > U256::ZERO, "zero buy quote");
     let min_out = SlippageUtils::calculate_amount_out_min(expected, SLIPPAGE);
     let tx = core
-        .buy_with_native_v2(V2BuyWithNativeParams {
+        .v2()
+        .buy_with_native(V2BuyWithNativeParams {
             token,
             to: core.wallet_address(),
             amount_out_min: min_out,
@@ -319,13 +322,15 @@ async fn buy_v2_native(core: &Core, token: Address, value: U256) {
 
 async fn sell_v2_native(core: &Core, token: Address, amount_in: U256) {
     let expected = core
-        .get_amount_out_v2(token, amount_in, false)
+        .v2()
+        .get_amount_out(token, amount_in, false)
         .await
         .expect("sell quote");
     assert!(expected > U256::ZERO, "zero sell quote");
     let min_out = SlippageUtils::calculate_amount_out_min(expected, SLIPPAGE);
     let tx = core
-        .sell_to_native_v2(V2SellToNativeParams {
+        .v2()
+        .sell_to_native(V2SellToNativeParams {
             token,
             to: core.wallet_address(),
             amount_in,
@@ -364,6 +369,7 @@ async fn v1_lifecycle() {
     let n = unique_suffix(&core).await;
     let initial_buy = parse_ether("1").unwrap();
     let amount_out = core
+        .v1()
         .get_initial_buy_amount_out(initial_buy)
         .await
         .expect("initial buy quote");
@@ -380,7 +386,11 @@ async fn v1_lifecycle() {
         value: initial_buy,
         action_id: ActionId::CapricornActor,
     };
-    let result = core.create_token(params, &api).await.expect("create_token");
+    let result = core
+        .v1()
+        .create_token(params, &api)
+        .await
+        .expect("create_token");
     let token = result.token_address;
     println!("[v1] created {token} (tx {})", result.transaction_hash);
     assert!(
@@ -392,7 +402,7 @@ async fn v1_lifecycle() {
         nadfun_sdk::SdkVersion::V1
     );
     assert!(
-        !core.is_graduated(token).await.unwrap(),
+        !core.v1().is_graduated(token).await.unwrap(),
         "fresh v1 token is pre-graduation"
     );
 
@@ -407,7 +417,11 @@ async fn v1_lifecycle() {
     println!("[v1] bonding sell ok");
 
     // ── 4. graduate (adaptive on balance) ──────────────────────────────
-    let (_available, required_mon) = core.available_buy_tokens(token).await.expect("available");
+    let (_available, required_mon) = core
+        .v1()
+        .available_buy_tokens(token)
+        .await
+        .expect("available");
     let bal_now = core.provider().get_balance(wallet).await.unwrap();
     println!(
         "[v1] graduation needs ~{} MON, have {} MON",
@@ -428,7 +442,11 @@ async fn v1_lifecycle() {
     let cap = bal_now - parse_ether("500").unwrap();
     let mut spent = U256::ZERO;
     loop {
-        let (_avail, need) = core.available_buy_tokens(token).await.expect("available");
+        let (_avail, need) = core
+            .v1()
+            .available_buy_tokens(token)
+            .await
+            .expect("available");
         if need == U256::ZERO || spent >= cap {
             break;
         }
@@ -443,7 +461,7 @@ async fn v1_lifecycle() {
     // after the curve sells out — poll the on-chain flag.
     let mut graduated = false;
     for _ in 0..60 {
-        if core.is_graduated(token).await.unwrap() {
+        if core.v1().is_graduated(token).await.unwrap() {
             graduated = true;
             break;
         }
@@ -469,12 +487,14 @@ async fn v1_lifecycle() {
 
 async fn v1_buy(core: &Core, token: Address, value: U256) {
     let (router, expected) = core
+        .v1()
         .get_amount_out(token, value, true)
         .await
         .expect("v1 buy quote");
     assert!(expected > U256::ZERO, "zero v1 buy quote");
     let min_out = SlippageUtils::calculate_amount_out_min(expected, SLIPPAGE);
     let tx = core
+        .v1()
         .buy(
             BuyParams {
                 token,
@@ -495,6 +515,7 @@ async fn v1_buy(core: &Core, token: Address, value: U256) {
 
 async fn v1_sell(core: &Core, token: Address, amount_in: U256) {
     let (router, expected) = core
+        .v1()
         .get_amount_out(token, amount_in, false)
         .await
         .expect("v1 sell quote");
@@ -502,6 +523,7 @@ async fn v1_sell(core: &Core, token: Address, amount_in: U256) {
     approve_if_needed(core, token, router.address(), amount_in).await;
     let min_out = SlippageUtils::calculate_amount_out_min(expected, SLIPPAGE);
     let tx = core
+        .v1()
         .sell(
             SellParams {
                 amount_in,

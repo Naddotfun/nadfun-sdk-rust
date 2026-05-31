@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     // 1. Get quote for buying tokens
     let token: Address = "0x...".parse()?;
     let mon_amount = parse_ether("0.1")?; // Buy with 0.1 MON
-    let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+    let (router, expected_tokens) = core.v1().get_amount_out(token, mon_amount, true).await?;
 
     // 2. Apply slippage protection (5%)
     let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
         to: core.wallet_address(),
         deadline: U256::from(9999999999999999u64),
     };
-    let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+    let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
     let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
     // 4. Execute buy
@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
     };
 
     // Execute buy - returns tx_hash immediately
-    let tx_hash = core.buy(buy_params, router).await?;
+    let tx_hash = core.v1().buy(buy_params, router).await?;
     println!("Transaction submitted: {}", tx_hash);
 
     // Optionally wait for receipt to check status
@@ -77,7 +77,7 @@ Nad.fun ships two generations of contracts. Starting in 0.4.0 a single
 
 | | v1 (legacy) | v2 (current) |
 |---|---|---|
-| Method names | `buy` / `sell` / `get_amount_out` / `create_token` | `buy_v2` / `sell_v2` / `get_amount_out_v2` / `create_token_v2` |
+| Method names | `core.v1().buy` / `core.v1().sell` / `core.v1().get_amount_out` / `core.v1().create_token` | `core.v2().buy` / `core.v2().sell` / `core.v2().get_amount_out` / `core.v2().create_token` |
 | Routers | `BondingCurveRouter` + `DexRouter` (Capricorn CL) | unified `NadFunRouter` |
 | Quote tokens | MON only | MON + arbitrary ERC-20 |
 | Vaults | n/a | Burn / LP / CreatorFee / Gift |
@@ -91,22 +91,22 @@ auto-route between generations — you pick the method by version:
 match core.detect_version(token).await? {
     SdkVersion::V1 => {
         // v1 quote returns (router, expected); buy takes that router.
-        let (router, expected) = core.get_amount_out(token, mon_amount, true).await?;
+        let (router, expected) = core.v1().get_amount_out(token, mon_amount, true).await?;
         let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-        core.buy(/* BuyParams { .. } */, router).await?;
+        core.v1().buy(/* BuyParams { .. } */, router).await?;
     }
     SdkVersion::V2 => {
         // v2 quote is quote-agnostic; the trade method funds the buy.
-        let expected = core.get_amount_out_v2(token, mon_amount, true).await?;
+        let expected = core.v2().get_amount_out(token, mon_amount, true).await?;
         let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
-        core.buy_with_native_v2(/* V2BuyWithNativeParams { .. } */).await?;
+        core.v2().buy_with_native(/* V2BuyWithNativeParams { .. } */).await?;
     }
     SdkVersion::None => { /* not a Nad.fun token — refuse */ }
 }
 ```
 
 Need the token's quote token alongside the version (to choose
-`buy_with_native_v2` vs `buy_v2` for an ERC-20-quoted v2 token)? Use
+`core.v2().buy_with_native` vs `core.v2().buy` for an ERC-20-quoted v2 token)? Use
 `core.detect_token_info(token).await?` → `TokenInfo { version, quote_token }`.
 The complete runnable dispatcher (including the v2 native-vs-ERC-20 quote
 routing) is [`examples/unified_dispatch.rs`](examples/unified_dispatch.rs).
@@ -138,10 +138,10 @@ async fn main() -> anyhow::Result<()> {
     let mon_amount = parse_ether("0.1")?;
 
     // Auto-routed quote: bonding curve pre-graduation, NadFunPair post.
-    let expected = core.get_amount_out_v2(token, mon_amount, true).await?;
+    let expected = core.v2().get_amount_out(token, mon_amount, true).await?;
     let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
-    let tx = core.buy_with_native_v2(V2BuyWithNativeParams {
+    let tx = core.v2().buy_with_native(V2BuyWithNativeParams {
         token,
         to: core.wallet_address(),
         amount_out_min: min_out,
@@ -269,7 +269,7 @@ async fn main() -> Result<()> {
 
     // 2. Calculate token output for initial buy
     let initial_buy = parse_ether("1.5")?; // 1.5 MON
-    let tokens_out = core.get_initial_buy_amount_out(initial_buy).await?;
+    let tokens_out = core.v1().get_initial_buy_amount_out(initial_buy).await?;
 
     // 3. Configure token parameters
     let params = CreateTokenParams {
@@ -287,7 +287,7 @@ async fn main() -> Result<()> {
     };
 
     // 4. Create token (uploads image, creates metadata, deploys contract)
-    let result = core.create_token(params, &api).await?;
+    let result = core.v1().create_token(params, &api).await?;
 
     println!("✅ Token deployed: {}", result.token_address);
     println!("📄 Metadata: {}", result.metadata_uri);
@@ -339,14 +339,14 @@ println!("Found {} tokens", response.total_count);
 for token in &response.tokens {
     if let Some(params) = ApiClient::build_claim_params(token) {
         println!("Claiming {} wei from {}", token.reward_info.amount, token.token_info.name);
-        let tx_hash = core.claim_creator_reward(params).await?;
+        let tx_hash = core.v1().claim_creator_reward(params).await?;
         println!("TX: {}", tx_hash);
     }
 }
 
 // Or batch claim all at once (more gas efficient)
 if let Some(batch_params) = ApiClient::build_batch_claim_params(&response.tokens) {
-    let tx_hash = core.claim_creator_rewards_batch(batch_params).await?;
+    let tx_hash = core.v1().claim_creator_rewards_batch(batch_params).await?;
     println!("Batch claim TX: {}", tx_hash);
 }
 ```
@@ -361,8 +361,8 @@ if let Some(batch_params) = ApiClient::build_batch_claim_params(&response.tokens
 
 Execute buy/sell operations on bonding curves with slippage protection:
 
-> v1 trading shown here. For v2 (`buy_v2` / `buy_with_native_v2` /
-> `sell_to_native_v2` / `get_amount_out_v2`) see [v2 Quick Start](#v2-quick-start)
+> v1 trading shown here. For v2 (`core.v2().buy` / `core.v2().buy_with_native` /
+> `core.v2().sell_to_native` / `core.v2().get_amount_out`) see [v2 Quick Start](#v2-quick-start)
 > and [`examples/v2/`](examples/v2/). Choose the path by token version
 > (`core.detect_version(token)`), as shown above.
 
@@ -371,7 +371,7 @@ use nadfun_sdk::{Core, SlippageUtils, GasEstimationParams};
 use nadfun_sdk::types::{BuyParams, GasPricing};
 
 // Get quote and execute buy (v1)
-let (router, expected_tokens) = core.get_amount_out(token, mon_amount, true).await?;
+let (router, expected_tokens) = core.v1().get_amount_out(token, mon_amount, true).await?;
 let min_tokens = SlippageUtils::calculate_amount_out_min(expected_tokens, 5.0);
 
 // Use new unified gas estimation system
@@ -384,7 +384,7 @@ let gas_params = GasEstimationParams::Buy {
 };
 
 // Get accurate gas estimation from network
-let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
 
 let buy_params = BuyParams {
@@ -399,7 +399,7 @@ let buy_params = BuyParams {
 };
 
 // Execute buy - returns tx_hash immediately (fast!)
-let tx_hash = core.buy(buy_params, router).await?;
+let tx_hash = core.v1().buy(buy_params, router).await?;
 println!("Transaction submitted: {}", tx_hash);
 
 // Later, check the transaction status if needed
@@ -415,10 +415,10 @@ if receipt.status {
 
 ```rust
 // OLD - Waits for confirmation (slow)
-let result = core.buy(params, router).await?;  // Waits ~2-15 seconds
+let result = core.v1().buy(params, router).await?;  // Waits ~2-15 seconds
 
 // NEW - Returns immediately (fast!)
-let tx_hash = core.buy(params, router).await?;  // Returns in milliseconds
+let tx_hash = core.v1().buy(params, router).await?;  // Returns in milliseconds
 println!("Submitted: {}", tx_hash);
 
 // Check status later when you need it
@@ -474,7 +474,7 @@ let gas_params = GasEstimationParams::Buy {
 };
 
 // Get real-time gas estimation from network
-let estimated_gas = core.estimate_gas(&router, gas_params).await?;
+let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
 let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
@@ -533,7 +533,7 @@ let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 // NEW (v0.2.0) - Network-based estimation
 use nadfun_sdk::GasEstimationParams;
 let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
-let estimated_gas = core.estimate_gas(&router, params).await?;
+let estimated_gas = core.v1().estimate_gas(&router, params).await?;
 let gas_limit = estimated_gas * 120 / 100; // Apply buffer
 ```
 
@@ -658,14 +658,14 @@ while let Some(event_result) = stream.next().await {
 #### DEX Swap Streaming (v2 — NadFunPair)
 
 For v2 tokens, swaps come from `NadFunPair` contracts via `NadFunSwapStream`.
-Resolve pair addresses first (`core.pool_address_v2(token)`), then stream:
+Resolve pair addresses first (`core.v2().pool_address(token)`), then stream:
 
 ```rust
 use nadfun_sdk::stream::v2::NadFunSwapStream;
 use nadfun_sdk::Network;
 use futures_util::{pin_mut, StreamExt};
 
-// `pairs` are NadFunPair addresses (resolve via core.pool_address_v2(token)).
+// `pairs` are NadFunPair addresses (resolve via core.v2().pool_address(token)).
 let stream = NadFunSwapStream::new("wss://your-ws-endpoint".to_string(), pairs, Network::Mainnet).await?;
 let s = stream.subscribe().await?;
 pin_mut!(s);
@@ -818,7 +818,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 
 **Features:**
 
-- **Unified Gas Estimation**: Demonstrates `core.estimate_gas()` for all operation types
+- **Unified Gas Estimation**: Demonstrates `core.v1().estimate_gas()` for all operation types
 - **Automatic Approval**: Handles token approval for SELL operations automatically
 - **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
 - **Buffer Strategies**: Shows different buffer calculation methods (fixed +50k, percentage 20%-25%)
@@ -940,7 +940,7 @@ cargo run --example pool_discovery -- \
 ### v2 Examples
 
 v2 example targets use a `v2_` prefix. Trading, creation, and streaming all
-go through the unified `Core` (`*_v2` methods) or the `stream::v2` module:
+go through the unified `Core` (`core.v2().*` handle methods) or the `stream::v2` module:
 
 ```bash
 # Mixed-token dispatch: routes buy through v1 or v2 by detected version
@@ -1178,7 +1178,7 @@ use anyhow::Result;
 
 async fn example() -> Result<()> {
     let core = Core::new(rpc_url, private_key, Network::Mainnet).await?;
-    let result = core.get_amount_out(token, amount, true).await?;
+    let result = core.v1().get_amount_out(token, amount, true).await?;
     Ok(())
 }
 ```

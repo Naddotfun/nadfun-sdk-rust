@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     // 10 quote-token units (assumes 18 decimals; adjust for USDT 6).
     let amount_in: U256 = U256::from(10u64) * U256::from(10).pow(U256::from(18u64));
 
-    let expected = core.get_amount_out_v2(token, amount_in, true).await?;
+    let expected = core.v2().get_amount_out(token, amount_in, true).await?;
     println!("expected token out: {}", expected);
     if expected == U256::ZERO {
         anyhow::bail!("zero quote — token may not be tradeable with this quote");
@@ -37,7 +37,8 @@ async fn main() -> Result<()> {
     let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
 
     let tx_hash = core
-        .buy_v2(V2BuyParams {
+        .v2()
+        .buy(V2BuyParams {
             token,
             to: core.wallet_address(),
             amount_in,
