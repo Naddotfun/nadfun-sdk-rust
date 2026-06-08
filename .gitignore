@@ -6,3 +6,8 @@ benches/.omc/
 /docs/superpowers/
 /branches/
 /.claude/
+
+# Dev tooling / agent files — not crate content, excluded from the published tarball.
+.gstack/
+AGENTS.md
+CLAUDE.md
