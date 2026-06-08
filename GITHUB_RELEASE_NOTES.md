@@ -1,5 +1,229 @@
 # Release Notes
 
+## v0.3.10 (2025-12-23)
+
+### 🔧 Code Quality
+
+- **Fixed all clippy warnings** - 24 warnings resolved
+  - Removed useless `.into()` and `.try_into()` conversions
+  - Replaced manual range checks with `Range::contains()`
+  - Simplified redundant closures
+  - Added `Default` implementation for `PoolMetadata`
+  - Added `#[allow]` attributes for intentional patterns (module inception, many arguments)
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.10"
+```
+
+---
+
+## v0.3.9 (2025-12-23)
+
+### 🚀 Enhancement
+
+- **Unified `DexEvent` enum** - Single decoder for all DEX pool events
+  - `DexEvent::Swap(SwapEvent)` - Token swap events
+  - `DexEvent::Mint(MintEvent)` - Liquidity add events
+  - `DexEvent::Burn(BurnEvent)` - Liquidity remove events
+
+- **New `decode_dex_event()` function** - Automatically matches and decodes any DEX event
+
+```rust
+use nadfun_sdk::types::{decode_dex_event, DexEvent};
+
+match decode_dex_event(log)? {
+    DexEvent::Swap(swap) => println!("Swap: {:?}", swap),
+    DexEvent::Mint(mint) => println!("Mint: {:?}", mint),
+    DexEvent::Burn(burn) => println!("Burn: {:?}", burn),
+}
+
+// Common methods on DexEvent
+let pool = event.pool_address();
+let block = event.block_number();
+let tx_hash = event.transaction_hash();
+let event_type = event.event_type(); // "Swap", "Mint", or "Burn"
+```
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.9"
+```
+
+---
+
+## v0.3.8 (2025-12-23)
+
+### 🚀 New Features
+
+- **`MintEvent` type** - DEX pool liquidity addition events
+- **`BurnEvent` type** - DEX pool liquidity removal events
+- **Decode functions** - `decode_mint_event()`, `decode_burn_event()`
+- **Event signatures** - `MINT_SIGNATURE`, `BURN_SIGNATURE`
+
+```rust
+use nadfun_sdk::types::{decode_mint_event, decode_burn_event, MintEvent, BurnEvent};
+
+// Decode liquidity events
+let mint: MintEvent = decode_mint_event(log)?;
+let burn: BurnEvent = decode_burn_event(log)?;
+
+// Get amounts based on token order
+let wmon_added = mint.wmon_amount(wmon_is_token0);
+let tokens_removed = burn.token_amount(wmon_is_token0);
+```
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.8"
+```
+
+---
+
+## v0.3.7 (2025-12-23)
+
+### 🔧 Update
+
+- **Testnet contract addresses updated** - All testnet addresses updated to latest deployment
+
+| Contract | Address |
+|----------|---------|
+| DEX_FACTORY | `0xd0a37cf728CE2902eB8d4F6f2afc76854048253b` |
+| WMON | `0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd` |
+| BONDING_CURVE | `0x1228b0dc9481C11D3071E7A924B794CfB038994e` |
+| BONDING_CURVE_ROUTER | `0x865054F0F6A288adaAc30261731361EA7E908003` |
+| DEX_ROUTER | `0x5D4a4f430cA3B1b2dB86B9cFE48a5316800F5fb2` |
+| LENS | `0xB056d79CA5257589692699a46623F901a3BB76f1` |
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.7"
+```
+
+---
+
+## v0.3.6 (2025-12-23)
+
+### 🚀 Enhancement
+
+- **Network-aware API server URL** - API URL now automatically switches based on network setting
+  - Mainnet: `https://api.nad.fun`
+  - Testnet: `https://dev-api.nad.fun`
+
+- **New `get_api_server_url()` function** - Returns correct API URL for current network
+
+```rust
+use nadfun_sdk::constants::{set_network, Network, get_api_server_url};
+
+set_network(Network::Mainnet);
+assert_eq!(get_api_server_url(), "https://api.nad.fun");
+
+set_network(Network::Testnet);
+assert_eq!(get_api_server_url(), "https://dev-api.nad.fun");
+```
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.6"
+```
+
+---
+
+## v0.3.5 (2025-01-16)
+
+### 🔧 Update
+
+- **Testnet contract addresses updated**
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.5"
+```
+
+---
+
+## v0.3.4 (2025-01-16)
+
+### 🚀 Enhancement
+
+- **`create` function now returns tx_hash immediately** - No longer waits for receipt
+  - `bonding_curve.create()` returns `B256` (tx_hash) instead of `(Address, TransactionResult)`
+  - Token address is now obtained from salt API response (CREATE2 pre-calculation)
+  - Faster token creation flow
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.4"
+```
+
+---
+
+## v0.3.3 (2025-01-16)
+
+### 🔧 Update
+
+- **Testnet contract addresses updated** - All testnet addresses updated to latest deployment
+
+| Contract | Address |
+|----------|---------|
+| DEX_FACTORY | `0xE6dc50f36E26bAfC5f103021e01EF111402Cd940` |
+| BONDING_CURVE | `0x985Ae3529A1875698772C5fFbc66b8327049E094` |
+| BONDING_CURVE_ROUTER | `0x2D729C91aB77a887b3579aa50f55B50E5bC6dE46` |
+| DEX_ROUTER | `0x8a7697098da7F8692325046DB98F3dA9c480B529` |
+| LENS | `0x143dc84ac094edECABeF577Fb326aa4d9893D97B` |
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.3"
+```
+
+---
+
+## v0.3.2 (2025-01-16)
+
+### 🔧 Enhancement
+
+- **`create` function now supports EIP-1559** - Token creation now uses unified `GasPricing` like other trade functions
+  - `gas_price: Option<u128>` → `gas_price: Option<GasPricing>`
+
+```rust
+// Example: Create token with EIP-1559
+bonding_curve_router.create(
+    name, symbol, token_uri, amount_out, salt, action_id, value,
+    Some(300_000), // gas_limit
+    Some(GasPricing::Eip1559 {
+        max_fee_per_gas: 100_000_000_000,
+        max_priority_fee_per_gas: 2_000_000_000,
+    }),
+    None, // nonce
+).await?;
+```
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.2"
+```
+
+---
+
 ## v0.3.1 (2025-01-16)
 
 ### 🔧 API Simplification

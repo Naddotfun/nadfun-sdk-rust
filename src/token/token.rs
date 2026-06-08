@@ -1,9 +1,11 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::types::TokenMetadata;
 use alloy::{
     network::EthereumWallet,
     primitives::{keccak256, Address, B256, U256},
     providers::{DynProvider, ProviderBuilder},
-    signers::{Signer, local::PrivateKeySigner},
+    signers::{local::PrivateKeySigner, Signer},
     sol,
 };
 use anyhow::Result;

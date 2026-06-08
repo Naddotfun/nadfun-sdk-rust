@@ -194,7 +194,9 @@ impl Config {
                     println!("  --token <ADDRESS>    Token address for operations");
                     println!("  --tokens <ADDRS>     Token addresses: 'addr1,addr2' or '[\"addr1\",\"addr2\"]'");
                     println!("  --recipient <ADDR>   Recipient address for transfers/allowances");
-                    println!("  --network <NET>      Network: mainnet or testnet (default: mainnet)");
+                    println!(
+                        "  --network <NET>      Network: mainnet or testnet (default: mainnet)"
+                    );
                     println!();
                     println!("Token creation options:");
                     println!("  --name <NAME>        Token name");
@@ -236,6 +238,7 @@ impl Config {
     }
 
     /// Get private key or return error if not provided
+    #[allow(dead_code)] // Not every example needs a key; some are read-only.
     pub fn require_private_key(&self) -> Result<String> {
         match &self.private_key {
             Some(key) => Ok(key.clone()),
@@ -249,6 +252,7 @@ impl Config {
     }
 
     /// Print configuration
+    #[allow(dead_code)] // Some examples skip the banner.
     pub fn print(&self) {
         println!("📋 Configuration:");
         println!("  RPC URL: {}", self.rpc_url);

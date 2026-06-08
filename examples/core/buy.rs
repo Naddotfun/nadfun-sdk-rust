@@ -84,8 +84,8 @@ async fn main() -> Result<()> {
 
     // Check token status before buying
     println!("🔍 Checking token status...");
-    let is_locked = core.is_locked(token).await?;
-    let is_graduated = core.is_graduated(token).await?;
+    let is_locked = core.v1().is_locked(token).await?;
+    let is_graduated = core.v1().is_graduated(token).await?;
     println!("  Is locked: {}", is_locked);
     println!("  Is graduated: {}", is_graduated);
 
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
         println!("⚠️  Warning: Token is locked!");
     }
 
-    let (router, amount_out) = core.get_amount_out(token, mon_amount, true).await?;
+    let (router, amount_out) = core.v1().get_amount_out(token, mon_amount, true).await?;
     println!("📊 Quote:");
     println!("  Router: {:?}", router);
     println!("  Router address: {}", router.address());
@@ -157,7 +157,7 @@ async fn main() -> Result<()> {
         deadline,
     };
 
-    let estimated_gas = match core.estimate_gas(&router, gas_params).await {
+    let estimated_gas = match core.v1().estimate_gas(&router, gas_params).await {
         Ok(gas) => {
             println!("⛽ Estimated gas for buy: {}", gas);
             gas
@@ -181,7 +181,7 @@ async fn main() -> Result<()> {
         deadline,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(GasPricing::LegacyWithPrice {
-            gas_price: recommended_gas_price.try_into().unwrap_or(50_000_000_000)
+            gas_price: recommended_gas_price.try_into().unwrap_or(50_000_000_000),
         }),
         nonce: Some(current_nonce), // Use actual account nonce
     };
@@ -189,7 +189,7 @@ async fn main() -> Result<()> {
     println!("🚀 Executing buy transaction...");
 
     // Execute buy transaction - returns tx_hash immediately
-    let tx_hash = core.buy(buy_params, router).await?;
+    let tx_hash = core.v1().buy(buy_params, router).await?;
     println!("✅ Transaction submitted!");
     println!("  Transaction hash: {}", tx_hash);
 

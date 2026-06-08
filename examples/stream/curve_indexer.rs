@@ -31,14 +31,11 @@ async fn main() -> Result<()> {
     let config = Config::from_args()?;
     config.print();
 
-    // Set network before creating indexer
-    nadfun_sdk::constants::set_network(config.network);
-
     println!("📈 Historical Event Fetching");
 
     // 1. Create HTTP provider and indexer
     let provider = Arc::new(ProviderBuilder::new().connect_http(config.rpc_url.parse()?));
-    let indexer = CurveIndexer::new(provider.clone());
+    let indexer = CurveIndexer::new(provider.clone(), config.network);
 
     // 2. Fetch events from specific block range (wider range to find events)
     let current_block = provider.get_block_number().await?; // Get recent blocks
@@ -46,7 +43,13 @@ async fn main() -> Result<()> {
         .fetch_events(
             current_block - 100, // from_block (wider range)
             current_block,       // to_block
-            vec![EventType::Create, EventType::Buy, EventType::Sell, EventType::Graduate, EventType::Lock], // event types
+            vec![
+                EventType::Create,
+                EventType::Buy,
+                EventType::Sell,
+                EventType::Graduate,
+                EventType::Lock,
+            ], // event types
             None,                // token_filter (None = all tokens)
         )
         .await?;
@@ -97,7 +100,13 @@ async fn main() -> Result<()> {
         .fetch_all_events(
             start_block,
             batch_size,
-            vec![EventType::Create, EventType::Buy, EventType::Sell, EventType::Graduate, EventType::Lock],
+            vec![
+                EventType::Create,
+                EventType::Buy,
+                EventType::Sell,
+                EventType::Graduate,
+                EventType::Lock,
+            ],
             None, // No token filter for this test
         )
         .await?;
