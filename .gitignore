@@ -1,2 +1,8 @@
 /target
-benches/
+.omc/
+benches/.omc/
+
+# Local planning / process artifacts — kept on disk, not tracked.
+/docs/superpowers/
+/branches/
+/.claude/

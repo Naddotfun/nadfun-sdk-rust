@@ -25,7 +25,7 @@ use alloy::eips::BlockId;
 use alloy::primitives::{utils::parse_ether, Address, U256};
 use alloy::providers::Provider;
 use anyhow::Result;
-use nadfun_sdk::types::{SellPermitParams, GasPricing};
+use nadfun_sdk::types::{GasPricing, SellPermitParams};
 use nadfun_sdk::{Core, GasEstimationParams, TokenHelper};
 
 #[path = "../common/mod.rs"]
@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
     }
 
     // Get quote: how much ETH we'll receive
-    let (router, expected_eth) = core.get_amount_out(token, token_amount, false).await?;
+    let (router, expected_eth) = core.v1().get_amount_out(token, token_amount, false).await?;
 
     println!("📊 Quote:");
     println!("  Tokens to sell: {}", token_amount);
@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
         s: s.into(),
     };
 
-    let estimated_gas = match core.estimate_gas(&router, gas_params).await {
+    let estimated_gas = match core.v1().estimate_gas(&router, gas_params).await {
         Ok(gas) => {
             println!("⛽ Estimated gas for sell permit: {}", gas);
             gas
@@ -171,7 +171,7 @@ async fn main() -> Result<()> {
         s,
         gas_limit: Some(gas_with_buffer), // Use estimated gas with buffer
         gas_price: Some(GasPricing::LegacyWithPrice {
-            gas_price: recommended_gas_price.try_into().unwrap_or(100_000_000_000)
+            gas_price: recommended_gas_price.try_into().unwrap_or(100_000_000_000),
         }),
         nonce: Some(current_nonce), // Use actual account nonce
     };
@@ -180,7 +180,7 @@ async fn main() -> Result<()> {
     println!("  This combines approval + sell in one transaction!");
 
     // Execute sell permit transaction (gasless) - returns tx_hash immediately
-    let tx_hash = core.sell_permit(sell_permit_params, router).await?;
+    let tx_hash = core.v1().sell_permit(sell_permit_params, router).await?;
     println!("✅ Transaction submitted!");
     println!("  Transaction hash: {}", tx_hash);
 

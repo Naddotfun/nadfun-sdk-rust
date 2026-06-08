@@ -33,7 +33,9 @@ async fn main() -> Result<()> {
 
     // Token addresses - can be provided via CLI or use examples
     let tokens: Vec<alloy::primitives::Address> = if !config.tokens.is_empty() {
-        config.tokens.iter()
+        config
+            .tokens
+            .iter()
             .filter_map(|addr| addr.parse().ok())
             .collect()
     } else if let Some(token_address) = config.token {
@@ -50,21 +52,28 @@ async fn main() -> Result<()> {
     println!("🔍 Pool Discovery Example");
     println!("Tokens to search: {}", tokens.len());
 
+    let network = config.network;
+
     // Method 1: Discover all pools at once
-    discover_all_pools(&config.rpc_url, &tokens).await?;
+    discover_all_pools(&config.rpc_url, &tokens, network).await?;
 
     // Method 2: Discover pools one by one
-    discover_individual_pools(&config.rpc_url, &tokens).await?;
+    discover_individual_pools(&config.rpc_url, &tokens, network).await?;
 
     Ok(())
 }
 
-async fn discover_all_pools(rpc_url: &str, tokens: &[Address]) -> Result<()> {
+async fn discover_all_pools(
+    rpc_url: &str,
+    tokens: &[Address],
+    network: nadfun_sdk::Network,
+) -> Result<()> {
     println!("\n📦 Auto Pool Discovery");
 
     // DexIndexer automatically finds pools for tokens
     let indexer =
-        DexIndexer::discover_pools_for_tokens(rpc_url.to_string(), tokens.to_vec()).await?;
+        DexIndexer::discover_pools_for_tokens(rpc_url.to_string(), tokens.to_vec(), network)
+            .await?;
 
     println!("Found pools:");
     for (i, pool) in indexer.pool_addresses().iter().enumerate() {
@@ -74,12 +83,16 @@ async fn discover_all_pools(rpc_url: &str, tokens: &[Address]) -> Result<()> {
     Ok(())
 }
 
-async fn discover_individual_pools(rpc_url: &str, tokens: &[Address]) -> Result<()> {
+async fn discover_individual_pools(
+    rpc_url: &str,
+    tokens: &[Address],
+    network: nadfun_sdk::Network,
+) -> Result<()> {
     println!("\n🔧 Individual Pool Discovery");
 
     // Create indexer for each token individually
     for (i, &token) in tokens.iter().enumerate() {
-        match DexIndexer::discover_pool_for_token(rpc_url.to_string(), token).await {
+        match DexIndexer::discover_pool_for_token(rpc_url.to_string(), token, network).await {
             Ok(indexer) => {
                 let pools = indexer.pool_addresses();
                 if pools.is_empty() {

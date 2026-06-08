@@ -1,119 +1,111 @@
 # Token Creation Flow Documentation
 
-This document describes the complete flow for creating a token on the NAD platform. The process consists of three sequential API calls.
+This document describes the complete flow for creating a token on Nad.fun, for
+**both v1 and v2**. The off-chain pipeline (image → metadata → salt) is shared;
+the on-chain step differs by version (v1 `BondingCurveRouter` vs v2
+`NadFunRouter`), and so does the initial-buy fee model.
+
+The API surface mirrors the Nad.fun API integration guide
+(`github.com/Naddotfun/api-intergration`); the on-chain sections track
+`nadfun-contract-v2` (`INadFunRouter` / `NadFunRouter` / `BondingCurve`) for v2
+and the v1 `BondingCurveRouter` for v1.
+
+> SDK note: `ApiClient` (`nadfun_sdk::api`) wraps the three off-chain calls, and
+> `core.v1().create_token(..)` / `core.v2().create_token(..)` orchestrate the
+> full off-chain → on-chain flow. The raw API is documented here for integrators
+> who do not use the SDK.
 
 ---
 
 ## Overview
 
-The token creation process follows these steps:
-
-1. **Upload Image** - Upload and validate the token image
-2. **Upload Metadata** - Create and store token metadata
-3. **Mine Salt** - Generate a vanity address salt for token deployment
-
 ```
-┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
-│  Upload Image   │ ───> │ Upload Metadata  │ ───> │   Mine Salt     │
-│ /metadata/image │      │ /metadata/metadata│      │  /token/salt    │
-└─────────────────┘      └──────────────────┘      └─────────────────┘
-       │                         │                          │
-       ▼                         ▼                          ▼
-  image_uri              metadata_uri                    salt
-   is_nsfw                                              address
+            shared off-chain pipeline                       on-chain create
+┌───────────────────┐   ┌──────────────────────┐   ┌─────────────┐   ┌────────────────────────┐
+│   Upload Image    │──>│   Upload Metadata    │──>│  Mine Salt  │──>│  v1: BondingCurveRouter│
+│ /agent/token/image│   │/agent/token/metadata │   │/agent/salt  │   │      .create(..)       │
+└───────────────────┘   └──────────────────────┘   └─────────────┘   │  v2: NadFunRouter      │
+         │                       │                       │            │ .create / .createWith  │
+         ▼                       ▼                       ▼            │        Native(..)      │
+     image_uri             metadata_uri          salt + predicted     └────────────────────────┘
+      is_nsfw                                        address                      │
+                                                                          ▼
+                                                          token live → index via /token/:token
 ```
+
+| Step | Endpoint / call | Shared? | Output |
+|------|-----------------|---------|--------|
+| 1. Upload Image | `POST /agent/token/image` | shared (v1 + v2) | `image_uri`, `is_nsfw` |
+| 2. Upload Metadata | `POST /agent/token/metadata` | shared | `metadata_uri` |
+| 3. Mine Salt | `POST /agent/salt` (`version: "V1"`/`"V2"`) | shared, version-tagged | `salt`, predicted `address` |
+| 4. On-chain create | v1 `BondingCurveRouter.create` / v2 `NadFunRouter.create[WithNative]` | **version-specific** | `token`, (v2) `tokenOut` |
+| 5. Index | `GET /token/:token`, `/trade/*` | shared | live token + market data |
+
+Salt mining is CREATE2 over an EIP-1167 minimal-proxy clone of the version's
+Token implementation, deployed by that version's bonding curve. **Pass the
+correct `version`** to `/agent/salt` — a v1 salt predicts a different address
+than a v2 salt for the same name/symbol/creator, and using the wrong one makes
+the on-chain create revert or deploy to an unexpected address.
 
 ---
 
 ## Step 1: Upload Image
 
-Upload the token image with automatic NSFW validation.
+Upload the token image with automatic NSFW validation. Shared by v1 and v2.
 
 ### Endpoint
 ```
-POST /metadata/image
+POST /agent/token/image
 ```
 
 ### Request
 
 **Content-Type**: `image/png`, `image/jpeg`, `image/webp`, or `image/svg+xml`
+**Body**: raw binary image bytes
+**Size Limit**: 5MB maximum (format detected from magic bytes, not just the header)
 
-**Body**: Raw binary image data
-
-**Size Limit**: 5MB maximum
-
-**Example (cURL)**:
 ```bash
-curl -X POST https://api.nadapp.net/metadata/image \
+curl -X POST {BASE_URL}/agent/token/image \
   -H "Content-Type: image/png" \
   --data-binary @./my-token-image.png
 ```
 
-**Example (JavaScript)**:
-```javascript
-const imageFile = document.querySelector('input[type="file"]').files[0];
+### Response — `200 OK`
 
-const response = await fetch('https://api.nadapp.net/metadata/image', {
-  method: 'POST',
-  headers: {
-    'Content-Type': imageFile.type
-  },
-  body: imageFile
-});
-
-const data = await response.json();
-```
-
-### Response
-
-**Status Code**: `200 OK`
-
-**Body**:
 ```json
 {
-  "image_uri": "https://storage.nadapp.net/image-94a412d2-b599-4bb0-b026-b14c4036c58c.png",
+  "image_uri": "https://storage.nadapp.net/coin/94a412d2-b599-4bb0-b026-b14c4036c58c",
   "is_nsfw": false
 }
 ```
 
-**Response Fields**:
-- `image_uri` (string): CDN URL of the uploaded image
-- `is_nsfw` (boolean): NSFW classification result from AI validation
+- `image_uri` (string): CDN URL of the uploaded image (used in Step 2).
+- `is_nsfw` (boolean): NSFW classification result.
 
-### Error Responses
-
-| Status Code | Description |
-|-------------|-------------|
+| Status | Description |
+|--------|-------------|
 | 400 | Invalid image format or missing image |
 | 413 | Image exceeds 5MB limit |
-| 500 | NSFW check failed or upload failed |
-
-**Example Error**:
-```json
-{
-  "error": "Invalid image format"
-}
-```
+| 500 | NSFW check or upload failed |
 
 ---
 
 ## Step 2: Upload Metadata
 
-Create and store token metadata using the image URI from Step 1.
+Store token metadata JSON using the `image_uri` from Step 1. Shared by v1 and v2.
+The NSFW result is cached after image upload — call this soon after Step 1 or the
+cache expires and metadata upload fails.
 
 ### Endpoint
 ```
-POST /metadata/metadata
+POST /agent/token/metadata
 ```
 
-### Request
+### Request — `application/json`
 
-**Content-Type**: `application/json`
-
-**Body**:
 ```json
 {
-  "image_uri": "https://storage.nadapp.net/image-94a412d2-b599-4bb0-b026-b14c4036c58c.png",
+  "image_uri": "https://storage.nadapp.net/coin/94a412d2-...",
   "name": "My Token",
   "symbol": "MTK",
   "description": "An awesome token for the NAD community",
@@ -123,72 +115,25 @@ POST /metadata/metadata
 }
 ```
 
-**Required Fields**:
-- `image_uri` (string): Image URI from Step 1 (must be from allowed domain)
-- `name` (string): Token name (cannot be empty)
-- `symbol` (string): Token symbol (cannot be empty)
-- `description` (string): Token description (cannot be empty)
+| Field | Required | Rule |
+|-------|:--------:|------|
+| `image_uri` | Yes | Must start with the allowed image domain (e.g. `https://storage.nadapp.net/`) |
+| `name` | Yes | Trimmed length 1–32, no newlines |
+| `symbol` | Yes | 1–10 chars, ASCII alphanumeric |
+| `description` | No | ≤ 500 chars (integrations should send a non-empty value) |
+| `website` | No | If present, must start with `https://` |
+| `twitter` | No | If present, must start with `https://x.com/` |
+| `telegram` | No | If present, must start with `https://t.me/` |
 
-**Optional Fields**:
-- `website` (string | null): Website URL (must start with `https://`)
-- `twitter` (string | null): X (Twitter) URL (must contain `x.com` and start with `https://`)
-- `telegram` (string | null): Telegram URL (must contain `t.me` and start with `https://`)
+### Response — `200 OK`
 
-**Validation Rules**:
-- All URLs must use HTTPS
-- Twitter URLs must contain `x.com`
-- Telegram URLs must contain `t.me`
-- Image URI must be from the allowed domain (e.g., `https://storage.nadapp.net/`)
-
-**Example (cURL)**:
-```bash
-curl -X POST https://api.nadapp.net/metadata/metadata \
-  -H "Content-Type: application/json" \
-  -d '{
-    "image_uri": "https://storage.nadapp.net/image-94a412d2-b599-4bb0-b026-b14c4036c58c.png",
-    "name": "My Token",
-    "symbol": "MTK",
-    "description": "An awesome token for the NAD community",
-    "website": "https://mytoken.com",
-    "twitter": "https://x.com/mytoken",
-    "telegram": "https://t.me/mytoken"
-  }'
-```
-
-**Example (JavaScript)**:
-```javascript
-const response = await fetch('https://api.nadapp.net/metadata/metadata', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    image_uri: imageUri, // from Step 1
-    name: 'My Token',
-    symbol: 'MTK',
-    description: 'An awesome token for the NAD community',
-    website: 'https://mytoken.com',
-    twitter: 'https://x.com/mytoken',
-    telegram: 'https://t.me/mytoken'
-  })
-});
-
-const data = await response.json();
-```
-
-### Response
-
-**Status Code**: `200 OK`
-
-**Body**:
 ```json
 {
-  "metadata_uri": "https://storage.nadapp.net/metadata-94a412d2-b599-4bb0-b026-b14c4036c58c.json",
+  "metadata_uri": "https://storage.nadapp.net/metadata/94a412d2-...json",
   "metadata": {
-    "name": "My Token",
-    "symbol": "MTK",
+    "name": "My Token", "symbol": "MTK",
     "description": "An awesome token for the NAD community",
-    "image_uri": "https://storage.nadapp.net/image-94a412d2-b599-4bb0-b026-b14c4036c58c.png",
+    "image_uri": "https://storage.nadapp.net/coin/94a412d2-...",
     "website": "https://mytoken.com",
     "twitter": "https://x.com/mytoken",
     "telegram": "https://t.me/mytoken",
@@ -197,271 +142,236 @@ const data = await response.json();
 }
 ```
 
-**Response Fields**:
-- `metadata_uri` (string): CDN URL of the metadata JSON file
-- `metadata` (object): The complete metadata object with NSFW flag
-
-### Error Responses
-
-| Status Code | Description |
-|-------------|-------------|
-| 400 | NSFW status unknown for image, invalid data, or validation failed |
-| 500 | Upload to R2 or database failed |
-
-**Example Error**:
-```json
-{
-  "error": "Invalid image URI - must be from https://storage.nadapp.net/"
-}
-```
+The salt server normalizes `name`/`symbol`; the on-chain create **must** use the
+server-returned values (the CREATE2 hash is computed against them).
 
 ---
 
-## Step 3: Mine Salt
+## Step 3: Mine Salt (CREATE2 vanity address)
 
-Generate a salt value to create a vanity token address (address ending with specific digits).
+Mine a `bytes32` salt so the predicted token clone address ends with the
+configured vanity suffix (e.g. `7777`). **Version-tagged** — pass `version`.
 
 ### Endpoint
 ```
-POST /token/salt
+POST /agent/salt
 ```
 
-### Request
+### Request — `application/json`
 
-**Content-Type**: `application/json`
-
-**Body**:
 ```json
 {
   "creator": "0x742d35Cc6634C0532925a3b844Bc9e7595f70143",
   "name": "My Token",
   "symbol": "MTK",
-  "metadata_uri": "https://storage.nadapp.net/metadata-94a412d2-b599-4bb0-b026-b14c4036c58c.json"
+  "metadata_uri": "https://storage.nadapp.net/metadata/94a412d2-...json",
+  "version": "V2"
 }
 ```
 
-**Fields**:
-- `creator` (string): Creator's wallet address (EVM format)
-- `name` (string): Token name (must match metadata)
-- `symbol` (string): Token symbol (must match metadata)
-- `metadata_uri` (string): Metadata URI from Step 2
+| Field | Required | Rule |
+|-------|:--------:|------|
+| `creator` | Yes | EVM address — **must equal the wallet that signs the create tx** (the curve uses `msg.sender` as creator) |
+| `name` / `symbol` | Yes | Must match the metadata (server-normalized) |
+| `metadata_uri` | Yes | From Step 2 |
+| `version` | No | `"V1"` or `"V2"` (default `"V1"`). Selects the curve + token implementation the CREATE2 address is mined against |
 
-**Note**: The salt mining algorithm finds a salt that produces a token address ending with "777" (or other desired suffix).
+### Response — `200 OK`
 
-**Example (cURL)**:
-```bash
-curl -X POST https://api.nadapp.net/token/salt \
-  -H "Content-Type: application/json" \
-  -d '{
-    "creator": "0x742d35Cc6634C0532925a3b844Bc9e7595f70143",
-    "name": "My Token",
-    "symbol": "MTK",
-    "metadata_uri": "https://storage.nadapp.net/metadata-94a412d2-b599-4bb0-b026-b14c4036c58c.json"
-  }'
-```
-
-**Example (JavaScript)**:
-```javascript
-const response = await fetch('https://api.nadapp.net/token/salt', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    creator: walletAddress,
-    name: 'My Token',
-    symbol: 'MTK',
-    metadata_uri: metadataUri // from Step 2
-  })
-});
-
-const data = await response.json();
-```
-
-### Response
-
-**Status Code**: `200 OK`
-
-**Body**:
 ```json
 {
   "salt": "0x000000000000000000000000000000000000000000000000000000000000a3f5",
-  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f70777"
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f7777"
 }
 ```
 
-**Response Fields**:
-- `salt` (string): The mined salt value (32 bytes hex with 0x prefix)
-- `address` (string): The resulting token address with desired suffix
+The `address` is a **prediction** — verify it against the on-chain `Create`
+event / transaction receipt after Step 4. The SDK's `create_token` does this
+automatically and errors on any predicted-vs-on-chain mismatch.
 
-### Error Responses
-
-| Status Code | Description |
-|-------------|-------------|
-| 400 | Invalid parameters (e.g., invalid creator address) |
-| 408 | Request timeout - max iterations reached without finding salt |
-| 500 | Internal server error |
-
-**Example Error**:
-```json
-{
-  "error": "Max iterations reached",
-  "iterations_attempted": 1000000
-}
-```
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid parameters (e.g. bad creator address) |
+| 500 | Max iterations reached / internal error |
 
 ---
 
-## Complete Flow Example
+## Step 4: On-chain create — version-specific
 
-Here's a complete example in JavaScript:
+### v1 — `BondingCurveRouter.create`
 
-```javascript
-async function createToken(imageFile, tokenData, creatorAddress) {
-  try {
-    // Step 1: Upload Image
-    console.log('Step 1: Uploading image...');
-    const imageResponse = await fetch('https://api.nadapp.net/metadata/image', {
-      method: 'POST',
-      headers: {
-        'Content-Type': imageFile.type
-      },
-      body: imageFile
-    });
+v1 has a single native (MON) quote and one shared genesis curve.
 
-    if (!imageResponse.ok) {
-      throw new Error('Image upload failed');
-    }
+- The client computes the initial-buy `amountOut` **up front** and passes it in.
+  Use the on-chain Lens helper, exposed by the SDK as
+  `core.v1().get_initial_buy_amount_out(amount_in)` — **parameterless** beyond
+  the MON amount, because all v1 tokens share one genesis curve. It is an
+  on-chain Lens passthrough, so it is exact by construction.
+- `msg.value = deploy_fee + initial_buy` (the SDK adds the deploy fee on top of
+  `value`).
+- There is **no per-token creator fee** on the v1 curve.
 
-    const { image_uri, is_nsfw } = await imageResponse.json();
-    console.log('Image uploaded:', image_uri);
-    console.log('NSFW:', is_nsfw);
-
-    // Step 2: Upload Metadata
-    console.log('Step 2: Uploading metadata...');
-    const metadataResponse = await fetch('https://api.nadapp.net/metadata/metadata', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        image_uri,
-        name: tokenData.name,
-        symbol: tokenData.symbol,
-        description: tokenData.description,
-        website: tokenData.website,
-        twitter: tokenData.twitter,
-        telegram: tokenData.telegram
-      })
-    });
-
-    if (!metadataResponse.ok) {
-      throw new Error('Metadata upload failed');
-    }
-
-    const { metadata_uri } = await metadataResponse.json();
-    console.log('Metadata uploaded:', metadata_uri);
-
-    // Step 3: Mine Salt
-    console.log('Step 3: Mining salt...');
-    const saltResponse = await fetch('https://api.nadapp.net/token/salt', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        creator: creatorAddress,
-        name: tokenData.name,
-        symbol: tokenData.symbol,
-        metadata_uri
-      })
-    });
-
-    if (!saltResponse.ok) {
-      throw new Error('Salt mining failed');
-    }
-
-    const { salt, address } = await saltResponse.json();
-    console.log('Salt mined:', salt);
-    console.log('Token address:', address);
-
-    return {
-      image_uri,
-      is_nsfw,
-      metadata_uri,
-      salt,
-      address
-    };
-
-  } catch (error) {
-    console.error('Token creation failed:', error);
-    throw error;
-  }
-}
-
-// Usage
-const imageFile = document.querySelector('input[type="file"]').files[0];
-const tokenData = {
-  name: 'My Token',
-  symbol: 'MTK',
-  description: 'An awesome token for the NAD community',
-  website: 'https://mytoken.com',
-  twitter: 'https://x.com/mytoken',
-  telegram: 'https://t.me/mytoken'
-};
-const creatorAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f70143';
-
-const result = await createToken(imageFile, tokenData, creatorAddress);
-console.log('Token creation complete:', result);
+```rust
+let initial_buy = parse_ether("1")?;            // MON
+let amount_out = core.v1().get_initial_buy_amount_out(initial_buy).await?;
+let result = core.v1().create_token(
+    CreateTokenParams {
+        name, symbol, description, image_uri,
+        website: None, twitter: None, telegram: None,
+        creator_address: wallet,
+        amount_out,                              // client-computed, passed in
+        value: initial_buy,
+        action_id: ActionId::CapricornActor,
+    },
+    &api,
+).await?;
 ```
+
+### v2 — `NadFunRouter.create` / `createWithNative`
+
+v2 supports **multiple quote tokens** (WMON, LVMON, ERC-20s); each quote token
+has its own genesis `QuoteConfig`. The client does **not** pass `amountOut` — the
+router/curve compute `tokenOut` and return it.
+
+`INadFunRouter.CreateParams` (per the integration guide):
+
+```solidity
+struct CreateParams {
+    string name; string symbol; string tokenURI;
+    address quoteToken;          // must be registered in ProtocolManager
+    uint16  creatorFeeRate;      // BPS; default allowlist 100/300/500 = 1%/3%/5%
+    IBondingCurve.VaultAllocation[] vaults;   // bps must total 10000, ≤ 5 vaults
+    bytes32 salt;
+    ITokenRegistry.DexType dexType;           // current path: UniswapV2
+    uint256 buyQuoteAmount;      // initial buy; 0 = no initial buy
+    uint256 deadline;
+}
+```
+
+- **ERC-20 quote** → `NadFunRouter.create(params)` (approve `deployFee +
+  buyQuoteAmount` of the quote token first).
+- **Native MON** (quote = a native-equivalent — WMON or LVMON) →
+  `NadFunRouter.createWithNative{value: deployFee + buyQuoteAmount}(params)`. The
+  SDK derives `native_value = deploy_fee + buy_quote_amount` automatically. The
+  `quote_token` is supplied by the caller via
+  `V2CreatePayment::Native { quote_token: Address }` — there is no
+  auto-resolution. Resolve a valid native-equivalent from
+  `quote_tokens(network)` (any `is_native == true` entry, e.g. MON/WMON or
+  LVMON) or `core.v2().wrapped_native().await?`.
+
+```rust
+let params = V2CreateTokenParams {
+    name, symbol, description, image_uri,
+    website: None, twitter: None, telegram: None,
+    creator_address: wallet,     // must equal the signing wallet
+    creator_fee_rate: 100,       // 1% — per-token, stored on the curve
+    vaults,                      // bps total 10000
+    dex_type: V2DexType::NadFun,
+    buy_quote_amount: parse_ether("1")?,
+    // Caller-supplied native-equivalent (WMON or LVMON); resolve via
+    // quote_tokens(network) or core.v2().wrapped_native(). Or
+    // Erc20 { quote_token } for an ERC-20-funded create.
+    payment: V2CreatePayment::Native { quote_token: wmon },
+    deadline: U256::from(deadline),
+    gas_limit: None, gas_price: None, nonce: None,
+};
+let created = core.v2().create_token(params, &api).await?;   // returns token_address, tx, ...
+```
+
+#### v2 initial-buy fee model (important)
+
+The v2 create-time initial buy is **anti-sniping exempt**, but it **does** pay
+the curve protocol fee **and the per-token creator fee**. On-chain
+`BondingCurve._initialBuy` deducts a single combined rate
+`mulDivUp(amountIn, curveProtocolFeeRate + creatorFeeRate, BPS)` (ceil), then
+applies the constant-product / supply-cap math.
+
+To estimate the exact `tokenOut` for a v2 initial buy **before** sending the tx,
+use the SDK helper — note it takes the **creator fee rate** (a per-token
+parameter that is *not* part of the genesis quote config):
+
+```rust
+// EXACT to the wei vs the on-chain _initialBuy output.
+let out = core.v2()
+    .get_initial_buy_amount_out(quote_token, amount_in, creator_fee_rate)
+    .await?;
+```
+
+- Signature: **`get_initial_buy_amount_out(quote_token, amount_in, creator_fee_rate)`**
+  (v2). Contrast v1's parameterless `get_initial_buy_amount_out(amount_in)`.
+- It reads the quote token's genesis `QuoteConfig` (per-quote, so `quote_token`
+  is required) and subtracts protocol + creator fee.
+- It returns `Err` when a positive `amount_in`'s ceil-rounded fees would consume
+  the entire quote (the on-chain `_initialBuy` reverts in that case rather than
+  minting zero).
+- A later (post-creation) buy on the same curve differs by design: it also
+  carries the time-decaying anti-sniping penalty that the create-time buy is
+  exempt from.
+
+#### v2 deployment addresses (testnet example)
+
+| Name | Address |
+|------|---------|
+| `WMON` | `0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd` |
+| `V2_NAD_FUN_ROUTER` | `0x75588668999cA0557b78046b8a5E86b47b9234ec` |
+| `V2_BONDING_CURVE` | `0x27063a38eC0D3281D354090EB92e669Ed1eB956C` |
+| `V2_PROTOCOL_MANAGER` | `0x2F98030aBD7c59e3E5Dc6b4b66b6008821d0fB41` |
+| `V2_TOKEN_REGISTRY` | `0x2Bc127be900aD290E703Cd2C71eB0EDCa162C898` |
+
+Addresses differ per environment — the SDK resolves them from
+`nadfun_sdk::constants` by `Network`. Confirm production addresses before use.
+
+---
+
+## Step 5: Index
+
+After the create transaction is mined, query the live token:
+
+- `GET /token/:token` — token info (`version: "V1" | "V2"`, `is_graduated`, …).
+- `GET /token/metadata/:token_id` — token info + `market_info`
+  (`market_type` is `CURVE`/`DEX` for v1, `V2_CURVE`/`V2_DEX` for v2).
+- `GET /trade/*` — market, chart, metrics, swap history, holders.
+
+The SDK exposes `core.detect_version(token)` / `core.detect_token_info(token)`
+for the on-chain version probe, and curve/DEX indexers under `nadfun_sdk::stream`.
+
+---
+
+## v1 vs v2 — at a glance
+
+| Aspect | v1 | v2 |
+|--------|----|----|
+| Router | `BondingCurveRouter` + `DexRouter` | single `NadFunRouter` |
+| Quote asset | native MON only (one genesis curve) | multiple quote tokens, per-quote `QuoteConfig` |
+| Salt `version` | `"V1"` | `"V2"` |
+| Initial buy amount | client passes `amountOut` | client passes `buyQuoteAmount`; receives `tokenOut` |
+| Creator fee | none on the curve | per-token `creatorFeeRate` (bps), charged on the initial buy |
+| `get_initial_buy_amount_out` | `(amount_in)` — Lens passthrough, exact | `(quote_token, amount_in, creator_fee_rate)` — computed, exact, errors if fees consume the quote |
+| `actionId` | required (`ActionId`) | removed |
+| Post-graduation | external Capricorn CL router | `NadFunPair` + `NadSwapAdapter` |
 
 ---
 
 ## Important Notes
 
-1. **Sequential Process**: Each step depends on the output of the previous step
-   - Step 2 requires `image_uri` from Step 1
-   - Step 3 requires `metadata_uri` from Step 2
-
-2. **NSFW Validation**:
-   - Images are automatically checked for NSFW content in Step 1
-   - The NSFW flag is included in the final metadata
-
-3. **URL Validation**:
-   - All social media and website URLs must use HTTPS
-   - Twitter URLs must use `x.com` domain
-   - Telegram URLs must use `t.me` domain
-
-4. **Image Domain Restriction**:
-   - Only images from the allowed domain can be used in metadata
-   - This ensures all images are properly stored and validated
-
-5. **Salt Mining**:
-   - The salt mining process generates vanity addresses
-   - May take time depending on the desired suffix pattern
-   - Has a timeout limit to prevent infinite loops
-
-6. **Smart Contract Integration**:
-   - Use the returned `salt` and `address` values when deploying the token contract
-   - These values ensure the deployed token has the desired vanity address
+1. **Sequential off-chain steps** — Step 2 needs `image_uri`, Step 3 needs
+   `metadata_uri`; call them promptly (NSFW cache TTL).
+2. **Predicted address is not final** — always verify the salt's predicted
+   `address` against the on-chain `Create` event / receipt.
+3. **Creator must equal the signer** — `msg.sender` becomes the creator on-chain;
+   a mismatch with the salt's `creator` predicts the wrong address.
+4. **v2 fees** — the initial buy pays protocol + creator fee (anti-sniping
+   exempt); use `get_initial_buy_amount_out(quote_token, amount_in,
+   creator_fee_rate)` for the exact `tokenOut`.
 
 ---
 
-## API Base URL
+## API Base URLs
 
-**Production**: `https://api.nadapp.net`
-**Development**: Configure via `ENVIRONMENT` and `ALLOW_CORS_PORT` environment variables
+| Network | Base URL |
+|---------|----------|
+| Mainnet | `https://api.nadapp.net` |
+| Testnet | `https://dev-api.nadapp.net` |
 
----
-
-## Rate Limiting
-
-Rate limits may apply to prevent abuse. Contact the NAD team for rate limit details.
-
----
-
-## Support
-
-For issues or questions about the token creation flow:
-- GitHub: https://github.com/anthropics/claude-code/issues
-- Documentation: https://docs.nadapp.net
+External callers may send requests without an `X-API-Key` (lower rate limit) or
+with one (`nadfun_` + 32 chars) for a higher limit.

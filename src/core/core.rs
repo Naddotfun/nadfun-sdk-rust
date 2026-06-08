@@ -1,168 +1,179 @@
+//! Unified `Core` — one entry point for v1 + v2 bonding-curve trading,
+//! token creation, and pool discovery on Nad.fun.
+//!
+//! A single `Core` instance binds to a `Network` and wires both the v1
+//! (`BondingCurveRouter` + `DexRouter` + `Lens`) and v2 (`NadFunRouter` +
+//! `NadFunFactory` + `BondingCurveV2` + `TokenRegistryV2`) contract
+//! surfaces. v1 trades are accessed via `core.v1()` ([`CoreV1`] handle,
+//! e.g. `core.v1().buy(...)`); v2 trades via `core.v2()` ([`CoreV2`]
+//! handle, e.g. `core.v2().buy(...)`; the `_v2` suffix is dropped).
+//!
+//! Use `Core::detect_version(token)` (or `detect_token_info` for the quote
+//! token too) to classify a token via the on-chain `TokenInfoLens` in one
+//! RPC call, then dispatch to the right v1/v2 surface. Stateless — no
+//! caching; cache results yourself if you need to.
+
 use crate::{
     constants::*,
-    contracts::{BondingCurveRouter, DexRouter, Lens},
-    create::TokenCreationClient,
+    contracts::{
+        BondingCurveRouter, BondingCurveV2, DexRouter, Lens, NadFunFactory, NadFunRouter,
+        ProtocolManagerV2, TokenInfoLens, TokenRegistryV2,
+    },
+    core::v1::CoreV1,
+    core::v2::CoreV2,
     types::*,
-    core::gas::{estimate_gas, GasEstimationParams},
+    version::{SdkVersion, TokenInfo},
 };
 use alloy::{
     network::EthereumWallet,
     primitives::{Address, B256, U256},
-    providers::{DynProvider, ProviderBuilder, Provider},
+    providers::{DynProvider, Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
-use anyhow::Result;
-use std::sync::Arc;
+use anyhow::{Context, Result};
+use std::{sync::Arc, time::Duration};
 
+/// Unified high-level SDK client. Handles v1 + v2 trading, token creation,
+/// quote routing, and creator reward claims from a single instance.
+///
+/// Internally splits contract bindings into per-version structs
+/// ([`V1Contracts`], [`V2Contracts`]) so the v1 / v2 surface is visibly
+/// separated in the type. Both are always wired — every supported
+/// `Network` ships with both deployments. If a future network skips one,
+/// `Core::new` will fail loudly during address resolution instead of
+/// carrying a dead branch.
 pub struct Core {
-    bonding_curve_router: BondingCurveRouter<DynProvider>,
-    dex_router: DexRouter<DynProvider>,
-    lens: Lens<DynProvider>,
-    provider: Arc<DynProvider>,
-    wallet_address: Address,
-    network: Network,
+    pub(crate) v1: V1Contracts,
+    pub(crate) v2: V2Contracts,
+    pub(crate) provider: Arc<DynProvider>,
+    pub(crate) wallet_address: Address,
+    pub(crate) network: Network,
+}
+
+/// v1 contract bindings — bonding-curve router, DEX (Capricorn CL) router,
+/// and the Lens used for auto-routing quotes.
+pub(crate) struct V1Contracts {
+    pub(crate) bonding_curve_router: BondingCurveRouter<DynProvider>,
+    pub(crate) dex_router: DexRouter<DynProvider>,
+    pub(crate) lens: Lens<DynProvider>,
+}
+
+/// v2 contract bindings — NadFunRouter + factory + bonding curve +
+/// per-token registry + `TokenInfoLens`. The Lens is required: it's deployed
+/// on every supported network, so `Core::new` resolves it at construction
+/// (failing loudly if a future network ships without it) rather than
+/// carrying a fallback branch.
+pub(crate) struct V2Contracts {
+    pub(crate) router: NadFunRouter<DynProvider>,
+    pub(crate) factory: NadFunFactory<DynProvider>,
+    pub(crate) bonding_curve: BondingCurveV2<DynProvider>,
+    pub(crate) token_registry: TokenRegistryV2<DynProvider>,
+    pub(crate) token_info_lens: TokenInfoLens<DynProvider>,
+    pub(crate) protocol_manager: ProtocolManagerV2<DynProvider>,
 }
 
 impl Core {
-    /// Create a new Core instance from a private key string (recommended)
+    /// Create a new `Core` from RPC URL + private key + network.
     ///
-    /// # Arguments
-    /// * `rpc_url` - RPC endpoint URL
-    /// * `private_key` - Private key string (with or without 0x prefix)
-    /// * `network` - Network to use (Mainnet or Testnet)
-    pub async fn new(rpc_url: String, private_key: String, network: Network) -> Result<Core> {
-        // Set the global network configuration
-        crate::constants::set_network(network);
-
+    /// Wires both v1 and v2 contract bindings for `network`. Errors if the
+    /// network does not have v2 configured (currently impossible — both
+    /// `Network::Mainnet` and `Network::Testnet` ship with v2).
+    pub async fn new(rpc_url: String, private_key: String, network: Network) -> Result<Self> {
         let signer: PrivateKeySigner = private_key.parse()?;
         let wallet_address = signer.address();
-
-        // Use current network contract addresses (automatically uses the network we just set)
-        let lens_address: Address = get_lens_address().parse()?;
-        let bonding_curve_router_address: Address = get_bonding_curve_router().parse()?;
-        let dex_router_address: Address = get_dex_router().parse()?;
-        let bonding_curve_address: Address = get_bonding_curve().parse()?;
 
         let wallet = EthereumWallet::from(signer);
         let url = rpc_url.parse()?;
         let provider = ProviderBuilder::new().wallet(wallet).connect_http(url);
         let dyn_provider = Arc::new(DynProvider::new(provider));
 
-        let bonding_curve_router = BondingCurveRouter::new(
-            bonding_curve_router_address,
-            bonding_curve_address,
-            dyn_provider.clone(),
-        );
+        Self::with_provider(dyn_provider, wallet_address, network)
+    }
 
-        let dex_router = DexRouter::new(dex_router_address, dyn_provider.clone());
-        let lens = Lens::new(lens_address, dyn_provider.clone());
+    /// Construct a `Core` from an existing provider + wallet address.
+    ///
+    /// Use this when you want to share an RPC provider (and nonce state)
+    /// across multiple `Core` instances — for example, two `Core`s pointing
+    /// at different networks but sharing a connection pool. Caller is
+    /// responsible for ensuring the provider's signer matches
+    /// `wallet_address`.
+    pub fn with_provider(
+        provider: Arc<DynProvider>,
+        wallet_address: Address,
+        network: Network,
+    ) -> Result<Self> {
+        let v1 = build_v1_contracts(&provider, network)?;
+        let v2 = build_v2_contracts(&provider, network)?;
 
-        Ok(Core {
-            bonding_curve_router,
-            dex_router,
-            lens,
-            provider: dyn_provider,
+        Ok(Self {
+            v1,
+            v2,
+            provider,
             wallet_address,
             network,
         })
     }
-}
 
-impl Core {
-    // Auto-routing functions using lens contract
-    pub async fn get_amount_out(
-        &self,
-        token: Address,
-        amount_in: U256,
-        is_buy: bool,
-    ) -> Result<(Router, U256)> {
-        let (router_address, amount_out) =
-            self.lens.get_amount_out(token, amount_in, is_buy).await?;
-
-        let router = if router_address == self.dex_router.address {
-            Router::Dex(router_address)
-        } else if router_address == self.bonding_curve_router.address {
-            Router::BondingCurve(router_address)
-        } else {
-            return Err(anyhow::anyhow!(
-                "Unknown router address: {}",
-                router_address
-            ));
-        };
-
-        Ok((router, amount_out))
+    /// v1 namespace handle (bonding curve + Capricorn CL DEX). Zero-cost —
+    /// borrows `&self`.
+    pub fn v1(&self) -> CoreV1<'_> {
+        CoreV1 { core: self }
     }
 
-    pub async fn get_amount_in(
-        &self,
-        token: Address,
-        amount_out: U256,
-        is_buy: bool,
-    ) -> Result<(Router, U256)> {
-        let (router_address, amount_in) =
-            self.lens.get_amount_in(token, amount_out, is_buy).await?;
-
-        let router = if router_address == self.dex_router.address {
-            Router::Dex(router_address)
-        } else if router_address == self.bonding_curve_router.address {
-            Router::BondingCurve(router_address)
-        } else {
-            return Err(anyhow::anyhow!(
-                "Unknown router address: {}",
-                router_address
-            ));
-        };
-
-        Ok((router, amount_in))
+    /// v2 namespace handle (NadFunRouter + registry + vaults). Zero-cost —
+    /// borrows `&self`.
+    pub fn v2(&self) -> CoreV2<'_> {
+        CoreV2 { core: self }
     }
 
-    pub async fn buy(&self, params: BuyParams, router: Router) -> Result<B256> {
-        match router {
-            Router::Dex(_) => self.dex_router.buy(params).await,
-            Router::BondingCurve(_) => self.bonding_curve_router.buy(params).await,
-        }
-    }
+    // ========================================================================
+    // v1 + v2: dispatch primitive
+    // ========================================================================
 
-    pub async fn sell(&self, params: SellParams, router: Router) -> Result<B256> {
-        match router {
-            Router::Dex(_) => self.dex_router.sell(params).await,
-            Router::BondingCurve(_) => self.bonding_curve_router.sell(params).await,
-        }
-    }
-
-    /// Sell tokens using SellPermitParams struct
-    /// User must provide valid permit signature (v, r, s)
-    pub async fn sell_permit(
-        &self,
-        params: SellPermitParams,
-        router: Router,
-    ) -> Result<B256> {
-        match router {
-            Router::Dex(_) => self.dex_router.sell_permit(params).await,
-            Router::BondingCurve(_) => self.bonding_curve_router.sell_permit(params).await,
-        }
-    }
-
-    /// Get transaction receipt for a given transaction hash
+    /// Classify a token as v1 / v2 / not-registered. Stateless — each
+    /// call hits the chain via the on-chain `TokenInfoLens` (one RPC
+    /// covers both v1 and v2 registries and returns `None` for unknown
+    /// tokens).
     ///
-    /// This allows you to check the status and details of a transaction
-    /// after it has been submitted.
+    /// Callers that issue many lookups for the same token should cache
+    /// the result themselves — the SDK is intentionally stateless.
+    pub async fn detect_version(&self, token: Address) -> Result<SdkVersion> {
+        Ok(self.detect_token_info(token).await?.version)
+    }
+
+    /// Batch version detection — one `TokenInfoLens` RPC classifies the
+    /// whole list. Order matches the input.
+    pub async fn detect_versions(&self, tokens: Vec<Address>) -> Result<Vec<SdkVersion>> {
+        Ok(self
+            .detect_token_infos(tokens)
+            .await?
+            .into_iter()
+            .map(|info| info.version)
+            .collect())
+    }
+
+    /// Classify a token and resolve its on-chain `quote_token` in a single
+    /// `TokenInfoLens` call. See [`TokenInfo`].
     ///
-    /// # Arguments
-    /// * `tx_hash` - Transaction hash returned from buy/sell operations
-    ///
-    /// # Returns
-    /// * `TransactionResult` - Complete transaction details including status, gas used, and logs
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let tx_hash = core.buy(buy_params, router).await?;
-    /// let receipt = core.get_receipt(tx_hash).await?;
-    /// println!("Transaction status: {}", receipt.status);
-    /// println!("Gas used: {:?}", receipt.gas_used);
-    /// ```
+    /// The SDK does not pick a trade method from the quote token — that is
+    /// the caller's decision (see the quote-routing matrix in `MIGRATION.md`).
+    pub async fn detect_token_info(&self, token: Address) -> Result<TokenInfo> {
+        self.v2.token_info_lens.get_token_info(token).await
+    }
+
+    /// Batch [`Self::detect_token_info`] — one RPC call for the whole list,
+    /// order preserved. Empty input returns an empty vec without an RPC.
+    pub async fn detect_token_infos(&self, tokens: Vec<Address>) -> Result<Vec<TokenInfo>> {
+        self.v2.token_info_lens.get_token_infos(tokens).await
+    }
+
+    /// Get transaction receipt for `tx_hash`. Works for both v1 and v2
+    /// transactions — the receipt format is chain-level.
     pub async fn get_receipt(&self, tx_hash: B256) -> Result<TransactionResult> {
-        let receipt = self.provider.get_transaction_receipt(tx_hash).await?
+        let receipt = self
+            .provider
+            .get_transaction_receipt(tx_hash)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Transaction receipt not found"))?;
 
         Ok(TransactionResult {
@@ -174,55 +185,10 @@ impl Core {
         })
     }
 
-    // Lens utility functions (wrapped for convenience)
-
-    /// Get available buy tokens and required MON amount
-    pub async fn available_buy_tokens(&self, token: Address) -> Result<(U256, U256)> {
-        self.lens.available_buy_tokens(token).await
-    }
-
-    /// Check if token is locked
-    pub async fn is_locked(&self, token: Address) -> Result<bool> {
-        self.lens.is_locked(token).await
-    }
-
-    /// Check if token is graduated (listed on DEX)
-    pub async fn is_graduated(&self, token: Address) -> Result<bool> {
-        self.lens.is_graduated(token).await
-    }
-
-    /// Get initial buy amount out for token creation
-    ///
-    /// Calculate how many tokens you'll receive when creating a new token
-    /// with a given MON amount (typically used during token creation).
-    pub async fn get_initial_buy_amount_out(&self, amount_in: U256) -> Result<U256> {
-        self.lens.get_initial_buy_amount_out(amount_in).await
-    }
-
-    /// Get deploy fee for token creation
-    pub async fn get_deploy_fee(&self) -> Result<U256> {
-        self.bonding_curve_router.get_deploy_fee().await
-    }
-
-    /// Get bonding curve progress percentage
-    ///
-    /// Returns the progress of the bonding curve towards graduation (0-10000 = 0-100%)
-    pub async fn get_progress(&self, token: Address) -> Result<U256> {
-        self.lens.get_progress(token).await
-    }
-
-    // Access to individual routers (advanced usage)
-    pub fn bonding_curve_router(&self) -> &BondingCurveRouter<DynProvider> {
-        &self.bonding_curve_router
-    }
-
-    pub fn dex_router(&self) -> &DexRouter<DynProvider> {
-        &self.dex_router
-    }
-
-    pub fn lens(&self) -> &Lens<DynProvider> {
-        &self.lens
-    }
+    // ========================================================================
+    // Escape hatches: direct access to underlying contract bindings.
+    // v1 escape hatches are on CoreV1: use core.v1().bonding_curve_router() etc.
+    // ========================================================================
 
     pub fn provider(&self) -> &Arc<DynProvider> {
         &self.provider
@@ -235,104 +201,97 @@ impl Core {
     pub fn network(&self) -> Network {
         self.network
     }
+}
 
-    /// Estimate gas for trading operations using the unified gas estimation system
-    ///
-    /// This is a convenience method that wraps the standalone estimate_gas function
-    /// and automatically provides the provider and handles the common use case.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// use nadfun_sdk::{Core, GasEstimationParams};
-    ///
-    /// let params = GasEstimationParams::Buy {
-    ///     token,
-    ///     amount_in: mon_amount,
-    ///     amount_out_min: min_tokens,
-    ///     to: wallet,
-    ///     deadline,
-    /// };
-    ///
-    /// let estimated_gas = core.estimate_gas(&router, params).await?;
-    /// let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
-    /// ```
-    pub async fn estimate_gas(
-        &self,
-        router: &Router,
-        params: GasEstimationParams,
-    ) -> Result<u64> {
-        estimate_gas(self.provider.clone(), router, params).await
-    }
+/// Build v1 contract bindings for `network`. Parses the v1 addresses and
+/// constructs the BondingCurveRouter, DexRouter, and Lens wrappers.
+fn build_v1_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V1Contracts> {
+    let lens_address: Address = get_lens_address(network).parse()?;
+    let bonding_curve_router_address: Address = get_bonding_curve_router(network).parse()?;
+    let dex_router_address: Address = get_dex_router(network).parse()?;
+    let bonding_curve_address: Address = get_bonding_curve(network).parse()?;
 
-    /// Create a new token using the complete token creation flow
-    ///
-    /// This function handles the entire token creation process:
-    /// 1. Download image from URI and upload to metadata server
-    /// 2. Create metadata on server
-    /// 3. Get salt value from server
-    /// 4. Execute create transaction on bonding curve
-    ///
-    /// # Arguments
-    /// * `params` - Token creation parameters including metadata and transaction details
-    ///
-    /// # Returns
-    /// * `TokenCreationResult` - Contains token address, metadata URI, image URI, salt, and transaction hash
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// use nadfun_sdk::{Core, CreateTokenParams};
-    /// use alloy::primitives::utils::parse_ether;
-    ///
-    /// let params = CreateTokenParams {
-    ///     name: "My Token".to_string(),
-    ///     symbol: "MTK".to_string(),
-    ///     description: "My awesome token".to_string(),
-    ///     image_uri: "https://example.com/image.png".to_string(),
-    ///     website: Some("https://example.com".to_string()),
-    ///     twitter: Some("@mytoken".to_string()),
-    ///     telegram: Some("@mytokenchat".to_string()),
-    ///     creator_address: wallet_address,
-    ///     amount_out: parse_ether("1000000")?,
-    ///     value: parse_ether("1.5")?, // 1.5 MON
-    /// };
-    ///
-    /// let result = core.create_token(params).await?;
-    /// println!("Token created at: {}", result.token_address);
-    /// ```
-    pub async fn create_token(&self, params: CreateTokenParams) -> Result<TokenCreationResult> {
-        // Step 1-3: Prepare token creation (image upload, metadata, salt)
-        let creation_client = TokenCreationClient::new();
-        let (metadata_uri, image_uri, salt, is_nsfw) =
-            creation_client.prepare_token_creation(&params).await?;
+    Ok(V1Contracts {
+        bonding_curve_router: BondingCurveRouter::new(
+            bonding_curve_router_address,
+            bonding_curve_address,
+            provider.clone(),
+        ),
+        dex_router: DexRouter::new(dex_router_address, provider.clone()),
+        lens: Lens::new(lens_address, provider.clone()),
+    })
+}
 
-        // Get deploy fee
-        let deploy_fee = self.get_deploy_fee().await?;
-        let total_value = params.value + deploy_fee;
+/// Build v2 contract bindings for `network`. Errors only if a v2 address
+/// constant fails to parse. v2 is deployed on every supported `Network`,
+/// so the address helpers return `&str` directly (no `None` arm).
+fn build_v2_contracts(provider: &Arc<DynProvider>, network: Network) -> Result<V2Contracts> {
+    let router_s = get_nadfun_router_v2(network);
+    let factory_s = get_nadfun_factory_v2(network);
+    let bc_s = get_bonding_curve_v2(network);
+    let reg_s = get_token_registry_v2(network);
 
-        // Step 4: Execute create transaction on bonding curve
-        let (token_address, tx_result) = self
-            .bonding_curve_router
-            .create(
-                params.name.clone(),
-                params.symbol.clone(),
-                metadata_uri.clone(),
-                params.amount_out,
-                salt,
-                params.action_id, // Actor type (CapricornActor or AmplifyActor)
-                total_value, // Initial buy amount + deploy fee
-                None, // gas_limit (auto-estimate)
-                None, // gas_price (use network default)
-                None, // nonce (auto-increment)
-            )
-            .await?;
+    let router_addr: Address = router_s
+        .parse()
+        .with_context(|| format!("invalid NadFunRouter address {router_s:?} for {network:?}"))?;
+    let factory_addr: Address = factory_s
+        .parse()
+        .with_context(|| format!("invalid NadFunFactory address {factory_s:?} for {network:?}"))?;
+    let bc_addr: Address = bc_s
+        .parse()
+        .with_context(|| format!("invalid BondingCurveV2 address {bc_s:?} for {network:?}"))?;
+    let reg_addr: Address = reg_s
+        .parse()
+        .with_context(|| format!("invalid TokenRegistryV2 address {reg_s:?} for {network:?}"))?;
 
-        Ok(TokenCreationResult {
-            token_address,
-            metadata_uri,
-            image_uri,
-            salt: format!("0x{}", hex::encode(salt)),
-            transaction_hash: tx_result.transaction_hash,
-            is_nsfw, // Return is_nsfw status from server
-        })
+    // TokenInfoLens is required — it's deployed on every supported network.
+    let lens_s = get_token_info_lens(network);
+    let lens_addr: Address = lens_s
+        .parse()
+        .with_context(|| format!("invalid TokenInfoLens address {lens_s:?} for {network:?}"))?;
+    let token_info_lens = TokenInfoLens::new(lens_addr, provider.clone());
+
+    let pm_s = get_protocol_manager_v2(network);
+    let pm_addr: Address = pm_s
+        .parse()
+        .with_context(|| format!("invalid ProtocolManager address {pm_s:?} for {network:?}"))?;
+    let protocol_manager = ProtocolManagerV2::new(pm_addr, provider.clone());
+
+    Ok(V2Contracts {
+        router: NadFunRouter::new(router_addr, provider.clone()),
+        factory: NadFunFactory::new(factory_addr, provider.clone()),
+        bonding_curve: BondingCurveV2::new(bc_addr, provider.clone()),
+        token_registry: TokenRegistryV2::new(reg_addr, provider.clone()),
+        token_info_lens,
+        protocol_manager,
+    })
+}
+
+/// Poll for a transaction receipt until `tx_hash` lands or `max_wait`
+/// elapses. Returns the receipt or an error on timeout / RPC failure.
+///
+/// `provider.get_transaction_receipt` returns `Ok(None)` while the tx is
+/// still pending; without polling, that becomes a confusing "receipt not
+/// found" right after a successful broadcast.
+pub(crate) async fn wait_for_receipt(
+    provider: &Arc<DynProvider>,
+    tx_hash: B256,
+    max_wait: Duration,
+) -> Result<alloy::rpc::types::TransactionReceipt> {
+    let poll_interval = Duration::from_millis(500);
+    let deadline = tokio::time::Instant::now() + max_wait;
+    loop {
+        match provider.get_transaction_receipt(tx_hash).await? {
+            Some(receipt) => return Ok(receipt),
+            None => {
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(anyhow::anyhow!(
+                        "timed out after {:?} waiting for receipt {tx_hash}",
+                        max_wait,
+                    ));
+                }
+                tokio::time::sleep(poll_interval).await;
+            }
+        }
     }
 }

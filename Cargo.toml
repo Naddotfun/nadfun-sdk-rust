@@ -1,12 +1,13 @@
 [package]
 name = "nadfun_sdk"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "Rust SDK for Nad.fun"
 license = "MIT"
 repository = "https://github.com/Naddotfun/nadfun-sdk-rust"
 documentation = "https://github.com/Naddotfun/nadfun-sdk-rust"
 keywords = ["memecoin", "nadfun", "nadfun-sdk"]
+exclude = [".omc/", "benches/"]
 
 readme = "README.md"
 
@@ -31,6 +32,7 @@ hex = "0.4"
 
 [dev-dependencies]
 tokio-test = "0.4"
+wiremock = "0.6"
 
 # Examples
 
@@ -86,3 +88,50 @@ path = "examples/stream/dex_stream.rs"
 [[example]]
 name = "pool_discovery"
 path = "examples/stream/pool_discovery.rs"
+
+# Creator Examples
+[[example]]
+name = "claim_reward"
+path = "examples/creator/claim_reward.rs"
+
+# === v2 Examples ===
+
+[[example]]
+name = "v2_buy"
+path = "examples/v2/buy.rs"
+
+[[example]]
+name = "v2_sell"
+path = "examples/v2/sell.rs"
+
+[[example]]
+name = "v2_buy_erc20_quote"
+path = "examples/v2/buy_erc20_quote.rs"
+
+[[example]]
+name = "v2_exact_out"
+path = "examples/v2/exact_out.rs"
+
+[[example]]
+name = "v2_create_token"
+path = "examples/v2/create_token.rs"
+
+[[example]]
+name = "v2_curve_stream"
+path = "examples/v2/curve_stream.rs"
+
+[[example]]
+name = "v2_dex_stream"
+path = "examples/v2/dex_stream.rs"
+
+[[example]]
+name = "v2_pool_discovery"
+path = "examples/v2/pool_discovery.rs"
+
+[[example]]
+name = "unified_dispatch"
+path = "examples/unified_dispatch.rs"
+
+[[example]]
+name = "v2_smoke"
+path = "examples/v2/smoke.rs"

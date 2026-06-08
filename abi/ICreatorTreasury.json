@@ -1,0 +1,52 @@
+[
+  {
+    "type": "function",
+    "name": "claim",
+    "inputs": [
+      { "name": "tokens", "type": "address[]" },
+      { "name": "amounts", "type": "uint256[]" },
+      { "name": "merkleProofs", "type": "bytes32[][]" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimed",
+    "inputs": [{ "name": "checkLeaf", "type": "bytes32" }],
+    "outputs": [{ "name": "", "type": "bool" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "wMon",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "address" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "creatorManager",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "address" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Claim",
+    "anonymous": false,
+    "inputs": [
+      { "name": "token", "type": "address", "indexed": true },
+      { "name": "creator", "type": "address", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "SetMerkleRoot",
+    "anonymous": false,
+    "inputs": [
+      { "name": "merkleRoot", "type": "bytes32", "indexed": true }
+    ]
+  }
+]
