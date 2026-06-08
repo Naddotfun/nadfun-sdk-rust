@@ -21,29 +21,29 @@ and the v1 `BondingCurveRouter` for v1.
 
 ```
             shared off-chain pipeline                       on-chain create
-┌───────────────┐   ┌──────────────────┐   ┌─────────────┐   ┌────────────────────────┐
-│  Upload Image │──>│ Upload Metadata  │──>│  Mine Salt  │──>│  v1: BondingCurveRouter│
-│/metadata/image│   │/metadata/metadata│   │ /token/salt │   │      .create(..)       │
-└───────────────┘   └──────────────────┘   └─────────────┘   │  v2: NadFunRouter      │
-       │                    │                      │          │ .create / .createWith  │
-       ▼                    ▼                      ▼          │        Native(..)      │
-   image_uri          metadata_uri        salt + predicted   └────────────────────────┘
-    is_nsfw                                   address                     │
+┌───────────────────┐   ┌──────────────────────┐   ┌─────────────┐   ┌────────────────────────┐
+│   Upload Image    │──>│   Upload Metadata    │──>│  Mine Salt  │──>│  v1: BondingCurveRouter│
+│ /agent/token/image│   │/agent/token/metadata │   │/agent/salt  │   │      .create(..)       │
+└───────────────────┘   └──────────────────────┘   └─────────────┘   │  v2: NadFunRouter      │
+         │                       │                       │            │ .create / .createWith  │
+         ▼                       ▼                       ▼            │        Native(..)      │
+     image_uri             metadata_uri          salt + predicted     └────────────────────────┘
+      is_nsfw                                        address                      │
                                                                           ▼
                                                           token live → index via /token/:token
 ```
 
 | Step | Endpoint / call | Shared? | Output |
 |------|-----------------|---------|--------|
-| 1. Upload Image | `POST /metadata/image` | shared (v1 + v2) | `image_uri`, `is_nsfw` |
-| 2. Upload Metadata | `POST /metadata/metadata` | shared | `metadata_uri` |
-| 3. Mine Salt | `POST /token/salt` (`version: "V1"`/`"V2"`) | shared, version-tagged | `salt`, predicted `address` |
+| 1. Upload Image | `POST /agent/token/image` | shared (v1 + v2) | `image_uri`, `is_nsfw` |
+| 2. Upload Metadata | `POST /agent/token/metadata` | shared | `metadata_uri` |
+| 3. Mine Salt | `POST /agent/salt` (`version: "V1"`/`"V2"`) | shared, version-tagged | `salt`, predicted `address` |
 | 4. On-chain create | v1 `BondingCurveRouter.create` / v2 `NadFunRouter.create[WithNative]` | **version-specific** | `token`, (v2) `tokenOut` |
 | 5. Index | `GET /token/:token`, `/trade/*` | shared | live token + market data |
 
 Salt mining is CREATE2 over an EIP-1167 minimal-proxy clone of the version's
 Token implementation, deployed by that version's bonding curve. **Pass the
-correct `version`** to `/token/salt` — a v1 salt predicts a different address
+correct `version`** to `/agent/salt` — a v1 salt predicts a different address
 than a v2 salt for the same name/symbol/creator, and using the wrong one makes
 the on-chain create revert or deploy to an unexpected address.
 
@@ -55,7 +55,7 @@ Upload the token image with automatic NSFW validation. Shared by v1 and v2.
 
 ### Endpoint
 ```
-POST /metadata/image
+POST /agent/token/image
 ```
 
 ### Request
@@ -65,7 +65,7 @@ POST /metadata/image
 **Size Limit**: 5MB maximum (format detected from magic bytes, not just the header)
 
 ```bash
-curl -X POST {BASE_URL}/metadata/image \
+curl -X POST {BASE_URL}/agent/token/image \
   -H "Content-Type: image/png" \
   --data-binary @./my-token-image.png
 ```
@@ -98,7 +98,7 @@ cache expires and metadata upload fails.
 
 ### Endpoint
 ```
-POST /metadata/metadata
+POST /agent/token/metadata
 ```
 
 ### Request — `application/json`
@@ -154,7 +154,7 @@ configured vanity suffix (e.g. `7777`). **Version-tagged** — pass `version`.
 
 ### Endpoint
 ```
-POST /token/salt
+POST /agent/salt
 ```
 
 ### Request — `application/json`
@@ -262,6 +262,7 @@ struct CreateParams {
 ```rust
 let params = V2CreateTokenParams {
     name, symbol, description, image_uri,
+    website: None, twitter: None, telegram: None,
     creator_address: wallet,     // must equal the signing wallet
     creator_fee_rate: 100,       // 1% — per-token, stored on the curve
     vaults,                      // bps total 10000
@@ -272,7 +273,7 @@ let params = V2CreateTokenParams {
     // Erc20 { quote_token } for an ERC-20-funded create.
     payment: V2CreatePayment::Native { quote_token: wmon },
     deadline: U256::from(deadline),
-    ..Default::default()
+    gas_limit: None, gas_price: None, nonce: None,
 };
 let created = core.v2().create_token(params, &api).await?;   // returns token_address, tx, ...
 ```
@@ -369,7 +370,7 @@ for the on-chain version probe, and curve/DEX indexers under `nadfun_sdk::stream
 
 | Network | Base URL |
 |---------|----------|
-| Mainnet | `https://api.nad.fun` |
+| Mainnet | `https://api.nadapp.net` |
 | Testnet | `https://dev-api.nadapp.net` |
 
 External callers may send requests without an `X-API-Key` (lower rate limit) or

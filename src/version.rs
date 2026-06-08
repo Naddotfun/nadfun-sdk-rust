@@ -5,7 +5,7 @@
 //! - [`SdkVersion::V1`] — original bonding curve + Capricorn CL DEX
 //!   surface (`buy`, `sell`, `get_amount_out`, `create_token`).
 //! - [`SdkVersion::V2`] — unified `NadFunRouter` + vault ecosystem
-//!   (`buy_v2`, `sell_v2`, `create_token_v2`, …).
+//!   (`core.v2().buy`, `core.v2().sell`, `core.v2().create_token`, …).
 //! - [`SdkVersion::None`] — token is not registered on either system.
 //!   Returned by [`crate::Core::detect_version`] when the on-chain
 //!   `TokenInfoLens` reports an unknown token (or, in the fallback

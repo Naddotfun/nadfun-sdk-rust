@@ -17,34 +17,34 @@ use nadfun_sdk::{Core, Network};
 let core = Core::new(rpc, key, Network::Mainnet).await?;
 ```
 
-| 0.3.x (`CoreV2::*`)                       | 0.4.0 (`Core::*`)                              |
-|-------------------------------------------|------------------------------------------------|
-| `c.buy(params)`                           | `c.buy_v2(params)`                             |
-| `c.buy_with_native(params, value)`        | `c.buy_with_native_v2(params)` (value in struct) |
-| `c.buy_with_permit(params)`               | `c.buy_with_permit_v2(params)`                 |
-| `c.sell(params)`                          | `c.sell_v2(params)`                            |
-| `c.sell_to_native(params)`                | `c.sell_to_native_v2(params)`                  |
-| `c.sell_with_permit(params)`              | `c.sell_with_permit_v2(params)`                |
-| `c.sell_to_native_with_permit(params)`    | `c.sell_to_native_with_permit_v2(params)`      |
-| `c.exact_out_buy(params)`                 | `c.exact_out_buy_v2(params)`                   |
-| `c.exact_out_buy_with_native(params)`     | `c.exact_out_buy_with_native_v2(params)`       |
-| `c.exact_out_sell(params)`                | `c.exact_out_sell_v2(params)`                  |
-| `c.exact_out_sell_to_native(params)`      | `c.exact_out_sell_to_native_v2(params)`        |
-| `c.create(params)`                        | `c.create_v2(params)`                          |
-| `c.create_with_native(params)`            | `c.create_with_native_v2(params)`              |
-| `c.create_token(params, &api)`            | `c.create_token_v2(params, &api)`              |
-| `c.quote(t, a, is_buy)`                   | `c.get_amount_out_v2(t, a, is_buy)`                     |
-| `c.quote_in(...)`                         | `c.get_amount_in_v2(...)`                           |
-| `c.quote_bonding_curve(...)`              | `c.get_bonding_curve_amount_out_v2(...)`                |
-| `c.quote_dex(...)`                        | `c.get_dex_amount_out_v2(...)`                          |
-| `c.is_graduated(t)`                       | `c.is_graduated_v2(t)`                         |
-| `c.pool_address(t)`                       | `c.pool_address_v2(t)`                         |
-| `c.wrapped_native()`                      | `c.wrapped_native_v2()`                        |
-| `c.estimate_gas(params)`                  | `c.estimate_gas_v2(params)`                    |
-| `c.router()` / `c.factory()` / …          | `c.router_v2()` / `c.factory_v2()` / …         |
+| 0.3.x (`CoreV2::*`)                       | 0.4.0 (`core.v2().*`)                              |
+|-------------------------------------------|----------------------------------------------------|
+| `c.buy(params)`                           | `core.v2().buy(params)`                            |
+| `c.buy_with_native(params, value)`        | `core.v2().buy_with_native(params)` (value in struct) |
+| `c.buy_with_permit(params)`               | `core.v2().buy_with_permit(params)`                |
+| `c.sell(params)`                          | `core.v2().sell(params)`                           |
+| `c.sell_to_native(params)`                | `core.v2().sell_to_native(params)`                 |
+| `c.sell_with_permit(params)`              | `core.v2().sell_with_permit(params)`               |
+| `c.sell_to_native_with_permit(params)`    | `core.v2().sell_to_native_with_permit(params)`     |
+| `c.exact_out_buy(params)`                 | `core.v2().exact_out_buy(params)`                  |
+| `c.exact_out_buy_with_native(params)`     | `core.v2().exact_out_buy_with_native(params)`      |
+| `c.exact_out_sell(params)`                | `core.v2().exact_out_sell(params)`                 |
+| `c.exact_out_sell_to_native(params)`      | `core.v2().exact_out_sell_to_native(params)`       |
+| `c.create(params)`                        | `core.v2().create(params)`                         |
+| `c.create_with_native(params)`            | `core.v2().create_with_native(params)`             |
+| `c.create_token(params, &api)`            | `core.v2().create_token(params, &api)`             |
+| `c.quote(t, a, is_buy)`                   | `core.v2().get_amount_out(t, a, is_buy)`           |
+| `c.quote_in(...)`                         | `core.v2().get_amount_in(...)`                     |
+| `c.quote_bonding_curve(...)`              | `core.v2().get_bonding_curve_amount_out(...)`      |
+| `c.quote_dex(...)`                        | `core.v2().get_dex_amount_out(...)`                |
+| `c.is_graduated(t)`                       | `core.v2().is_graduated(t)`                        |
+| `c.pool_address(t)`                       | `core.v2().pool_address(t)`                        |
+| `c.wrapped_native()`                      | `core.v2().wrapped_native()`                       |
+| `c.estimate_gas(params)`                  | `core.v2().estimate_gas(params)`                   |
+| `c.router()` / `c.factory()` / …          | `core.v2().router()` / `core.v2().factory()` / …   |
 
-The escape-hatch accessors (`router_v2`, `factory_v2`,
-`bonding_curve_v2`, `token_registry_v2`) return `&_` directly. Every
+The escape-hatch accessors (`core.v2().router()`, `.factory()`,
+`.bonding_curve()`, `.token_registry()`) return `&_` directly. Every
 supported `Network` ships with a v2 deployment, so `Core::new` either
 wires v2 or fails loudly during construction — there's no dead branch
 for these accessors to guard against.
@@ -164,7 +164,7 @@ constants are unchanged.
 core.buy_with_native(params, value).await?;
 
 // After
-core.buy_with_native_v2(V2BuyWithNativeParams {
+core.v2().buy_with_native(V2BuyWithNativeParams {
     /* existing fields */,
     value,
 }).await?;
@@ -185,7 +185,7 @@ V2GasEstimationParams::BuyWithNative(params)  // params.value is the msg.value
 ## 5. `V2PreparedCreation` carries `name` + `symbol`
 
 The salt server may normalize (trim, sanitize) the user-supplied name
-and symbol before computing the CREATE2 hash. `Core::create_token_v2`
+and symbol before computing the CREATE2 hash. `core.v2().create_token`
 now uses the server's normalized strings for the on-chain create, so
 the deploy lands at the address the API predicts.
 
@@ -234,13 +234,13 @@ The router handles BC vs DEX + quote-token bookkeeping internally:
 
 | Purpose                  | Method (works for any `quote_token`)        |
 |--------------------------|---------------------------------------------|
-| Price quote (exact-in)   | `core.get_amount_out_v2(token, amount_in, is_buy)`  |
-| Price quote (exact-out)  | `core.get_amount_in_v2(token, amount_out, is_buy)`  |
-| Force BC quote           | `core.get_bonding_curve_amount_out_v2(...)` |
-| Force DEX quote          | `core.get_dex_amount_out_v2(...)`           |
-| Pool address             | `core.pool_address_v2(token)`               |
-| Graduation status        | `core.is_graduated_v2(token)`               |
-| Wrapped native           | `core.wrapped_native_v2()`                  |
+| Price quote (exact-in)   | `core.v2().get_amount_out(token, amount_in, is_buy)` |
+| Price quote (exact-out)  | `core.v2().get_amount_in(token, amount_out, is_buy)` |
+| Force BC quote           | `core.v2().get_bonding_curve_amount_out(...)` |
+| Force DEX quote          | `core.v2().get_dex_amount_out(...)`         |
+| Pool address             | `core.v2().pool_address(token)`             |
+| Graduation status        | `core.v2().is_graduated(token)`             |
+| Wrapped native           | `core.v2().wrapped_native()`                |
 | Version detect (v1/v2/None) | `core.detect_version(token)`             |
 | Version + quote token (1 RPC) | `core.detect_token_info(token)` → `TokenInfo` |
 
@@ -249,21 +249,21 @@ The router handles BC vs DEX + quote-token bookkeeping internally:
 These hit different router entrypoints and **do** depend on the token's
 `quote_token`:
 
-| `quote_token` | Buy                          | Sell                                      |
-|---------------|------------------------------|-------------------------------------------|
-| **WMON**      | `buy_with_native_v2`         | `sell_to_native_v2` (router unwraps)      |
-| **LvMON**     | `buy_with_native_v2`         | `sell_v2` (LvMON can't unwrap — ERC-20 path) |
-| **Other ERC-20** (USDT, …) | `buy_v2`        | `sell_v2`                                 |
+| `quote_token` | Buy                              | Sell                                          |
+|---------------|----------------------------------|-----------------------------------------------|
+| **WMON**      | `core.v2().buy_with_native`      | `core.v2().sell_to_native` (router unwraps)   |
+| **LvMON**     | `core.v2().buy_with_native`      | `core.v2().sell` (LvMON can't unwrap — ERC-20 path) |
+| **Other ERC-20** (USDT, …) | `core.v2().buy`     | `core.v2().sell`                              |
 
 Note the LvMON asymmetry: buying with native MON wraps into LvMON via
 the LvMON minter on the way in, but selling back doesn't have a reverse
 unwrap path — you receive raw LvMON tokens and must use the ERC-20
-`sell_v2` form. WMON has a symmetric wrap/unwrap so both legs use the
+`core.v2().sell` form. WMON has a symmetric wrap/unwrap so both legs use the
 native-flavored helpers.
 
 `exact_out_*` and `*_with_permit` variants follow the same matrix
-(`exact_out_buy_with_native_v2` for WMON/LvMON buy, `exact_out_buy_v2`
-for other ERC-20s, etc.). To dispatch from a generic address, read the
+(`core.v2().exact_out_buy_with_native` for WMON/LvMON buy,
+`core.v2().exact_out_buy` for other ERC-20s, etc.). To dispatch from a generic address, read the
 `quote_token` on-chain in one call with `core.detect_token_info(token)`
 (returns `{ version, quote_token }`) — or off-chain via
 `api.get_token(token).quote_token`. The SDK never picks the trade method
@@ -275,11 +275,11 @@ To reserve the word "quote" for "quote token" (the trade's pricing
 currency), the v2 price-quote methods were renamed to match the v1
 `get_amount_out` / `get_amount_in` family:
 
-| 0.4.0-rc                          | 0.4.0                                       |
-|-----------------------------------|---------------------------------------------|
-| `c.quote_v2(t, a, is_buy)`        | `c.get_amount_out_v2(t, a, is_buy)`         |
-| `c.quote_in_v2(...)`              | `c.get_amount_in_v2(...)`                   |
-| `c.quote_bonding_curve_v2(...)`   | `c.get_bonding_curve_amount_out_v2(...)`    |
-| `c.quote_bonding_curve_in_v2(...)`| `c.get_bonding_curve_amount_in_v2(...)`     |
-| `c.quote_dex_v2(...)`             | `c.get_dex_amount_out_v2(...)`              |
-| `c.quote_dex_in_v2(...)`          | `c.get_dex_amount_in_v2(...)`               |
+| 0.4.0-rc                          | 0.4.0                                          |
+|-----------------------------------|------------------------------------------------|
+| `c.quote_v2(t, a, is_buy)`        | `core.v2().get_amount_out(t, a, is_buy)`       |
+| `c.quote_in_v2(...)`              | `core.v2().get_amount_in(...)`                 |
+| `c.quote_bonding_curve_v2(...)`   | `core.v2().get_bonding_curve_amount_out(...)`  |
+| `c.quote_bonding_curve_in_v2(...)`| `core.v2().get_bonding_curve_amount_in(...)`   |
+| `c.quote_dex_v2(...)`             | `core.v2().get_dex_amount_out(...)`            |
+| `c.quote_dex_in_v2(...)`          | `core.v2().get_dex_amount_in(...)`             |
