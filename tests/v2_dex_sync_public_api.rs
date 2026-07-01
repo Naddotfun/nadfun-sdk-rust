@@ -13,7 +13,9 @@ fn sync_surface_is_public_and_decodes() {
     // Reserves in the data slot; Sync has no indexed fields → topics = [sig].
     let sig: B256 = keccak256("Sync(uint112,uint112)");
     let pair = address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    let data: Bytes = (U256::from(5u64), U256::from(9u64)).abi_encode_params().into();
+    let data: Bytes = (U256::from(5u64), U256::from(9u64))
+        .abi_encode_params()
+        .into();
     let inner = alloy::primitives::Log {
         address: pair,
         data: LogData::new_unchecked(vec![sig], data),
