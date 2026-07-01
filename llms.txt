@@ -752,6 +752,14 @@ let swaps = NadFunSwapStream::new(ws_url, vec![pair], Network::Mainnet)
     .await?
     .subscribe()
     .await?;
+
+// NadFunPair reserve snapshots (live, push-based). Same empty-vec = "no address
+// filter" semantics as NadFunSwapStream. reserve0/reserve1 follow token0/token1
+// ordering — map to a side via core.v2().quote_token(token).
+let reserves = NadFunSyncStream::new(ws_url, vec![pair], Network::Mainnet)
+    .await?
+    .subscribe()
+    .await?; // Stream<Item = Result<NadFunSyncEvent>>
 ```
 
 ### Mixed Token Dispatch
