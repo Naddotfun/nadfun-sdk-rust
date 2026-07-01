@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.4.1] — 2026-07-01
+
+### Added
+
 - **v2 DEX live `Sync` stream**: `NadFunSyncStream` (real-time
   `NadFunPair::Sync(reserve0, reserve1)` reserve snapshots over WebSocket) plus
   the `NadFunSyncEvent` type, `decode_nadfun_sync_event`, and
@@ -18,10 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reserve1` follow the pair's `token0`/`token1` ordering; map to a side via
   `CoreV2::quote_token`. v2-only (v1 Capricorn CL concentrated-liquidity pools
   emit no `Sync`).
-
-### Changed
-
-### Fixed
 
 ## [0.4.0] — 2026-05-31
 
