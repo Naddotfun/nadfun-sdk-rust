@@ -202,7 +202,10 @@ mod tests {
     fn decode_sync_extracts_reserves_and_metadata() {
         let pair = address!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         let ev = decode_nadfun_sync_event(sync_log(pair, 42, 3, 7, 1_000, 2_000)).expect("decode");
-        assert_eq!(ev.pair_address, pair, "pair_address is the emitting contract");
+        assert_eq!(
+            ev.pair_address, pair,
+            "pair_address is the emitting contract"
+        );
         assert_eq!(ev.reserve0, 1_000);
         assert_eq!(ev.reserve1, 2_000);
         assert_eq!(ev.block_number, 42);
@@ -214,7 +217,9 @@ mod tests {
     fn decode_sync_rejects_non_sync_topic() {
         // A Swap-signature log must NOT decode as Sync — the stream relies on
         // this to drop foreign logs the RPC may leak through the filter.
-        let data: Bytes = (U256::from(1u64), U256::from(1u64)).abi_encode_params().into();
+        let data: Bytes = (U256::from(1u64), U256::from(1u64))
+            .abi_encode_params()
+            .into();
         let inner = alloy::primitives::Log {
             address: Address::ZERO,
             data: LogData::new_unchecked(vec![nadfun_swap_signature()], data),
