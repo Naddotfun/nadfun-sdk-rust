@@ -17,7 +17,7 @@ pub use v1::{CurveIndexer, CurveStream, DexIndexer, DexStream};
 // names so v1 callers' wildcard imports keep working without surprise.
 pub use v2::{
     discover_pools_unified, CurveIndexerV2, CurveStreamV2, NadFunSwapEvent, NadFunSwapIndexer,
-    NadFunSwapStream, PoolLocation, PoolSurface,
+    NadFunSwapStream, NadFunSyncEvent, NadFunSyncStream, PoolLocation, PoolSurface,
 };
 
 // Re-export types from the types module

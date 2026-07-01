@@ -7,7 +7,10 @@ pub mod curve;
 pub mod dex;
 
 pub use curve::{CurveIndexerV2, CurveStreamV2};
-pub use dex::{decode_nadfun_swap_event, NadFunSwapEvent, NadFunSwapIndexer, NadFunSwapStream};
+pub use dex::{
+    decode_nadfun_swap_event, decode_nadfun_sync_event, NadFunSwapEvent, NadFunSwapIndexer,
+    NadFunSwapStream, NadFunSyncEvent, NadFunSyncStream,
+};
 
 use crate::constants::{get_token_registry_v2, Network};
 use crate::contracts::{PoolDiscovery as CapricornPoolDiscovery, TokenRegistryV2};
