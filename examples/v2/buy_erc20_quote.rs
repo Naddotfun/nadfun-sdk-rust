@@ -1,10 +1,10 @@
-//! Buy a v2 token using an ERC-20 quote (e.g. USDT) instead of native MON.
+//! Buy a v2 token using an ERC-20 quote (e.g. USDC) instead of native MON.
 //!
 //! Requires caller to have pre-approved the router for at least
 //! `amount_in` worth of the quote token. v1 had no analogue — quote was
 //! always MON.
 
-use alloy::primitives::{Address, U256};
+use alloy::primitives::{utils::parse_units, Address, U256};
 use anyhow::Result;
 use nadfun_sdk::{Core, GasPricing, SlippageUtils, V2BuyParams};
 
@@ -26,8 +26,12 @@ async fn main() -> Result<()> {
 
     let core = Core::new(config.rpc_url, private_key, config.network).await?;
 
-    // 10 quote-token units (assumes 18 decimals; adjust for USDT 6).
-    let amount_in: U256 = U256::from(10u64) * U256::from(10).pow(U256::from(18u64));
+    // 10 units of the token's quote, scaled by the quote's on-chain decimals
+    // (USDC is 6, so this is 10_000_000).
+    let quote = core.v2().quote_token(token).await?;
+    let decimals = core.v2().quote_config(quote).await?.decimals;
+    let amount_in = parse_units("10", decimals)?.get_absolute();
+    println!("quote {quote} ({decimals} decimals), amount_in: {amount_in}");
 
     let expected = core.v2().get_amount_out(token, amount_in, true).await?;
     println!("expected token out: {}", expected);

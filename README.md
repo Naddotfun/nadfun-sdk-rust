@@ -11,6 +11,27 @@ Add this to your `Cargo.toml`:
 nadfun_sdk = "0.4.2"
 ```
 
+## What's new in 0.4.2
+
+- **Multi-quote trading.** `quote_tokens(network)` lists every on-chain allowed
+  v2 quote (mainnet 7: MON/WMON, LVMON, BNCB, USDC, aWEN, aQQQ, aHOOD; testnet 9).
+  Tokens on a non-native quote (USDC, aStocks, ...) trade through the ERC-20
+  `create` / `buy` / `sell` (+ permit) methods — see
+  [Multi-quote trading](#multi-quote-trading). Quotes can have 6 decimals (USDC).
+- **API-based token detection.** `Core::detect_token_info_with_api` /
+  `detect_version_with_api` read the v2 `TokenRegistry` first and ask the
+  api-server only for unregistered tokens. Use them on mainnet: the shipped
+  mainnet `TOKEN_INFO_LENS` address is not a TokenInfoLens, so the lens-based
+  `detect_*` methods revert there.
+- **Fixes and endpoints.** `ApiClient::get_token` parses the live
+  `{"token_info": ..}` response; the mainnet API is now `https://api.nad.fun`;
+  `ApiClient::get_quote_tokens()` returns the api-server catalog
+  (non-authoritative — use `quote_tokens()` / on-chain config for funds).
+- **Router ABI** refreshed to the latest `NadFunRouter`; existing methods are
+  unchanged. Nine unused v2 address getters are deprecated (removed in 0.5.0).
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the full list.
+
 ## Quick Start
 
 ```rust
@@ -79,7 +100,7 @@ Nad.fun ships two generations of contracts. Starting in 0.4.0 a single
 |---|---|---|
 | Method names | `core.v1().buy` / `core.v1().sell` / `core.v1().get_amount_out` / `core.v1().create_token` | `core.v2().buy` / `core.v2().sell` / `core.v2().get_amount_out` / `core.v2().create_token` |
 | Routers | `BondingCurveRouter` + `DexRouter` (Capricorn CL) | unified `NadFunRouter` |
-| Quote tokens | MON only | MON + arbitrary ERC-20 |
+| Quote tokens | MON only | per token: MON (WMON) / LVMON (native-funded) or an ERC-20 quote (USDC, aStocks, ...) — see [Multi-quote trading](#multi-quote-trading) |
 | Vaults | n/a | Burn / LP / CreatorFee / Gift |
 | Streaming | `CurveStream` / `DexStream` | `CurveStreamV2` / `NadFunSwapStream` |
 
@@ -99,7 +120,8 @@ match core.detect_version_with_api(&api, token).await? {
         core.v1().buy(/* BuyParams { .. } */, router).await?;
     }
     SdkVersion::V2 => {
-        // v2 quote is quote-agnostic; the trade method funds the buy.
+        // Native MON in works only for WMON/LVMON-quoted tokens; other quotes
+        // (USDC, ...) use the ERC-20 `buy` — see "Multi-quote trading".
         let expected = core.v2().get_amount_out(token, mon_amount, true).await?;
         let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
         core.v2().buy_with_native(/* V2BuyWithNativeParams { .. } */).await?;
@@ -166,24 +188,47 @@ End-to-end v2 token creation, exact-output, ERC-20 quote, permits, pool
 discovery, and event streaming are covered under
 [`examples/v2/`](examples/v2/).
 
-#### v2 multi-quote tokens
+### Multi-quote trading
 
-A v2 token trades against its own on-chain quote (`core.v2().quote_token(token)`).
-`buy_with_native` / `create_with_native` (native MON in) only work when that
-quote is native-funded (`is_native`: WMON or LVMON); any other quote (USDC,
-aStocks, ...) reverts with `NativeQuoteMustUseRoute` (both deployed routers
-have a swap executor set; a router without one reverts `InvalidNativeQuoteToken`).
-`sell_to_native` / `exact_out_sell_to_native` (native MON out) unwrap WMON, so
-they work for WMON-quoted tokens only — sell LVMON-quoted tokens with `sell`.
-Trade non-native quotes with the
-ERC-20 methods in the quote token — `create` / `buy` / `sell` (+ `*_with_permit`)
-after approving the v2 router — and size amounts with the quote's `decimals`
-(USDC is 6):
+Every v2 token trades against one quote token, fixed at creation. Pick the
+method family from that quote:
+
+| Token's quote | Buy / create with | Sell with |
+|---|---|---|
+| MON (WMON) — `is_native` | `buy_with_native` / `create_with_native` (send MON), or ERC-20 `buy` / `create` in WMON | `sell_to_native` (receive MON) or `sell` (receive WMON) |
+| LVMON — `is_native` | `buy_with_native` / `create_with_native` (router mints LVMON from MON), or ERC-20 in LVMON | `sell` (receive LVMON) — `sell_to_native` is WMON-only |
+| Any other quote (USDC, AUSD, BNCB, aStocks, ...) | ERC-20 `buy` / `buy_with_permit` / `create` in that token | `sell` / `sell_with_permit` (receive that token) |
+
+1. **Find the quote.** `core.detect_token_info_with_api(&api, token)` returns
+   `TokenInfo { version, quote_token }` on every network (v2 registry first,
+   api-server for unregistered tokens; required on mainnet, where the lens-based
+   `detect_token_info` reverts). For a known v2 token,
+   `core.v2().quote_token(token)` reads it directly.
+2. **Classify it.** `quote_tokens(network)` marks the native-funded quotes
+   (`is_native`: MON/WMON and LVMON). `is_native` covers buy/create only;
+   native-out sells (`sell_to_native`, `sell_to_native_with_permit`,
+   `exact_out_sell_to_native`) unwrap WMON and work for WMON-quoted tokens only.
+3. **Native quotes** use the `*_with_native` methods with MON amounts (18
+   decimals). On any other quote they revert with `NativeQuoteMustUseRoute`
+   (both deployed routers have a swap executor set; without one the router
+   reverts `InvalidNativeQuoteToken`).
+4. **Other quotes** use the ERC-20 methods. Amounts are in the quote's own
+   decimals — read them from `core.v2().quote_config(quote).await?.decimals`
+   (on-chain `ProtocolManager` config; USDC is 6) — and the v2 router
+   (`core.v2().router().address`) must be approved for the quote first, or use
+   the `*_with_permit` variants. Creating such a token is
+   `V2CreatePayment::Erc20 { quote_token }` with `buy_quote_amount` in the
+   quote's decimals.
 
 ```rust,ignore
-let quote = core.v2().quote_token(token).await?;                // e.g. USDC
-let amount_in = U256::from(10_000u64);                          // 0.01 USDC
-// approve the v2 router (core.v2().router().address) for `amount_in` of `quote` first
+use alloy::primitives::utils::parse_units;
+
+let api = ApiClient::new(Network::Mainnet);
+let info = core.detect_token_info_with_api(&api, token).await?;   // V2 + quote
+let decimals = core.v2().quote_config(info.quote_token).await?.decimals;
+let amount_in = parse_units("10", decimals)?.get_absolute();      // 10 USDC = 10_000_000
+
+// approve core.v2().router().address for `amount_in` of info.quote_token first
 let expected = core.v2().get_amount_out(token, amount_in, true).await?;
 core.v2().buy(V2BuyParams {
     token,
@@ -195,9 +240,18 @@ core.v2().buy(V2BuyParams {
     gas_price: None,
     nonce: None,
 }).await?;
+
+// Selling returns the quote token (approve the router for the token first).
+let proceeds = core.v2().get_amount_out(token, token_amount, false).await?; // in quote decimals
 ```
 
-#### v2 view / query parity
+`ApiClient::get_quote_tokens()` lists the api-server catalog, but it is not
+filtered on the on-chain allow-list; for anything that moves funds rely on
+`quote_tokens(network)` or `ProtocolManager.isAllowed` + on-chain `decimals()`.
+[`examples/unified_dispatch.rs`](examples/unified_dispatch.rs) puts detection,
+`is_native` routing, and decimal scaling together.
+
+### v2 view / query parity
 
 Thin `core.v2()` wrappers over the on-chain v2 views, mirroring the v1 query
 surface:
@@ -438,7 +492,8 @@ Execute buy/sell operations on bonding curves with slippage protection:
 > v1 trading shown here. For v2 (`core.v2().buy` / `core.v2().buy_with_native` /
 > `core.v2().sell_to_native` / `core.v2().get_amount_out`) see [v2 Quick Start](#v2-quick-start)
 > and [`examples/v2/`](examples/v2/). Choose the path by token version
-> (`core.detect_version(token)`), as shown above.
+> (`core.detect_version_with_api(&api, token)`) and, for v2, by quote token
+> ([Multi-quote trading](#multi-quote-trading)), as shown above.
 
 ```rust
 use nadfun_sdk::{Core, SlippageUtils, GasEstimationParams};
@@ -1258,7 +1313,7 @@ means the router can wrap native MON (`msg.value`) into it, so it is a valid
 address as the v1 `WMON` constant; the DB labels it `MON`/`MONAD`.
 `is_native == false` quotes are traded with the ERC-20 methods (`create` /
 `buy` / `sell` + permit) in that token, see
-[v2 multi-quote tokens](#v2-multi-quote-tokens); the native-in methods revert
+[Multi-quote trading](#multi-quote-trading); the native-in methods revert
 with `NativeQuoteMustUseRoute` for them. `is_native` covers buy/create only:
 `*sell_to_native*` is WMON-quote only. Every row is
 `ProtocolManager.isAllowed == true` with on-chain decimals (verified

@@ -1,4 +1,7 @@
 //! v2 sell tokens for native MON via the unified `Core` (`core.v2()` handle).
+//!
+//! `sell_to_native` unwraps WMON, so it only works for WMON-quoted tokens;
+//! sell tokens on any other quote (LVMON, USDC, ...) with `core.v2().sell`.
 
 use alloy::primitives::{Address, U256};
 use anyhow::Result;
