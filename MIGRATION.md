@@ -62,6 +62,13 @@ in the same single call (`Core::detect_token_infos` for the batch). The
 SDK does not auto-select a trade method from `quote_token`; use it to drive
 the matrix in §7 yourself.
 
+**Mainnet (0.4.2+):** the shipped mainnet `TOKEN_INFO_LENS` address is not a
+TokenInfoLens (another contract lives there), so the lens-based `detect_*`
+calls revert there. Use
+`Core::detect_token_info_with_api(&api, token)` /
+`Core::detect_version_with_api(&api, token)` instead (v2 registry first; an
+unregistered token asks the api-server, whose 404 is `SdkVersion::None`).
+
 ## 2. Drop `set_network` — pass `Network` to every constructor
 
 ```rust
@@ -148,8 +155,10 @@ V2CreatePayment::Native { quote_token: wmon }
 // resolve on-chain with `core.v2().wrapped_native().await?`.
 ```
 
-The caller-supplied address is used verbatim; anything the on-chain
-`createWithNative` rejects reverts with `InvalidNativeQuoteToken`.
+The caller-supplied address is used verbatim. A quote the on-chain
+`createWithNative` cannot fund from native (anything but WMON/LVMON) reverts
+with `NativeQuoteMustUseRoute` on routers with a swap executor set (both
+deployed routers), otherwise with `InvalidNativeQuoteToken`.
 
 Also removed: `constants::get_lv_mon_v2` and `addresses::testnet::v2::LV_MON`.
 Use the structured `quote_tokens(Network)` registry instead — it lists every

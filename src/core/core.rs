@@ -14,6 +14,7 @@
 //! caching; cache results yourself if you need to.
 
 use crate::{
+    api::ApiClient,
     constants::*,
     contracts::{
         BondingCurveRouter, BondingCurveV2, DexRouter, Lens, NadFunFactory, NadFunRouter,
@@ -59,10 +60,10 @@ pub(crate) struct V1Contracts {
 }
 
 /// v2 contract bindings — NadFunRouter + factory + bonding curve +
-/// per-token registry + `TokenInfoLens`. The Lens is required: it's deployed
-/// on every supported network, so `Core::new` resolves it at construction
-/// (failing loudly if a future network ships without it) rather than
-/// carrying a fallback branch.
+/// per-token registry + `TokenInfoLens`. Every network has a lens address
+/// configured (the mainnet one is not a lens; see
+/// `Core::detect_token_info_with_api`), so `Core::new` resolves it at
+/// construction rather than carrying a fallback branch.
 pub(crate) struct V2Contracts {
     pub(crate) router: NadFunRouter<DynProvider>,
     pub(crate) factory: NadFunFactory<DynProvider>,
@@ -137,12 +138,20 @@ impl Core {
     ///
     /// Callers that issue many lookups for the same token should cache
     /// the result themselves — the SDK is intentionally stateless.
+    ///
+    /// **Mainnet:** the shipped `TOKEN_INFO_LENS` address is not a
+    /// `TokenInfoLens` (another contract lives there), so this errors there;
+    /// use [`Self::detect_token_info_with_api`].
     pub async fn detect_version(&self, token: Address) -> Result<SdkVersion> {
         Ok(self.detect_token_info(token).await?.version)
     }
 
     /// Batch version detection — one `TokenInfoLens` RPC classifies the
     /// whole list. Order matches the input.
+    ///
+    /// **Mainnet:** the shipped `TOKEN_INFO_LENS` address is not a
+    /// `TokenInfoLens` (another contract lives there), so this errors there;
+    /// use [`Self::detect_token_info_with_api`].
     pub async fn detect_versions(&self, tokens: Vec<Address>) -> Result<Vec<SdkVersion>> {
         Ok(self
             .detect_token_infos(tokens)
@@ -157,14 +166,84 @@ impl Core {
     ///
     /// The SDK does not pick a trade method from the quote token — that is
     /// the caller's decision (see the quote-routing matrix in `MIGRATION.md`).
+    ///
+    /// **Mainnet:** the shipped `TOKEN_INFO_LENS` address is not a
+    /// `TokenInfoLens` (another contract lives there), so this errors there;
+    /// use [`Self::detect_token_info_with_api`].
     pub async fn detect_token_info(&self, token: Address) -> Result<TokenInfo> {
         self.v2.token_info_lens.get_token_info(token).await
     }
 
     /// Batch [`Self::detect_token_info`] — one RPC call for the whole list,
     /// order preserved. Empty input returns an empty vec without an RPC.
+    ///
+    /// **Mainnet:** the shipped `TOKEN_INFO_LENS` address is not a
+    /// `TokenInfoLens` (another contract lives there), so this errors there;
+    /// use [`Self::detect_token_info_with_api`].
     pub async fn detect_token_infos(&self, tokens: Vec<Address>) -> Result<Vec<TokenInfo>> {
         self.v2.token_info_lens.get_token_infos(tokens).await
+    }
+
+    /// Classify a token from the v2 `TokenRegistry` plus the api-server
+    /// (`GET /token/{token}`) instead of the `TokenInfoLens`. Use this on
+    /// mainnet, where the shipped `TOKEN_INFO_LENS` address holds a different
+    /// contract and lens calls revert.
+    ///
+    /// The chain is read first: a registry entry means V2 with that quote
+    /// token, whatever the API says. Only an unregistered token is looked up
+    /// in the API: V1 -> the network's WMON; the api-server's 404 error body
+    /// -> `SdkVersion::None` with `Address::ZERO` (lens semantics). An API that
+    /// claims V2 for an unregistered token, any other API error (including a
+    /// 404 without the api-server error body), or an `api` bound to a
+    /// different network than this `Core` is an error.
+    pub async fn detect_token_info_with_api(
+        &self,
+        api: &ApiClient,
+        token: Address,
+    ) -> Result<TokenInfo> {
+        if api.network() != self.network {
+            anyhow::bail!(
+                "detect_token_info_with_api: ApiClient is bound to {:?} but Core is on {:?}",
+                api.network(),
+                self.network,
+            );
+        }
+        // Chain first: a v2 registry entry is authoritative (covers tokens the
+        // API has not indexed yet and an API that misreports the version).
+        let quote = self.v2.token_registry.get_quote_token(token).await?;
+        if quote != Address::ZERO {
+            return Ok(TokenInfo {
+                version: SdkVersion::V2,
+                quote_token: quote,
+            });
+        }
+        let Some(api_info) = api.get_token_opt(token).await? else {
+            return Ok(TokenInfo {
+                version: SdkVersion::None,
+                quote_token: Address::ZERO,
+            });
+        };
+        let quote_token = match api_info.version {
+            SdkVersion::V1 => crate::constants::get_wmon(self.network).parse()?,
+            SdkVersion::V2 => anyhow::bail!(
+                "detect_token_info_with_api: API reports {token} as V2 but the v2 \
+                 TokenRegistry has no entry for it"
+            ),
+            SdkVersion::None => Address::ZERO,
+        };
+        Ok(TokenInfo {
+            version: api_info.version,
+            quote_token,
+        })
+    }
+
+    /// Version-only [`Self::detect_token_info_with_api`].
+    pub async fn detect_version_with_api(
+        &self,
+        api: &ApiClient,
+        token: Address,
+    ) -> Result<SdkVersion> {
+        Ok(self.detect_token_info_with_api(api, token).await?.version)
     }
 
     /// Get transaction receipt for `tx_hash`. Works for both v1 and v2

@@ -21,9 +21,10 @@
 
 use crate::constants::{get_api_server_url, Network};
 use crate::types::{
-    ApiErrorResponse, ApiTokenInfo, CreateTokenParams, CreatedToken, CreatedTokenResponse,
-    CreatorBatchClaimParams, CreatorClaimParams, MetadataParams, PostMetadataData, PostSaltData,
-    SaltParams, UploadImageData, V2PrepareCreationParams, V2PreparedCreation, VaultState,
+    ApiErrorResponse, ApiQuoteToken, ApiTokenInfo, CreateTokenParams, CreatedToken,
+    CreatedTokenResponse, CreatorBatchClaimParams, CreatorClaimParams, MetadataParams,
+    PostMetadataData, PostSaltData, SaltParams, UploadImageData, V2PrepareCreationParams,
+    V2PreparedCreation, VaultState,
 };
 use crate::version::SdkVersion;
 use alloy::primitives::{Address, B256, U256};
@@ -482,6 +483,20 @@ impl ApiClient {
     /// address from outside (e.g. a wallet UI or message). For tight loops,
     /// cache the result; the version of a token does not change.
     pub async fn get_token(&self, token: Address) -> Result<ApiTokenInfo> {
+        self.get_token_opt(token)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("get_token({:?}) failed: token not found (404)", token))
+    }
+
+    /// [`Self::get_token`] with the api-server's 404 error body (unknown token)
+    /// mapped to `None`, so callers can tell "not a Nad.fun token" from other
+    /// failures.
+    pub(crate) async fn get_token_opt(&self, token: Address) -> Result<Option<ApiTokenInfo>> {
+        // The api-server wraps the record: `{"token_info": {..}}`.
+        #[derive(serde::Deserialize)]
+        struct Response {
+            token_info: ApiTokenInfo,
+        }
         // `format!("{:?}", token)` produces the EIP-55 mixed-case `0x...` form.
         let url = format!("{}/token/{:?}", self.api_url, token);
         let response = self.get(&url).send().await?;
@@ -489,13 +504,20 @@ impl ApiClient {
         let body = response.text().await?;
         if !status.is_success() {
             if let Ok(err) = serde_json::from_str::<ApiErrorResponse>(&body) {
+                // Only the api-server's own 404 body means "unknown token"; a
+                // bare 404 (wrong base URL, proxy page) stays an error.
+                if status == reqwest::StatusCode::NOT_FOUND {
+                    return Ok(None);
+                }
                 anyhow::bail!("get_token({:?}) failed: {}", token, err.error);
             }
             anyhow::bail!("get_token({:?}) failed with {}: {}", token, status, body);
         }
-        serde_json::from_str(&body).map_err(|e| {
-            anyhow::anyhow!("Failed to parse get_token response: {}. Body: {}", e, body)
-        })
+        serde_json::from_str::<Response>(&body)
+            .map(|r| Some(r.token_info))
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to parse get_token response: {}. Body: {}", e, body)
+            })
     }
 
     /// Look up the v2 vault state for a token (fees per vault slot, totals,
@@ -524,6 +546,42 @@ impl ApiClient {
                 body
             )
         })
+    }
+}
+
+// === Quote Token API ===
+
+impl ApiClient {
+    /// Quote tokens registered on the api-server (`GET /quote_token`), in
+    /// registration order.
+    ///
+    /// Not authoritative: the API returns its DB rows without filtering on
+    /// the on-chain allow-list. For anything that moves funds use
+    /// [`crate::quote_tokens`] or `ProtocolManager.isAllowed` + the token's
+    /// on-chain `decimals()`.
+    pub async fn get_quote_tokens(&self) -> Result<Vec<ApiQuoteToken>> {
+        #[derive(serde::Deserialize)]
+        struct Response {
+            quote_tokens: Vec<ApiQuoteToken>,
+        }
+        let url = format!("{}/quote_token", self.api_url);
+        let response = self.get(&url).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        if !status.is_success() {
+            if let Ok(err) = serde_json::from_str::<ApiErrorResponse>(&body) {
+                anyhow::bail!("get_quote_tokens failed: {}", err.error);
+            }
+            anyhow::bail!("get_quote_tokens failed with {}: {}", status, body);
+        }
+        let parsed: Response = serde_json::from_str(&body).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse get_quote_tokens response: {}. Body: {}",
+                e,
+                body
+            )
+        })?;
+        Ok(parsed.quote_tokens)
     }
 }
 
