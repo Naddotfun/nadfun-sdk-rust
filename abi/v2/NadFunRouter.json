@@ -100,6 +100,52 @@
       {
         "name": "params",
         "type": "tuple",
+        "internalType": "struct INadFunRouter.V2BuyParams",
+        "components": [
+          {
+            "name": "amountOutMin",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "to",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "path",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "buyWithNative",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
         "internalType": "struct INadFunRouter.BuyWithNativeParams",
         "components": [
           {
@@ -292,6 +338,104 @@
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createWithNative",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct INadFunRouter.V2CreateParams",
+        "components": [
+          {
+            "name": "name",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "tokenURI",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "quoteToken",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "creatorFeeRate",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "vaults",
+            "type": "tuple[]",
+            "internalType": "struct IBondingCurve.VaultAllocation[]",
+            "components": [
+              {
+                "name": "vault",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "bps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "setupData",
+                "type": "bytes",
+                "internalType": "bytes"
+              }
+            ]
+          },
+          {
+            "name": "salt",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "dexType",
+            "type": "uint8",
+            "internalType": "enum ITokenRegistry.DexType"
+          },
+          {
+            "name": "quoteAmountOutMin",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "path",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "payable"
   },
   {
     "type": "function",
@@ -604,6 +748,45 @@
         "internalType": "address"
       },
       {
+        "name": "nativeIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "isBuy",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "path",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "quoteOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "tokenOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getAmountOut",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
         "name": "amountIn",
         "type": "uint256",
         "internalType": "uint256"
@@ -741,6 +924,54 @@
   },
   {
     "type": "function",
+    "name": "getNativeAmountOut",
+    "inputs": [
+      {
+        "name": "path",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "quoteIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "nativeOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getQuoteAmountOut",
+    "inputs": [
+      {
+        "name": "path",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "nativeIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "quoteOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "initialize",
     "inputs": [
       {
@@ -765,6 +996,24 @@
       },
       {
         "name": "lvMonMinter_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initializeV2",
+    "inputs": [
+      {
+        "name": "pancakeSwapRouter_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "quoteLens_",
         "type": "address",
         "internalType": "address"
       }
@@ -826,6 +1075,19 @@
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "quoteLens",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1069,6 +1331,45 @@
   },
   {
     "type": "function",
+    "name": "setQuoteLens",
+    "inputs": [
+      {
+        "name": "quoteLens_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setSwapExecutor",
+    "inputs": [
+      {
+        "name": "swapExecutor_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "swapExecutor",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "tokenRegistry",
     "inputs": [],
     "outputs": [
@@ -1195,6 +1496,50 @@
   },
   {
     "type": "event",
+    "name": "NativeRefundFallback",
+    "inputs": [
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "quoteToken",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "QuoteLensUpdated",
+    "inputs": [
+      {
+        "name": "oldLens",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newLens",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Sell",
     "inputs": [
       {
@@ -1226,6 +1571,25 @@
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SwapExecutorUpdated",
+    "inputs": [
+      {
+        "name": "oldExecutor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newExecutor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -1365,7 +1729,47 @@
   },
   {
     "type": "error",
+    "name": "InvalidPancakeQuoterV2",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPancakeSwapRouter",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidQuoteLens",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidRecipient",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRoute",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidSwapExecutor",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NativeQuoteMustUseRoute",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NativeQuoteNotSupportedByRoute",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NativeQuoteOnlySupportsBuy",
     "inputs": []
   },
   {
@@ -1376,6 +1780,11 @@
   {
     "type": "error",
     "name": "NotInitializing",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PancakeFactoryMismatch",
     "inputs": []
   },
   {

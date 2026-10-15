@@ -83,8 +83,11 @@ pub struct V2CreateWithNativeParams {
     pub symbol: String,
     pub token_uri: String,
     /// Quote token for the new token. Native funding only supports the
-    /// wrapped native (WMON) or LvMON (minted from native); any other value
-    /// reverts on-chain with `InvalidNativeQuoteToken`. The caller supplies
+    /// wrapped native (WMON) or LvMON (minted from native); any other quote
+    /// reverts on-chain with `NativeQuoteMustUseRoute` (routers with a swap
+    /// executor set, as both deployed routers are; otherwise
+    /// `InvalidNativeQuoteToken`) — create those with [`V2CreateParams`]
+    /// (ERC-20, pre-approved). The caller supplies
     /// it explicitly — resolve a native-equivalent via
     /// `constants::quote_tokens(network)` or `core.v2().wrapped_native()`.
     pub quote_token: Address,
@@ -221,8 +224,15 @@ pub struct V2ExactOutSellParams {
     pub nonce: Option<u64>,
 }
 
+/// Params for `sell_to_native`. WMON-quoted tokens only: the router unwraps
+/// WMON to pay native, so any other quote (LVMON, USDC, ...) reverts — use
+/// [`V2SellParams`] with `sell` for those.
 pub type V2SellToNativeParams = V2SellParams;
+/// Params for `sell_to_native_with_permit`. WMON-quoted tokens only (see
+/// [`V2SellToNativeParams`]).
 pub type V2SellToNativeWithPermitParams = V2SellWithPermitParams;
+/// Params for `exact_out_sell_to_native`. WMON-quoted tokens only (see
+/// [`V2SellToNativeParams`]).
 pub type V2ExactOutSellToNativeParams = V2ExactOutSellParams;
 
 // ============================================================================
@@ -248,8 +258,10 @@ pub enum V2CreatePayment {
     /// the caller supplies it explicitly. Get a valid native quote token from
     /// `constants::quote_tokens(network)` (any entry with `is_native == true`,
     /// e.g. the `MON`/WMON or `LVMON` row) or from
-    /// `core.v2().wrapped_native()`. Anything the on-chain `createWithNative`
-    /// rejects reverts with `InvalidNativeQuoteToken`.
+    /// `core.v2().wrapped_native()`. Any other quote (e.g. USDC) reverts with
+    /// `NativeQuoteMustUseRoute` (routers with a swap executor set, as both
+    /// deployed routers are; otherwise `InvalidNativeQuoteToken`); use
+    /// [`V2CreatePayment::Erc20`] for those.
     Native {
         /// Native-equivalent quote token to fund the create with (WMON or
         /// LVMON). Resolve it via `constants::quote_tokens(network)` or

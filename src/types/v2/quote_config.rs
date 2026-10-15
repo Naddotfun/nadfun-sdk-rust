@@ -1,6 +1,8 @@
-//! On-chain per-quote-token protocol config for v2.
+//! On-chain per-quote-token protocol config for v2, plus the api-server
+//! quote-token catalog row.
 
-use alloy::primitives::U256;
+use alloy::primitives::{Address, U256};
+use serde::Deserialize;
 
 /// Per-quote-token bonding-curve + protocol configuration, as returned by
 /// `ProtocolManager.getConfig(address)`.
@@ -35,4 +37,21 @@ pub struct V2QuoteConfig {
     pub settlement_threshold: U256,
     /// Whether this quote token is currently allowed for new curves.
     pub active: bool,
+}
+
+/// One row of the api-server quote-token catalog (`GET /quote_token`).
+///
+/// Not authoritative: the API returns its DB rows without filtering on the
+/// on-chain allow-list. For anything that moves funds use
+/// [`crate::quote_tokens`] or `ProtocolManager.isAllowed` + the token's
+/// on-chain `decimals()`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
+pub struct ApiQuoteToken {
+    /// Quote-token contract address.
+    pub quote_id: Address,
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u8,
+    pub image_uri: String,
 }
