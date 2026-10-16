@@ -332,8 +332,10 @@ After the create transaction is mined, query the live token:
   (`market_type` is `CURVE`/`DEX` for v1, `V2_CURVE`/`V2_DEX` for v2).
 - `GET /trade/*` — market, chart, metrics, swap history, holders.
 
-The SDK exposes `core.detect_version(token)` / `core.detect_token_info(token)`
-for the on-chain version probe, and curve/DEX indexers under `nadfun_sdk::stream`.
+The SDK exposes `core.detect_version_with_api(&api, token)` /
+`core.detect_token_info_with_api(&api, token)` (v2 registry first, api-server for unregistered tokens;
+use these on mainnet, where the shipped lens address holds another contract),
+the lens-based `core.detect_version(token)` / `core.detect_token_info(token)`, and curve/DEX indexers under `nadfun_sdk::stream`.
 
 ---
 
@@ -370,7 +372,7 @@ for the on-chain version probe, and curve/DEX indexers under `nadfun_sdk::stream
 
 | Network | Base URL |
 |---------|----------|
-| Mainnet | `https://api.nadapp.net` |
+| Mainnet | `https://api.nad.fun` |
 | Testnet | `https://dev-api.nadapp.net` |
 
 External callers may send requests without an `X-API-Key` (lower rate limit) or

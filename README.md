@@ -8,8 +8,29 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.4.0"
+nadfun_sdk = "0.4.2"
 ```
+
+## What's new in 0.4.2
+
+- **Multi-quote trading.** `quote_tokens(network)` lists every on-chain allowed
+  v2 quote (mainnet 7: MON/WMON, LVMON, BNCB, USDC, aWEN, aQQQ, aHOOD; testnet 9).
+  Tokens on a non-native quote (USDC, aStocks, ...) trade through the ERC-20
+  `create` / `buy` / `sell` (+ permit) methods — see
+  [Multi-quote trading](#multi-quote-trading). Quotes can have 6 decimals (USDC).
+- **API-based token detection.** `Core::detect_token_info_with_api` /
+  `detect_version_with_api` read the v2 `TokenRegistry` first and ask the
+  api-server only for unregistered tokens. Use them on mainnet: the shipped
+  mainnet `TOKEN_INFO_LENS` address is not a TokenInfoLens, so the lens-based
+  `detect_*` methods revert there.
+- **Fixes and endpoints.** `ApiClient::get_token` parses the live
+  `{"token_info": ..}` response; the mainnet API is now `https://api.nad.fun`;
+  `ApiClient::get_quote_tokens()` returns the api-server catalog
+  (non-authoritative — use `quote_tokens()` / on-chain config for funds).
+- **Router ABI** refreshed to the latest `NadFunRouter`; existing methods are
+  unchanged. Nine unused v2 address getters are deprecated (removed in 0.5.0).
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the full list.
 
 ## Quick Start
 
@@ -79,7 +100,7 @@ Nad.fun ships two generations of contracts. Starting in 0.4.0 a single
 |---|---|---|
 | Method names | `core.v1().buy` / `core.v1().sell` / `core.v1().get_amount_out` / `core.v1().create_token` | `core.v2().buy` / `core.v2().sell` / `core.v2().get_amount_out` / `core.v2().create_token` |
 | Routers | `BondingCurveRouter` + `DexRouter` (Capricorn CL) | unified `NadFunRouter` |
-| Quote tokens | MON only | MON + arbitrary ERC-20 |
+| Quote tokens | MON only | per token: MON (WMON) / LVMON (native-funded) or an ERC-20 quote (USDC, aStocks, ...) — see [Multi-quote trading](#multi-quote-trading) |
 | Vaults | n/a | Burn / LP / CreatorFee / Gift |
 | Streaming | `CurveStream` / `DexStream` | `CurveStreamV2` / `NadFunSwapStream` |
 
@@ -87,8 +108,11 @@ Dispatch a v1 vs v2 path with the on-chain probe. The SDK does **not**
 auto-route between generations — you pick the method by version:
 
 ```rust
-// `detect_version` does one `TokenInfoLens` call and returns V1 / V2 / None.
-match core.detect_version(token).await? {
+// v2 TokenRegistry first, api-server for unregistered tokens. Works on every
+// network (the lens-based `detect_version` does not work on mainnet: the
+// shipped TokenInfoLens address holds another contract).
+let api = ApiClient::new(Network::Mainnet);
+match core.detect_version_with_api(&api, token).await? {
     SdkVersion::V1 => {
         // v1 quote returns (router, expected); buy takes that router.
         let (router, expected) = core.v1().get_amount_out(token, mon_amount, true).await?;
@@ -96,7 +120,8 @@ match core.detect_version(token).await? {
         core.v1().buy(/* BuyParams { .. } */, router).await?;
     }
     SdkVersion::V2 => {
-        // v2 quote is quote-agnostic; the trade method funds the buy.
+        // Native MON in works only for WMON/LVMON-quoted tokens; other quotes
+        // (USDC, ...) use the ERC-20 `buy` — see "Multi-quote trading".
         let expected = core.v2().get_amount_out(token, mon_amount, true).await?;
         let min_out = SlippageUtils::calculate_amount_out_min(expected, 5.0);
         core.v2().buy_with_native(/* V2BuyWithNativeParams { .. } */).await?;
@@ -107,7 +132,10 @@ match core.detect_version(token).await? {
 
 Need the token's quote token alongside the version (to choose
 `core.v2().buy_with_native` vs `core.v2().buy` for an ERC-20-quoted v2 token)? Use
-`core.detect_token_info(token).await?` → `TokenInfo { version, quote_token }`.
+`core.detect_token_info_with_api(&api, token).await?` → `TokenInfo { version, quote_token }`
+(a v2 registry entry is authoritative; an unregistered token the api-server
+404s is `SdkVersion::None`). The lens-based `detect_version` /
+`detect_token_info` (+ batch forms) remain and work on testnet only.
 The complete runnable dispatcher (including the v2 native-vs-ERC-20 quote
 routing) is [`examples/unified_dispatch.rs`](examples/unified_dispatch.rs).
 
@@ -160,7 +188,70 @@ End-to-end v2 token creation, exact-output, ERC-20 quote, permits, pool
 discovery, and event streaming are covered under
 [`examples/v2/`](examples/v2/).
 
-#### v2 view / query parity
+### Multi-quote trading
+
+Every v2 token trades against one quote token, fixed at creation. Pick the
+method family from that quote:
+
+| Token's quote | Buy / create with | Sell with |
+|---|---|---|
+| MON (WMON) — `is_native` | `buy_with_native` / `create_with_native` (send MON), or ERC-20 `buy` / `create` in WMON | `sell_to_native` (receive MON) or `sell` (receive WMON) |
+| LVMON — `is_native` | `buy_with_native` / `create_with_native` (router mints LVMON from MON), or ERC-20 in LVMON | `sell` (receive LVMON) — `sell_to_native` is WMON-only |
+| Any other quote (USDC, AUSD, BNCB, aStocks, ...) | ERC-20 `buy` / `buy_with_permit` / `create` in that token | `sell` / `sell_with_permit` (receive that token) |
+
+1. **Find the quote.** `core.detect_token_info_with_api(&api, token)` returns
+   `TokenInfo { version, quote_token }` on every network (v2 registry first,
+   api-server for unregistered tokens; required on mainnet, where the lens-based
+   `detect_token_info` reverts). For a known v2 token,
+   `core.v2().quote_token(token)` reads it directly.
+2. **Classify it.** `quote_tokens(network)` marks the native-funded quotes
+   (`is_native`: MON/WMON and LVMON). `is_native` covers buy/create only;
+   native-out sells (`sell_to_native`, `sell_to_native_with_permit`,
+   `exact_out_sell_to_native`) unwrap WMON and work for WMON-quoted tokens only.
+3. **Native quotes** use the `*_with_native` methods with MON amounts (18
+   decimals). On any other quote they revert with `NativeQuoteMustUseRoute`
+   (both deployed routers have a swap executor set; without one the router
+   reverts `InvalidNativeQuoteToken`).
+4. **Other quotes** use the ERC-20 methods. Amounts are in the quote's own
+   decimals — read them from `core.v2().quote_config(quote).await?.decimals`
+   (on-chain `ProtocolManager` config; USDC is 6) — and the v2 router
+   (`core.v2().router().address`) must be approved for the quote first, or use
+   the `*_with_permit` variants. Creating such a token is
+   `V2CreatePayment::Erc20 { quote_token }` with `buy_quote_amount` in the
+   quote's decimals.
+
+```rust,ignore
+use alloy::primitives::utils::parse_units;
+
+let api = ApiClient::new(Network::Mainnet);
+let info = core.detect_token_info_with_api(&api, token).await?;   // V2 + quote
+let decimals = core.v2().quote_config(info.quote_token).await?.decimals;
+let amount_in = parse_units("10", decimals)?.get_absolute();      // 10 USDC = 10_000_000
+
+// approve core.v2().router().address for `amount_in` of info.quote_token first
+let expected = core.v2().get_amount_out(token, amount_in, true).await?;
+core.v2().buy(V2BuyParams {
+    token,
+    to: core.wallet_address(),
+    amount_in,
+    amount_out_min: SlippageUtils::calculate_amount_out_min(expected, 5.0),
+    deadline: U256::from(9_999_999_999u64),
+    gas_limit: None,
+    gas_price: None,
+    nonce: None,
+}).await?;
+
+// Selling returns the quote token (approve the router for the token first).
+let proceeds = core.v2().get_amount_out(token, token_amount, false).await?; // in quote decimals
+```
+
+`ApiClient::get_quote_tokens()` lists the api-server catalog, but it is not
+filtered on the on-chain allow-list; for anything that moves funds rely on
+`quote_tokens(network)` or `ProtocolManager.isAllowed` + on-chain `decimals()`.
+[`examples/unified_dispatch.rs`](examples/unified_dispatch.rs) puts detection,
+`is_native` routing, and decimal scaling together.
+
+### v2 view / query parity
 
 Thin `core.v2()` wrappers over the on-chain v2 views, mirroring the v1 query
 surface:
@@ -243,7 +334,7 @@ export NAD_API_KEY=nadfun_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ```bash
 # Or via API (requires session cookie from login)
-curl -X POST https://api.nadapp.net/api-key \
+curl -X POST https://api.nad.fun/api-key \
   -H "Content-Type: application/json" \
   -H "Cookie: nadfun-v3-api=<your_session>" \
   -d '{
@@ -269,10 +360,10 @@ curl -X POST https://api.nadapp.net/api-key \
 
 ```bash
 # List your API keys
-curl https://api.nadapp.net/api-key -H "Cookie: nadfun-v3-api=<your_session>"
+curl https://api.nad.fun/api-key -H "Cookie: nadfun-v3-api=<your_session>"
 
 # Delete an API key
-curl -X DELETE https://api.nadapp.net/api-key/<id> -H "Cookie: nadfun-v3-api=<your_session>"
+curl -X DELETE https://api.nad.fun/api-key/<id> -H "Cookie: nadfun-v3-api=<your_session>"
 ```
 
 #### Limits & Security
@@ -401,7 +492,8 @@ Execute buy/sell operations on bonding curves with slippage protection:
 > v1 trading shown here. For v2 (`core.v2().buy` / `core.v2().buy_with_native` /
 > `core.v2().sell_to_native` / `core.v2().get_amount_out`) see [v2 Quick Start](#v2-quick-start)
 > and [`examples/v2/`](examples/v2/). Choose the path by token version
-> (`core.detect_version(token)`), as shown above.
+> (`core.detect_version_with_api(&api, token)`) and, for v2, by quote token
+> ([Multi-quote trading](#multi-quote-trading)), as shown above.
 
 ```rust
 use nadfun_sdk::{Core, SlippageUtils, GasEstimationParams};
@@ -1169,9 +1261,12 @@ All contract addresses are defined in `constants.rs` (the source of truth),
 organized by network and version (`addresses::{mainnet,testnet}::{v1,v2}`).
 Access them via the typed helpers — `get_bonding_curve(network)`,
 `get_nadfun_router_v2(network)` (returns `&str` directly — v2 is deployed on
-every network; only `get_fee_to_v2` returns `Option`), etc. The v2 set has many
-more contracts (vaults, registry, bonding curve, lens); the most useful are
-listed below.
+every network), etc. The v2 set has more contracts (vaults, registry, bonding
+curve, lens); the most useful are listed below. Deprecated since 0.4.2 (unused
+by the SDK, removed in 0.5.0): `get_creator_fee_processor_v2`,
+`get_fee_collector_v2`, `get_fee_to_v2`, `get_gift_vault_v2`,
+`get_lp_manager_v2`, `get_nad_swap_adapter_v2`, `get_nadfun_pair_impl_v2`,
+`get_token_impl_v2`, `get_vault_registry_v2` and their constants.
 
 #### Mainnet — v1
 
@@ -1188,7 +1283,7 @@ listed below.
 - NadFun Factory: `0xA25b13127e63ddae6d0b35570FF3D39dBD621001`
 - Token Registry: `0x3CBF1E9F8847A4c968Bb2636696723CC82b91565`
 - Bonding Curve (v2): `0x9f3832732923252A21044F21eE6bd87F09514ae4`
-- TokenInfoLens (v1/v2 classifier): `0x40c126f92DAD5C26D3b36aA7F2A949265FA534cB`
+- TokenInfoLens (v1/v2 classifier): `0x40c126f92DAD5C26D3b36aA7F2A949265FA534cB` — **not a TokenInfoLens**: another contract (~18KB, DEX-router-like) lives there and lens calls revert; use `Core::detect_token_info_with_api` on mainnet
 
 #### Testnet — v1
 
@@ -1216,6 +1311,16 @@ means the router can wrap native MON (`msg.value`) into it, so it is a valid
 `quote_token` for `V2CreatePayment::Native { quote_token }` and the
 `*_with_native` trades. `MON` is the wrapped native (WMON) per network — same
 address as the v1 `WMON` constant; the DB labels it `MON`/`MONAD`.
+`is_native == false` quotes are traded with the ERC-20 methods (`create` /
+`buy` / `sell` + permit) in that token, see
+[Multi-quote trading](#multi-quote-trading); the native-in methods revert
+with `NativeQuoteMustUseRoute` for them. `is_native` covers buy/create only:
+`*sell_to_native*` is WMON-quote only. Every row is
+`ProtocolManager.isAllowed == true` with on-chain decimals (verified
+2026-10-15). `ApiClient::get_quote_tokens()` returns the api-server's DB list,
+which is not filtered on the on-chain allow-list — for anything that moves
+funds use `quote_tokens()` or `ProtocolManager.isAllowed` + on-chain
+`decimals()`.
 
 ```rust
 use nadfun_sdk::{quote_tokens, Network};
@@ -1231,6 +1336,11 @@ for qt in quote_tokens(Network::Mainnet) {
 |--------|------|---------|----------|--------|
 | MON | MONAD | `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A` | 18 | yes |
 | LVMON | LeverUpMon | `0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56` | 18 | yes |
+| BNCB | Cea Industries | `0x094aDB9ab02Ed230697297C219073DC8C69Df0DF` | 18 | no |
+| USDC | USD Coin | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` | 6 | no |
+| aWEN | Wendy's aStock | `0x4644Fd1eab16A21969B4c16Be8A2D5c986033F2a` | 18 | no |
+| aQQQ | Invesco QQQ aStock | `0x1446501E886c7f830DB9b494A1890cBCCC072f57` | 18 | no |
+| aHOOD | Robinhood aStock | `0x5a4860adDCc094FcE026384caeEcb1e634DD9af4` | 18 | no |
 
 #### Testnet
 
@@ -1238,6 +1348,13 @@ for qt in quote_tokens(Network::Mainnet) {
 |--------|------|---------|----------|--------|
 | MON | MONAD | `0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd` | 18 | yes |
 | LVMON | LeverUpMon | `0xBe3fa50514D9617ce645a02B34F595541AF02b6b` | 18 | yes |
+| AUSD | Agora Dollar | `0x2523c381F49c73e840c87c6d63A6725AaDf0C62b` | 6 | no |
+| HOODB | Robinhood | `0x00675faD7Eb1cF45bbfF37c46E2483237D38Cb4B` | 18 | no |
+| USDC | USD Coin | `0x17b032Dc6B33D54328E4F6518852F3F3DB166d0E` | 6 | no |
+| BNCB | Cea Industries | `0x4C0920638766D229B99aE7B75E7187cE798F567C` | 18 | no |
+| aWEN | Wendy's aStock | `0x5e6c30e86E81160e4b2eA1c49f2045c10708b86E` | 18 | no |
+| aQQQ | Invesco QQQ aStock | `0x37B46AD5BF1f130C25020e333033c29F0f37b2dD` | 18 | no |
+| aHOOD | Robinhood aStock | `0x00d0e0939eC5Ac83b82A98c6a6dB1B12bf285A54` | 18 | no |
 
 ## Error Handling
 

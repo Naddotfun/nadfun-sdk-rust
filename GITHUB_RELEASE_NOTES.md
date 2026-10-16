@@ -1,5 +1,131 @@
 # Release Notes
 
+## v0.4.2 (2026-10-16)
+
+### 🚀 New Features
+
+- **Multi-quote trading** - every on-chain allowed v2 quote is in `quote_tokens(network)`
+  - Mainnet (7): MON/WMON, LVMON, BNCB, USDC (6 decimals), aWEN, aQQQ, aHOOD
+  - Testnet (9): MON/WMON, LVMON, AUSD (6), HOODB, USDC (6), BNCB, aWEN, aQQQ, aHOOD
+  - Tokens on a non-native quote trade through the ERC-20 `create` / `buy` / `sell` (+ permit) methods, with amounts in the quote's own decimals
+- **API-based token detection** - `Core::detect_token_info_with_api` / `Core::detect_version_with_api`
+  - Reads the v2 `TokenRegistry` first (a registry entry is V2 + its quote); only unregistered tokens ask the api-server (V1 -> WMON, api-server 404 -> `SdkVersion::None`)
+  - Use these on mainnet: the shipped mainnet `TOKEN_INFO_LENS` address is not a TokenInfoLens, so the lens-based `detect_*` methods revert there (they still work on testnet)
+- **`ApiClient::get_quote_tokens()`** - api-server quote-token catalog (`ApiQuoteToken`, `#[non_exhaustive]`); not filtered on the on-chain allow-list, so use `quote_tokens()` or on-chain config for anything that moves funds
+
+```rust
+let api = ApiClient::new(Network::Mainnet);
+let info = core.detect_token_info_with_api(&api, token).await?;
+let native = quote_tokens(Network::Mainnet)
+    .iter()
+    .any(|q| q.is_native && q.address.parse::<Address>().ok() == Some(info.quote_token));
+if native {
+    // core.v2().buy_with_native(..) with MON
+} else {
+    let decimals = core.v2().quote_config(info.quote_token).await?.decimals;
+    // approve the router, then core.v2().buy(..) with an amount in `decimals`
+}
+```
+
+### 🔧 Fixes & Changes
+
+- **`ApiClient::get_token` fixed** - parses the live `{"token_info": {..}}` response (it failed on every live response before); a 404 reports `token not found (404)`
+- **Mainnet API URL** - `https://api.nad.fun` (was `https://api.nadapp.net`); testnet unchanged
+- **Router ABI refreshed** to the latest `NadFunRouter`; existing methods keep their signatures and behavior
+- **Native-path constraints documented**
+  - `buy_with_native` / `create_with_native` work only for `is_native` quotes (WMON, LVMON); others revert `NativeQuoteMustUseRoute` (`InvalidNativeQuoteToken` on a router without a swap executor)
+  - `sell_to_native` / `sell_to_native_with_permit` / `exact_out_sell_to_native` are WMON-quote only
+- **`examples/unified_dispatch.rs`** - API-based detection, `is_native` routing, and quote-decimal scaling
+
+### ⚠️ Deprecated (removed in 0.5.0)
+
+- Nine unused v2 address getters and their constants: `get_creator_fee_processor_v2`, `get_fee_collector_v2`, `get_fee_to_v2`, `get_gift_vault_v2`, `get_lp_manager_v2`, `get_nad_swap_adapter_v2`, `get_nadfun_pair_impl_v2`, `get_token_impl_v2`, `get_vault_registry_v2`
+
+### 🧪 Testing
+
+- Testnet anvil-fork E2E: `scripts/e2e-fork.sh` (report at `target/e2e-fork-report.json`) — USDC-quoted create/buy/sell including large sizes and the graduation boundary, WMON native regression, the `NativeQuoteMustUseRoute` revert, and API detection
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.4.2"
+```
+
+---
+
+## v0.4.1 (2026-07-01)
+
+### 🚀 New Features
+
+- **v2 DEX live `Sync` stream** - `NadFunSyncStream` pushes `NadFunPair::Sync(reserve0, reserve1)` snapshots over WebSocket on every trade/mint/burn
+  - `NadFunSyncEvent`, `decode_nadfun_sync_event`, `nadfun_sync_signature`, re-exported at `nadfun_sdk::stream::*`
+  - `reserve0` / `reserve1` follow the pair's `token0` / `token1` order; map a side via `core.v2().quote_token(token)`
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.4.1"
+```
+
+---
+
+## v0.4.0 (2026-05-31)
+
+### 🚀 New Features
+
+- **Unified `Core` for v1 + v2** - one instance, namespace handles `core.v1()` / `core.v2()`
+  - v2 trading (`buy`, `buy_with_native`, `buy_with_permit`, `sell`, `sell_to_native`, permit and exact-out variants), creation (`create`, `create_with_native`, `create_token`), quotes, and gas estimation on the `NadFunRouter`
+  - `Core::detect_version` / `Core::detect_token_info` (`TokenInfo { version, quote_token }`) and `SdkVersion::None`
+- **v2 views and helpers** - `get_curve`, `quote_config`, `is_halted`, `get_sniping_penalty`, `get_reserves`, `get_progress`, `available_buy_tokens`, exact `get_initial_buy_amount_out`
+- **`quote_tokens(network)`** - structured v2 quote-token registry (`QuoteToken { address, symbol, name, decimals, is_native }`)
+- **v2 streaming** - `CurveStreamV2`, `CurveIndexerV2`, `NadFunSwapStream`, `NadFunSwapIndexer`, `discover_pools_unified`
+- **ApiClient v2** - `get_token` with `version`, `get_token_vaults`, `prepare_token_creation_v2`
+
+### ⚠️ Breaking Changes
+
+- Trading methods moved behind `core.v1()` / `core.v2()`; `CoreV2` and the `*_v2` suffixes are gone
+- `Network` is passed to every constructor (`ApiClient::new(network)`, streams, indexers, pool discovery); `set_network` removed
+- v2 address helpers return `&'static str` (only `get_fee_to_v2` stays `Option`)
+- `V2CreatePayment::Native { quote_token }`, required `SaltParams.version`, `V2BuyWithNativeParams.value`; `get_lv_mon_v2` / `LV_MON` removed
+
+See [`MIGRATION.md`](MIGRATION.md) for the upgrade path.
+
+### 🔧 Fixes
+
+- v2 event decoding reads indexed fields from topics; `create_token` verifies the on-chain `Create` event against the predicted address; null-tolerant `ApiTokenInfo.version`; network-correct WMON in pool discovery
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.4.0"
+```
+
+---
+
+## v0.3.12 (2025-02-02)
+
+### 🚀 New Features
+
+- **API key authentication** - `ApiClient::from_env()` (`NAD_API_KEY`) / `.with_api_key()` for higher rate limits
+- **Creator rewards** - `ApiClient::get_created_tokens()`, `build_claim_params()`, `build_batch_claim_params()`, `Core::claim_creator_reward()`, `Core::claim_creator_rewards_batch()`
+
+### 🔧 Changes
+
+- Mainnet API URL `https://api.nadapp.net`; token creation uses `/agent/*` endpoints
+- `TokenCreationClient` deprecated — use `ApiClient` directly
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.3.12"
+```
+
+---
+
 ## v0.3.10 (2025-12-23)
 
 ### 🔧 Code Quality
