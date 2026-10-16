@@ -15,6 +15,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] — Unreleased
 
+### Breaking
+
+- **alloy 1.1 → 2.5.** Public items that use alloy types (`Address`, `U256`,
+  `B256`, `Bytes`, `DynProvider`, `Log`/`TransactionReceipt` in
+  `TransactionResult`, `PendingTransactionBuilder`, the `sol!`-generated event
+  types, ...) now use alloy 2.x types, so downstream crates must depend on
+  alloy 2.x too (mixing alloy 1.x and 2.x types fails to type-check).
+- **reqwest 0.12 → 0.13 in the public API:** `ApiClient::{request, get, post,
+  delete}` take/return reqwest 0.13 types (`reqwest::Method`,
+  `reqwest::RequestBuilder`), and `ApiClient` error chains carry reqwest 0.13
+  errors — a caller still on reqwest 0.12 doing
+  `err.downcast_ref::<reqwest::Error>()` now silently gets `None`.
+- **MSRV is now rustc 1.94.1** (`rust-version` in `Cargo.toml`), required by
+  alloy 2.5.
+- **TLS stack:** reqwest 0.13's default TLS is rustls with the OS trust store
+  (via `rustls-platform-verifier`) instead of native-tls, using the
+  `aws-lc-rs` crypto backend. That adds a native build dependency
+  (`aws-lc-sys`): a C compiler is required, cmake on musl / cross targets,
+  and NASM may be needed on Windows. reqwest's `system-proxy` default means
+  system proxy settings are now honoured.
+- **`ApiClient` refuses cross-origin redirects.** reqwest forwards custom
+  headers such as `X-API-Key` on redirect (it strips only Authorization /
+  Cookie / Proxy-Authorization / WWW-Authenticate), so a redirect from the API
+  host to another origin now fails instead of leaking the key. Same-origin
+  redirects still follow (limit 10). Image downloads in
+  `upload_image_from_uri` (no API key sent) still follow any redirect.
+
+### Compatibility notes
+
+- The first WebSocket connect installs `aws-lc-rs` as the process-wide rustls
+  `CryptoProvider`. An application that later calls
+  `CryptoProvider::install_default(..).unwrap()` will panic — install your
+  provider before using the SDK's streams, or handle the `Err`.
+- Library consumers: your `Cargo.lock` does not inherit ours. Run
+  `cargo update -p rustls-webpki` so it resolves to ≥ 0.103.15.
+
+### Removed
+
+- The 26 items deprecated in 0.4.2: `get_creator_fee_processor_v2`,
+  `get_fee_collector_v2`, `get_fee_to_v2`, `get_gift_vault_v2`,
+  `get_lp_manager_v2`, `get_nad_swap_adapter_v2`, `get_nadfun_pair_impl_v2`,
+  `get_token_impl_v2`, `get_vault_registry_v2`, and their constants
+  `CREATOR_FEE_PROCESSOR`, `FEE_COLLECTOR`, `FEE_TO` (testnet only), `GIFT_VAULT`,
+  `LP_MANAGER`, `NAD_SWAP_ADAPTER`, `NAD_FUN_PAIR_IMPL`, `TOKEN_IMPL`,
+  `VAULT_REGISTRY` under `addresses::{mainnet,testnet}::v2`.
+
 ### Fixed
 
 - **Nonce gap after a failed send.** The signing providers built by
@@ -90,6 +136,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dependencies bumped to the latest stable releases: alloy 1.1.2 → 2.5.0,
+  reqwest 0.12 → 0.13.5, tokio 1.0 → 1.53.3, serde 1.0 → 1.0.229, serde_json
+  1.0 → 1.0.154, anyhow 1.0 → 1.0.104, futures-util 0.3 → 0.3.34, async-stream
+  0.3 → 0.3.6, rayon 1.8 → 1.12.0, chrono 0.4 → 0.4.45, clap 4.5 → 4.6.7, hex
+  0.4 → 0.4.3; dev: tokio-test 0.4 → 0.4.6, wiremock 0.6 → 0.6.5 (minimum
+  requirements in `Cargo.toml`; `Cargo.lock` refreshed).
+- Docs and examples no longer use gas prices below Monad's 100 gwei minimum
+  base fee (`50_000_000_000` -> `100_000_000_000`; example fallbacks likewise).
 - **Behaviour changes on `Core::new` / `TokenHelper::new` providers (may
   affect existing callers):**
   - sends from one account are serialized process-wide; concurrent calls queue

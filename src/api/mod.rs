@@ -32,6 +32,31 @@ use anyhow::Result;
 use reqwest::{Client, Method, RequestBuilder};
 use std::str::FromStr;
 
+/// HTTP client for api-server requests: reqwest defaults (TLS verification,
+/// proxy, 10-redirect limit) except that redirects leaving the API's origin are
+/// refused, because reqwest forwards custom headers such as `X-API-Key` on
+/// redirect (it strips only Authorization / Cookie / Proxy-Authorization /
+/// WWW-Authenticate).
+fn api_http_client() -> Client {
+    let policy = reqwest::redirect::Policy::custom(|attempt| {
+        let same_origin = attempt
+            .previous()
+            .first()
+            .is_some_and(|first| first.origin() == attempt.url().origin());
+        if !same_origin {
+            attempt.error("refusing cross-origin redirect from the API host")
+        } else if attempt.previous().len() > 10 {
+            attempt.error("too many redirects")
+        } else {
+            attempt.follow()
+        }
+    });
+    Client::builder()
+        .redirect(policy)
+        .build()
+        .expect("reqwest client (same failure mode as Client::new)")
+}
+
 /// Allowed image types for token creation
 pub const ALLOWED_IMAGE_TYPES: [&str; 4] =
     ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
@@ -60,7 +85,7 @@ impl ApiClient {
     /// ```
     pub fn new(network: Network) -> Self {
         Self {
-            http_client: Client::new(),
+            http_client: api_http_client(),
             api_url: get_api_server_url(network).to_string(),
             api_key: None,
             network,
@@ -78,7 +103,7 @@ impl ApiClient {
     pub fn from_env(network: Network) -> Self {
         let api_key = std::env::var("NAD_API_KEY").ok();
         Self {
-            http_client: Client::new(),
+            http_client: api_http_client(),
             api_url: get_api_server_url(network).to_string(),
             api_key,
             network,
@@ -180,7 +205,9 @@ impl ApiClient {
     /// * `UploadImageData` - Contains the uploaded image URI and NSFW status
     pub async fn upload_image_from_uri(&self, image_uri: &str) -> Result<UploadImageData> {
         // Download image (external URL, no API key needed)
-        let response = self.http_client.get(image_uri).send().await?;
+        // External image host: no API key is sent, so the default client (which
+        // follows cross-host redirects, e.g. to a CDN) is fine here.
+        let response = Client::new().get(image_uri).send().await?;
 
         // Get content type from response header
         let header_content_type = response
