@@ -12,3 +12,5 @@ benches/.omc/
 .gstack/
 AGENTS.md
 CLAUDE.md
+graphify-out/
+llms.txt
