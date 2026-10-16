@@ -141,10 +141,9 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Headroom: curve +10%, graduated (DEX) +50k
-    let graduated = core.v1().is_graduated(token).await?;
-    let gas_with_buffer = common::gas_with_headroom(estimated_gas, graduated);
-    println!("⛽ Gas with headroom (graduated={graduated}): {gas_with_buffer}");
+    // Headroom: estimate + 10%
+    let gas_with_buffer = common::gas_with_headroom(estimated_gas);
+    println!("⛽ Gas with 10% headroom: {gas_with_buffer}");
 
     // Get current network gas price
     let network_gas_price_raw = core.provider().get_gas_price().await?;

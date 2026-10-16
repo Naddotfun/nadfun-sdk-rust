@@ -58,10 +58,9 @@ async fn main() -> Result<()> {
         .estimate_gas(V2GasEstimationParams::BuyWithNative(params.clone()))
         .await
         .unwrap_or(400_000);
-    // Headroom: curve +10%, graduated (DEX) +50k
-    let graduated = core.v2().is_graduated(token).await?;
-    let gas_with_buffer = common::gas_with_headroom(gas_estimate, graduated);
-    println!("estimated gas: {gas_estimate} (send {gas_with_buffer}, graduated={graduated})");
+    // Headroom: estimate + 10%
+    let gas_with_buffer = common::gas_with_headroom(gas_estimate);
+    println!("estimated gas: {gas_estimate} (send {gas_with_buffer})");
 
     let mut params = params;
     params.gas_limit = Some(gas_with_buffer);

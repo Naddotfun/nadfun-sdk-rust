@@ -31,8 +31,9 @@
 //! Every trade in 7-9: fill == `get_amount_out` preview, `amount_out_min = preview + 1`
 //! reverts `InsufficientOutput()` (checked via `estimate_gas`, which sends nothing), and
 //! the router holds no token / USDC / WMON / native afterwards. Those trades send an
-//! explicit `gas_limit` (`gas_with_buffer`, the examples' rule): bonding curve
-//! estimate + 10 %, graduated (DEX) estimate + 50_000.
+//! explicit `gas_limit` (`gas_with_buffer`): bonding curve estimate + 10 %,
+//! graduated (DEX) estimate + 50_000 — larger than the documented flat +10 %
+//! because anvil uses the Ethereum gas schedule, not Monad's.
 //!
 //! `E2E_ONLY=8` runs only the listed scenarios (plus prerequisites);
 //! `E2E_PROBE_GAS_TS=1` additionally records `probe_gas_vs_timestamp`, the evidence that
@@ -560,12 +561,13 @@ async fn assert_slippage_reverts(
     Ok("InsufficientOutput()".to_string())
 }
 
-/// Explicit gas limit, the rule the SDK examples use: bonding-curve trades get
-/// estimate + 10 %, graduated-token DEX trades estimate + 50_000. A bare estimate
-/// can be up to ~48 k short on a DEX trade (this anvil fork uses the Ethereum
-/// gas schedule; Monad prices storage differently): the pair writes its price
-/// accumulators only when the block timestamp moved since its last update, and a
-/// tx estimated in that same second may land in the next one.
+/// Explicit gas limit for fork trades: bonding curve estimate + 10 %, graduated
+/// (DEX) estimate + 50_000. Larger than the docs' flat +10 % on purpose: anvil
+/// runs the Ethereum gas schedule, not Monad's, and there the first DEX trade
+/// after graduation needs +15.6 % (~48 k) once the block timestamp moves past
+/// the pair's last update (cold zero → nonzero accumulator SSTOREs). On Monad
+/// the same case measured +6.22 % (testnet) / +6.34 % (mainnet), which the
+/// documented +10 % covers.
 async fn gas_with_buffer(
     core: &Core,
     token: Address,

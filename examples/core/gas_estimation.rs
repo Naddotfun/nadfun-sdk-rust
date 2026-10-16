@@ -106,11 +106,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Headroom rule: bonding curve +10%, graduated (DEX) +50k
-    let graduated = core.v1().is_graduated(token).await?;
+    // Headroom: estimate + 10%
     println!(
-        "  📊 Gas limit to send (graduated={graduated}): {}",
-        common::gas_with_headroom(buy_gas, graduated)
+        "  📊 Gas limit to send (+10%): {}",
+        common::gas_with_headroom(buy_gas)
     );
     println!();
 
@@ -218,8 +217,8 @@ async fn main() -> Result<()> {
     };
 
     println!(
-        "  📊 Gas limit to send (graduated={graduated}): {}",
-        common::gas_with_headroom(sell_gas, graduated)
+        "  📊 Gas limit to send (+10%): {}",
+        common::gas_with_headroom(sell_gas)
     );
     println!();
 
@@ -278,8 +277,8 @@ async fn main() -> Result<()> {
     };
 
     println!(
-        "  📊 Gas limit to send (graduated={graduated}): {}",
-        common::gas_with_headroom(sell_permit_gas, graduated)
+        "  📊 Gas limit to send (+10%): {}",
+        common::gas_with_headroom(sell_permit_gas)
     );
     println!();
 

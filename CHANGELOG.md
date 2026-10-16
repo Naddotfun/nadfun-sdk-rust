@@ -78,15 +78,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no headroom. On Monad the fee is `gas_limit × price` and failed transactions
   pay the full limit (Monad recommends estimate + ~7.5–10%,
   https://docs.monad.xyz/developer-essentials/gas-pricing). A graduated token's
-  NadFunPair writes its price accumulators when `block.timestamp` advances, so a
-  DEX trade estimated in the same second can need more gas one second later
-  (measured on an anvil fork, i.e. the Ethereum gas schedule: curve 0; DEX
-  steady +11.7k / +3.8%; first DEX trade after graduation +48.1k / +15.6%;
-  Monad's page-based storage pricing differs). README, llms.txt and the v2
-  params module docs recommend, as a conservative default until measured on
-  Monad, `gas_limit` = estimate + 10% for bonding-curve trades and
-  estimate + 50_000 for graduated-token DEX trades; the examples
-  (`common::gas_with_headroom`) and the fork E2E follow that rule.
+  NadFunPair writes its price accumulators when `block.timestamp` advances;
+  measured on Monad testnet and mainnet nodes (eth_estimateGas + state
+  overrides, 1 MON WMON-quoted DEX buy): overwrite +1,379 gas (+0.24%) on both,
+  first write after graduation +35,911 (+6.22%) testnet / +35,917 (+6.34%)
+  mainnet; sells and other routes not measured. README,
+  llms.txt and the v2 params module docs recommend `gas_limit` =
+  estimate + 10% for all trades; the examples (`common::gas_with_headroom`)
+  follow it. The fork E2E keeps a larger DEX buffer because anvil uses the
+  Ethereum gas schedule, where the first post-graduation DEX trade needs +15.6%.
 
 ### Changed
 

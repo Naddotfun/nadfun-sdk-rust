@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
         deadline: U256::from(9999999999999999u64),
     };
     let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-    let gas_with_buffer = if matches!(router, Router::Dex(_)) { estimated_gas + 50_000 } else { estimated_gas + estimated_gas / 10 }; // DEX +50k, curve +10%
+    let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 
     // 4. Execute buy
     let buy_params = BuyParams {
@@ -528,7 +528,7 @@ let gas_params = GasEstimationParams::Buy {
 
 // Get accurate gas estimation from network
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-let gas_with_buffer = if matches!(router, Router::Dex(_)) { estimated_gas + 50_000 } else { estimated_gas + estimated_gas / 10 }; // DEX +50k, curve +10%
+let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 
 let buy_params = BuyParams {
     token,
@@ -605,35 +605,33 @@ Residual risks:
 When `gas_limit` is `None`, the raw node estimate (`eth_estimateGas`) is sent
 as the gas limit with no headroom. On Monad the fee is `gas_limit × price`,
 failed transactions pay the full limit, and Monad recommends sending the
-estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing)).
+estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing),
+[opcode pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing)).
 
-Nad.fun trades need different headroom by route. A graduated token's DEX pair
-(NadFunPair) writes its price accumulators (two SSTOREs) only when
-`block.timestamp` moved since its last update, so a trade estimated in the same
-second as the pair's last update needs more gas if it lands in the next one
-(Monad blocks are ~400 ms, several per second). Minimum gas that succeeds,
-same second vs next second — measured on an anvil fork (Ethereum gas schedule); Monad's page-based storage pricing differs
-([Monad opcode pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing)),
-so these numbers are not Monad's:
+A graduated token's DEX pair (NadFunPair) writes its price accumulators only
+when `block.timestamp` moved since its last update, so a DEX trade estimated in
+the same second as the pair's last update can need more gas if it lands in the
+next one (Monad blocks are ~400 ms, several per second). Measured on Monad
+nodes (Monad gas schedule) via `eth_estimateGas` with state overrides, 1 MON
+WMON-quoted DEX buy (`buyWithNative` → NadSwapAdapter → `pair.swap`), same
+block — testnet (chain 10143) and mainnet (chain 143, `https://rpc.monad.xyz`,
+Monad/0.16.4, block 113804292); sells and other route paths were not measured:
 
-| Trade | Extra gas when the timestamp advances |
-|---|---|
-| Bonding-curve buy / sell | 0 |
-| DEX buy / sell (steady state) | +11.7k (+3.8%) |
-| First DEX trade after graduation | +48.1k (+15.6%) |
+| Pair accumulator state | Testnet estimate | Testnet extra | Mainnet estimate | Mainnet extra |
+|---|---|---|---|---|
+| No accumulator write (same timestamp) | 577,217 | – | 566,375 | – |
+| Overwrite (steady state) | 578,596 | +1,379 (+0.24%) | 567,754 | +1,379 (+0.24%) |
+| First write after graduation (0 → nonzero) | 613,128 | +35,911 (+6.22%) | 602,292 | +35,917 (+6.34%) |
 
-Conservative default until measured on Monad: bonding-curve trades
-`gas_limit = estimate + 10%`; graduated-token DEX trades `estimate + 50_000`
-(pick with `is_graduated`):
+On Monad the accumulator slots share a 128-slot storage page with a slot
+`_update` always writes, so overwrites are almost free; only the first
+zero → nonzero write costs extra. `estimate + 10%` covers every measured case on
+both networks. Recommended for all trades: `gas_limit = estimate + 10%`:
 
 ```rust,ignore
 let mut params = V2BuyParams { /* .. */ gas_limit: None, /* .. */ };
 let estimate = core.v2().estimate_gas(V2GasEstimationParams::Buy(params.clone())).await?;
-params.gas_limit = Some(if core.v2().is_graduated(token).await? {
-    estimate + 50_000          // DEX: covers the accumulator writes
-} else {
-    estimate + estimate / 10   // bonding curve
-});
+params.gas_limit = Some(estimate + estimate / 10);
 core.v2().buy(params).await?;
 ```
 
@@ -686,7 +684,7 @@ let gas_params = GasEstimationParams::Buy {
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
-let gas_with_buffer = if matches!(router, Router::Dex(_)) { estimated_gas + 50_000 } else { estimated_gas + estimated_gas / 10 }; // DEX +50k, curve +10%
+let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 ```
 
 #### Gas Estimation Parameters
@@ -715,15 +713,11 @@ The new system automatically handles common issues:
 
 #### Buffer Strategies
 
-Use the route-based headroom from [Gas Management](#-gas-management): bonding
-curve +10%, graduated (DEX) +50k. Monad charges the full gas limit, so keep the
-headroom no larger than needed.
+Send `estimate + 10%` (see [Gas Management](#-gas-management)). Monad charges the
+full gas limit, so keep the headroom no larger than needed.
 
 ```rust
-let final_gas = match router {
-    Router::Dex(_) => estimated_gas + 50_000,                    // DEX pair accumulator writes
-    Router::BondingCurve(_) => estimated_gas + estimated_gas / 10, // bonding curve
-};
+let final_gas = estimated_gas + estimated_gas / 10;
 ```
 
 #### Migration from v0.1.x
@@ -737,7 +731,7 @@ let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 use nadfun_sdk::GasEstimationParams;
 let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
 let estimated_gas = core.v1().estimate_gas(&router, params).await?;
-let gas_limit = if matches!(router, Router::Dex(_)) { estimated_gas + 50_000 } else { estimated_gas + estimated_gas / 10 }; // see Gas Management
+let gas_limit = estimated_gas + estimated_gas / 10; // +10%, see Gas Management
 ```
 
 **⚠️ Important Notes:**
@@ -1024,7 +1018,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 - **Unified Gas Estimation**: Demonstrates `core.v1().estimate_gas()` for all operation types
 - **Automatic Approval**: Handles token approval for SELL operations automatically
 - **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
-- **Gas Headroom**: Gas limit to send = estimate + 10% on the bonding curve, + 50k on the DEX (graduated tokens)
+- **Gas Headroom**: Gas limit to send = estimate + 10% (Monad guidance: estimate + ~7.5–10%)
 - **Cost Analysis**: Real-time transaction cost estimates at different gas prices
 - **Error Handling**: Graceful fallback when estimation fails
 

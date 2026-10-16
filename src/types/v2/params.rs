@@ -8,14 +8,12 @@
 //! (<https://docs.monad.xyz/developer-essentials/gas-pricing>).
 //!
 //! A graduated token's NadFunPair writes its price accumulators only when
-//! `block.timestamp` moved since its last update, so a DEX trade estimated in
-//! that same second needs more gas if it lands in the next one (measured on an
-//! anvil fork, i.e. the Ethereum gas schedule: bonding curve 0, DEX steady state
-//! +11.7k / +3.8%, first DEX trade after graduation +48.1k / +15.6%; Monad's
-//! page-based storage pricing differs). Conservative default until measured on
-//! Monad: `gas_limit = estimate + 10%` for bonding-curve trades and
-//! `estimate + 50_000` for graduated-token DEX trades (pick with
-//! `CoreV2::is_graduated`).
+//! `block.timestamp` moved since its last update. Measured on Monad testnet and
+//! mainnet nodes via `eth_estimateGas` with state overrides (1 MON WMON-quoted
+//! DEX buy, same block): an accumulator overwrite adds +1,379 gas (+0.24%) on
+//! both; the first write after graduation (0 → nonzero) +35,911 (+6.22%) on
+//! testnet and +35,917 (+6.34%) on mainnet; sells and other routes were not
+//! measured. Recommended for all trades: `gas_limit = estimate + 10%`.
 
 use alloy::primitives::{Address, Bytes, B256, U256};
 

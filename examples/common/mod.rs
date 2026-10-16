@@ -4,20 +4,12 @@ use anyhow::Result;
 use nadfun_sdk::Network;
 use std::env;
 
-/// Gas limit to send for a trade from its `estimate_gas` result: bonding-curve
-/// trades get +10%, graduated-token DEX trades +50_000. A DEX pair writes its
-/// price accumulators when the block timestamp moved since its last update, so
-/// a trade estimated in the same second can need up to ~48k more when it lands
-/// in the next one (measured on an anvil fork with the Ethereum gas schedule;
-/// Monad prices storage differently). A conservative default; Monad charges the
-/// full gas limit, see README "Gas Management".
+/// Gas limit to send for a trade from its `estimate_gas` result: estimate + 10%,
+/// in line with Monad's guidance (estimate + ~7.5–10%; Monad charges the full
+/// gas limit). See README "Gas Management".
 #[allow(dead_code)] // Only the trading examples send trades.
-pub fn gas_with_headroom(estimate: u64, graduated: bool) -> u64 {
-    if graduated {
-        estimate + 50_000
-    } else {
-        estimate + estimate / 10
-    }
+pub fn gas_with_headroom(estimate: u64) -> u64 {
+    estimate + estimate / 10
 }
 
 /// Get configuration from environment variables or defaults
