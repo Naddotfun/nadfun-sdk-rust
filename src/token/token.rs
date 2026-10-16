@@ -2,9 +2,8 @@
 
 use crate::types::TokenMetadata;
 use alloy::{
-    network::EthereumWallet,
     primitives::{keccak256, Address, B256, U256},
-    providers::{DynProvider, ProviderBuilder},
+    providers::DynProvider,
     signers::{local::PrivateKeySigner, Signer},
     sol,
 };
@@ -49,13 +48,10 @@ pub struct TokenHelper {
 impl TokenHelper {
     pub async fn new(rpc_url: String, private_key: String) -> Result<Self> {
         let signer: PrivateKeySigner = private_key.parse()?;
-        let wallet = EthereumWallet::from(signer.clone());
-        let url = rpc_url.parse()?;
-        let provider = ProviderBuilder::new().wallet(wallet).connect_http(url);
-        let dyn_provider = Arc::new(DynProvider::new(provider));
+        let provider = crate::core::nonce::signing_provider(&rpc_url, signer.clone())?;
 
         Ok(Self {
-            provider: dyn_provider,
+            provider: Arc::new(provider),
             signer,
         })
     }

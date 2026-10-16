@@ -8,7 +8,7 @@ Nad.fun is a meme coin launchpad on Monad with bonding curve mechanics. Tokens g
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.4.2"
+nadfun_sdk = "0.5.0"
 ```
 
 ## Quick Start
@@ -64,6 +64,23 @@ async fn main() -> Result<()> {
 - **Auto-Routing**: SDK automatically routes trades via Lens contract
 - **MON**: Native token of Monad, used for all transactions
 - **WMON**: Wrapped MON for DEX operations
+- **Nonces** (0.5.0+): `Core::new` / `TokenHelper::new` share one nonce state per
+  (chain, account) per process and send from an account one tx at a time. Gas
+  estimation runs before a nonce is taken; a node-rejected send (incl. "nonce too
+  high") reuses its nonce; "nonce too low" / "already known" skips past it;
+  transport errors and timeouts (30 s per RPC under the lock) reuse it. The mined
+  count is read before every send (+1 RPC); if it stays below our next nonce for
+  30 s since we last sent the nonce the chain is waiting on (sends past a gap do
+  not count), that tx is presumed dropped and the next send refills the gap. Residual risks: an ambiguous failure or a tx pending >30 s
+  can have its nonce re-signed (only one executes; the caller may see `Err` for
+  the executed one or `Ok` for one that never mines); a dropped tx stalls later
+  sends up to 30 s; after a restart, unmined txs of the old process are reused
+  (Monad `pending` == `latest`); `Core::with_provider`, other processes/wallets on
+  the key and same-chain-id devnet resets are not covered; sync sends may hold
+  the account up to 120 s; unknown error wordings fall back to max(n, chain);
+  stall recovery can replace a slow-but-alive tx; raw sends
+  (`send_raw_transaction*`) are not intercepted (state may be stale: one
+  spurious Err, then recovery); other-key envelopes / other `from` pass through.
 
 ## API Client (Optional Authentication)
 
@@ -182,7 +199,7 @@ let gas_params = GasEstimationParams::Buy {
     deadline: U256::from(9999999999999999u64),
 };
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
+let gas_with_buffer = if matches!(router, Router::Dex(_)) { estimated_gas + 50_000 } else { estimated_gas + estimated_gas / 10 }; // DEX +50k, curve +10%
 
 // 3. Execute
 let tx_hash = core.v1().buy(BuyParams {
@@ -231,6 +248,43 @@ let params = SellPermitParams {
 };
 
 let tx_hash = core.v1().sell_permit(params, router).await?;
+```
+
+## Gas Limit Headroom
+
+When `gas_limit` is `None`, the raw node estimate (`eth_estimateGas`) is sent
+as the gas limit with no headroom. On Monad the fee is `gas_limit × price`,
+failed transactions pay the full limit, and Monad recommends sending the
+estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing)).
+
+Nad.fun trades need different headroom by route. A graduated token's DEX pair
+(NadFunPair) writes its price accumulators (two SSTOREs) only when
+`block.timestamp` moved since its last update, so a trade estimated in the same
+second as the pair's last update needs more gas if it lands in the next one
+(Monad blocks are ~400 ms, several per second). Minimum gas that succeeds,
+same second vs next second — measured on an anvil fork (Ethereum gas schedule); Monad's page-based storage pricing differs
+([Monad opcode pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing)),
+so these numbers are not Monad's:
+
+| Trade | Extra gas when the timestamp advances |
+|---|---|
+| Bonding-curve buy / sell | 0 |
+| DEX buy / sell (steady state) | +11.7k (+3.8%) |
+| First DEX trade after graduation | +48.1k (+15.6%) |
+
+Conservative default until measured on Monad: bonding-curve trades
+`gas_limit = estimate + 10%`; graduated-token DEX trades `estimate + 50_000`
+(pick with `is_graduated`):
+
+```rust
+let mut params = V2BuyParams { /* .. */ gas_limit: None, /* .. */ };
+let estimate = core.v2().estimate_gas(V2GasEstimationParams::Buy(params.clone())).await?;
+params.gas_limit = Some(if core.v2().is_graduated(token).await? {
+    estimate + 50_000          // DEX: covers the accumulator writes
+} else {
+    estimate + estimate / 10   // bonding curve
+});
+core.v2().buy(params).await?;
 ```
 
 ## Gas Pricing Options
