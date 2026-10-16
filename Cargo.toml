@@ -9,7 +9,20 @@ license = "MIT"
 repository = "https://github.com/Naddotfun/nadfun-sdk-rust"
 documentation = "https://github.com/Naddotfun/nadfun-sdk-rust"
 keywords = ["memecoin", "nadfun", "nadfun-sdk"]
-exclude = [".omc/", "benches/"]
+# AI / agent tooling files never ship in the crate.
+exclude = [
+    ".omc/",
+    "benches/",
+    "graphify-out/",
+    ".claude/",
+    ".gstack/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "branches/",
+    "docs/superpowers/",
+    "llms.txt",
+    "TODO.md",
+]
 
 readme = "README.md"
 
