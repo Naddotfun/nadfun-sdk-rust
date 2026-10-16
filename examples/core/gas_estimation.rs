@@ -106,15 +106,12 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Different buffer strategies
-    let buy_gas_with_buffer_fixed = buy_gas + 50_000;
-    let buy_gas_with_buffer_percent = buy_gas * 120 / 100; // 20% buffer
-
+    // Headroom rule: bonding curve +10%, graduated (DEX) +50k
+    let graduated = core.v1().is_graduated(token).await?;
     println!(
-        "  📊 With fixed buffer (+50k): {}",
-        buy_gas_with_buffer_fixed
+        "  📊 Gas limit to send (graduated={graduated}): {}",
+        common::gas_with_headroom(buy_gas, graduated)
     );
-    println!("  📊 With 20% buffer: {}", buy_gas_with_buffer_percent);
     println!();
 
     // === SELL GAS ESTIMATION ===
@@ -220,15 +217,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Different buffer strategies
-    let sell_gas_with_buffer_fixed = sell_gas + 30_000;
-    let sell_gas_with_buffer_percent = sell_gas * 115 / 100; // 15% buffer
-
     println!(
-        "  📊 With fixed buffer (+30k): {}",
-        sell_gas_with_buffer_fixed
+        "  📊 Gas limit to send (graduated={graduated}): {}",
+        common::gas_with_headroom(sell_gas, graduated)
     );
-    println!("  📊 With 15% buffer: {}", sell_gas_with_buffer_percent);
     println!();
 
     // === SELL PERMIT GAS ESTIMATION ===
@@ -285,10 +277,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Different buffer strategies
-    let permit_gas_with_buffer = sell_permit_gas * 125 / 100; // 25% buffer (permits can be more complex)
-
-    println!("  📊 With 25% buffer: {}", permit_gas_with_buffer);
+    println!(
+        "  📊 Gas limit to send (graduated={graduated}): {}",
+        common::gas_with_headroom(sell_permit_gas, graduated)
+    );
     println!();
 
     // === GAS COMPARISON ===

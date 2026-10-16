@@ -1,6 +1,6 @@
 [package]
 name = "nadfun_sdk"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 description = "Rust SDK for Nad.fun"
 license = "MIT"
@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
-alloy = { version = "1.0.24", features = ["full", "signer-keystore", "pubsub"] }
+alloy = { version = "1.1.2", features = ["full", "signer-keystore", "pubsub"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"

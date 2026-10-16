@@ -169,9 +169,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Add 20% buffer to estimated gas
-    let gas_with_buffer = estimated_gas * 120 / 100;
-    println!("⛽ Gas with 20% buffer: {}", gas_with_buffer);
+    // Headroom: curve +10%, graduated (DEX) +50k
+    let graduated = core.v1().is_graduated(token).await?;
+    let gas_with_buffer = common::gas_with_headroom(estimated_gas, graduated);
+    println!("⛽ Gas with headroom (graduated={graduated}): {gas_with_buffer}");
 
     let buy_params = BuyParams {
         token,

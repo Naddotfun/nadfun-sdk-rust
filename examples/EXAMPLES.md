@@ -95,7 +95,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 **Features:**
 - ⛽ **Unified Gas Estimation**: Uses `core.v1().estimate_gas()` for BUY, SELL, and SELL PERMIT operations
 - 🔧 **Automatic Problem Solving**: Handles token approval and EIP-2612 permit signatures automatically
-- 📊 **Buffer Strategies**: Demonstrates different buffer calculation methods (fixed +50k, percentage 20%-25%)
+- 📊 **Gas Headroom**: Gas limit to send = estimate + headroom: bonding curve +10%, graduated (DEX) +50k (`common::gas_with_headroom`, picked with `is_graduated`)
 - 💰 **Cost Analysis**: Shows estimated transaction costs at different gas prices
 - ⚠️ **Real Network Conditions**: Uses actual network estimation with proper error handling
 
@@ -321,7 +321,7 @@ cargo run --example v2_buy -- --private-key your_private_key_here --rpc-url http
 - 🪙 **Native Funding**: Sends 0.01 MON (hardcoded `value`); router wraps to the native quote
 - 📊 **Quote First**: `core.v2().get_amount_out(token, amount, true)` with a zero-quote guard
 - 🛡️ **Slippage**: `SlippageUtils::calculate_amount_out_min(expected, 5.0)` (5%)
-- ⛽ **v2 Gas Estimation**: `core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(..))` + 20% buffer, falls back to 400k
+- ⛽ **v2 Gas Estimation**: `core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(..))` + headroom (bonding curve +10%, graduated (DEX) +50k (`common::gas_with_headroom`, picked with `is_graduated`)), falls back to 400k
 - 📝 **Receipt Check**: `core.get_receipt(tx_hash)` status/block reporting
 
 ### v2 Buy with ERC-20 Quote (`v2/buy_erc20_quote.rs`)
@@ -491,7 +491,7 @@ All trading examples now use the new unified gas estimation system:
 - **Real-time Network Estimation**: Uses `core.v1().estimate_gas()` for live gas calculations
 - **Automatic Problem Solving**: Handles token approval and permit signatures automatically
 - **Network-based Calculation**: No more static fallback constants - all estimates from actual network conditions
-- **Smart Buffer Strategies**: Multiple buffer calculation methods (fixed amounts, percentages)
+- **Gas Headroom**: bonding curve +10%, graduated (DEX) +50k (`common::gas_with_headroom`, picked with `is_graduated`)
 
 ### Gas Estimation Requirements
 ⚠️ **Important**: For accurate gas estimation, certain conditions must be met:
@@ -504,7 +504,7 @@ All trading examples now use the new unified gas estimation system:
 ### Dynamic Gas Features
 - **Real-time Estimation**: Actual contract call gas estimation using network conditions
 - **Network Price Detection**: Current gas price with EIP-1559 optimization
-- **Multiple Buffer Strategies**: Fixed amounts (+50k) and percentage-based (20%, 25%)
+- **Gas Headroom**: bonding curve +10%, graduated (DEX) +50k (`common::gas_with_headroom`, picked with `is_graduated`). Monad charges the full gas limit, so the headroom stays small
 - **Cost Analysis**: Transaction cost estimates at different gas prices
 - **Error Handling**: Graceful fallback when estimation fails
 
@@ -516,8 +516,9 @@ use nadfun_sdk::{Core, GasEstimationParams};
 let gas_params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
-// Apply buffer strategy
-let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
+// Headroom: bonding curve +10%, graduated (DEX) +50k
+let graduated = core.v1().is_graduated(token).await?;
+let gas_limit = if graduated { estimated_gas + 50_000 } else { estimated_gas + estimated_gas / 10 };
 ```
 
 ## 🚀 Configuration
@@ -549,7 +550,7 @@ All examples support command line arguments:
 - **Real-time vs Defaults**: Compare estimated gas with safe defaults
 - **Network Optimization**: EIP-1559 compatible gas pricing
 - **Router-specific**: Different limits for bonding curve vs DEX operations
-- **Buffer Strategies**: 20% safety buffers with customization options
+- **Gas Headroom**: bonding curve +10%, graduated (DEX) +50k (`common::gas_with_headroom`, picked with `is_graduated`)
 
 ### Event Processing
 - **Real-time Streaming**: WebSocket-based low-latency delivery

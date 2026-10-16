@@ -1,4 +1,21 @@
 //! NadFun contract v2 parameter types (trading + creation).
+//!
+//! Every trade/create parameter struct carries `gas_limit`, `gas_price` and
+//! `nonce` transaction options. When `gas_limit` is `None` the raw node
+//! estimate is sent as the gas limit with no headroom. Monad charges
+//! `gas_limit × price` (failed transactions pay the full limit) and recommends
+//! the estimate plus ~7.5–10%
+//! (<https://docs.monad.xyz/developer-essentials/gas-pricing>).
+//!
+//! A graduated token's NadFunPair writes its price accumulators only when
+//! `block.timestamp` moved since its last update, so a DEX trade estimated in
+//! that same second needs more gas if it lands in the next one (measured on an
+//! anvil fork, i.e. the Ethereum gas schedule: bonding curve 0, DEX steady state
+//! +11.7k / +3.8%, first DEX trade after graduation +48.1k / +15.6%; Monad's
+//! page-based storage pricing differs). Conservative default until measured on
+//! Monad: `gas_limit = estimate + 10%` for bonding-curve trades and
+//! `estimate + 50_000` for graduated-token DEX trades (pick with
+//! `CoreV2::is_graduated`).
 
 use alloy::primitives::{Address, Bytes, B256, U256};
 
