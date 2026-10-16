@@ -325,7 +325,7 @@ cargo run --example v2_buy -- --private-key your_private_key_here --rpc-url http
 - 📝 **Receipt Check**: `core.get_receipt(tx_hash)` status/block reporting
 
 ### v2 Buy with ERC-20 Quote (`v2/buy_erc20_quote.rs`)
-Buy a v2 token paying with an **ERC-20 quote token** (e.g. USDT) instead of native MON — a v2-only capability (`core.v2().buy`).
+Buy a v2 token paying with an **ERC-20 quote token** (e.g. USDC) instead of native MON — a v2-only capability (`core.v2().buy`).
 
 ```bash
 export PRIVATE_KEY="your_private_key_here"
@@ -338,7 +338,7 @@ cargo run --example v2_buy_erc20_quote -- --private-key your_private_key_here --
 ```
 
 **Features:**
-- 🪙 **ERC-20 Quote**: `amount_in` is denominated in the quote token (example assumes 18 decimals; adjust for USDT's 6)
+- 🪙 **ERC-20 Quote**: `amount_in` is 10 units of the token's quote, scaled by its on-chain decimals (`core.v2().quote_config(quote).decimals`; USDC is 6)
 - 🔐 **Pre-approval Required**: Caller must approve the v2 router for `amount_in` of the quote token beforehand (use `TokenHelper`)
 - 📊 **Quote + Slippage**: `core.v2().get_amount_out` then 5% `amount_out_min`
 - 📝 **Receipt Check**: Status/block reporting
@@ -357,7 +357,7 @@ cargo run --example v2_sell -- --private-key your_private_key_here --rpc-url htt
 ```
 
 **Features:**
-- 💱 **Sell to Native**: Sells 100 tokens (hardcoded, 18 decimals) for MON
+- 💱 **Sell to Native**: Sells 100 tokens (hardcoded, 18 decimals) for MON — WMON-quoted tokens only; use `core.v2().sell` for other quotes
 - 🔐 **Approval Required**: Caller must approve the router for `amount_in` of the token first (or use the permit flow below)
 - 📊 **Reverse Quote**: `core.v2().get_amount_out(token, amount, false)` + 5% slippage
 - 📝 **Receipt Check**: Status/block reporting

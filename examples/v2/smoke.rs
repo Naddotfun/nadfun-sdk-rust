@@ -9,9 +9,8 @@ use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use anyhow::Result;
 use nadfun_sdk::{
     constants::{
-        get_burn_vault_v2, get_creator_fee_vault_v2, get_fee_to_v2, get_gift_vault_v2,
-        get_lp_vault_v2, get_nad_swap_adapter_v2, get_nadfun_factory_v2, get_nadfun_pair_impl_v2,
-        get_nadfun_router_v2, get_protocol_manager_v2, get_token_impl_v2, get_token_registry_v2,
+        get_burn_vault_v2, get_creator_fee_vault_v2, get_lp_vault_v2, get_nadfun_factory_v2,
+        get_nadfun_router_v2, get_protocol_manager_v2, get_token_registry_v2,
     },
     Core, Network,
 };
@@ -37,22 +36,12 @@ async fn main() -> Result<()> {
     list! {
         "nadfun_router"        => get_nadfun_router_v2(net),
         "nadfun_factory"       => get_nadfun_factory_v2(net),
-        "nadfun_pair_impl"     => get_nadfun_pair_impl_v2(net),
-        "nad_swap_adapter"     => get_nad_swap_adapter_v2(net),
         "token_registry"       => get_token_registry_v2(net),
-        "token_impl"           => get_token_impl_v2(net),
         "protocol_manager"     => get_protocol_manager_v2(net),
         "burn_vault"           => get_burn_vault_v2(net),
         "lp_vault"             => get_lp_vault_v2(net),
         "creator_fee_vault"    => get_creator_fee_vault_v2(net),
-        "gift_vault"           => get_gift_vault_v2(net),
     }
-    // fee_to stays Option — genuinely absent on Mainnet.
-    println!(
-        "  {:<22} {}",
-        "fee_to",
-        get_fee_to_v2(net).unwrap_or("(none)")
-    );
 
     println!("\n=== Live RPC view-method probe ===");
     let provider = Arc::new(DynProvider::new(
