@@ -429,6 +429,8 @@ impl<F: TxFiller<Ethereum> + 'static> Provider for NonceGuard<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // alloy 2.x moved `build` (sign into an envelope) to the network-specific trait.
+    use alloy::network::NetworkTransactionBuilder as _;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,

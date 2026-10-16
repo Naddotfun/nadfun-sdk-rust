@@ -2,6 +2,8 @@
 name = "nadfun_sdk"
 version = "0.5.0"
 edition = "2021"
+# alloy 2.x requires rustc 1.94.1.
+rust-version = "1.94.1"
 description = "Rust SDK for Nad.fun"
 license = "MIT"
 repository = "https://github.com/Naddotfun/nadfun-sdk-rust"
@@ -17,22 +19,22 @@ name = "nadfun_sdk"
 path = "src/lib.rs"
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
-alloy = { version = "1.1.2", features = ["full", "signer-keystore", "pubsub"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
-futures-util = "0.3"
-async-stream = "0.3"
-rayon = "1.8"
-chrono = "0.4"
-clap = { version = "4.5", features = ["derive", "env"] }
-reqwest = { version = "0.12", features = ["json"] }
-hex = "0.4"
+tokio = { version = "1.53.3", features = ["full"] }
+alloy = { version = "2.5.0", features = ["full", "signer-keystore", "pubsub"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+anyhow = "1.0.104"
+futures-util = "0.3.34"
+async-stream = "0.3.6"
+rayon = "1.12.0"
+chrono = "0.4.45"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+reqwest = { version = "0.13.5", features = ["json"] }
+hex = "0.4.3"
 
 [dev-dependencies]
-tokio-test = "0.4"
-wiremock = "0.6"
+tokio-test = "0.4.6"
+wiremock = "0.6.5"
 
 # Examples
 
