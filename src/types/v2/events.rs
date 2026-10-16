@@ -13,8 +13,10 @@ use alloy::{
 };
 use anyhow::{anyhow, Result};
 
+// alloy 2.x `sol!` expansion exceeds clippy's too_many_arguments threshold.
 sol!(
     #[sol(rpc)]
+    #[allow(clippy::too_many_arguments)]
     IBondingCurveV2Events,
     "abi/v2/BondingCurve.json"
 );

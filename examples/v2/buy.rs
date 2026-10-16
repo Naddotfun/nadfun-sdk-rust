@@ -58,11 +58,9 @@ async fn main() -> Result<()> {
         .estimate_gas(V2GasEstimationParams::BuyWithNative(params.clone()))
         .await
         .unwrap_or(400_000);
-    let gas_with_buffer = gas_estimate * 120 / 100;
-    println!(
-        "estimated gas: {} (with 20% buffer: {})",
-        gas_estimate, gas_with_buffer
-    );
+    // Headroom: estimate + 10%
+    let gas_with_buffer = common::gas_with_headroom(gas_estimate);
+    println!("estimated gas: {gas_estimate} (send {gas_with_buffer})");
 
     let mut params = params;
     params.gas_limit = Some(gas_with_buffer);

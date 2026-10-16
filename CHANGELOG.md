@@ -13,6 +13,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.5.0] — 2026-10-16
+
+### Breaking
+
+- **alloy 1.1 → 2.5.** Public items that use alloy types (`Address`, `U256`,
+  `B256`, `Bytes`, `DynProvider`, `Log`/`TransactionReceipt` in
+  `TransactionResult`, `PendingTransactionBuilder`, the `sol!`-generated event
+  types, ...) now use alloy 2.x types, so downstream crates must depend on
+  alloy 2.x too (mixing alloy 1.x and 2.x types fails to type-check).
+- **reqwest 0.12 → 0.13 in the public API:** `ApiClient::{request, get, post,
+  delete}` take/return reqwest 0.13 types (`reqwest::Method`,
+  `reqwest::RequestBuilder`), and `ApiClient` error chains carry reqwest 0.13
+  errors — a caller still on reqwest 0.12 doing
+  `err.downcast_ref::<reqwest::Error>()` now silently gets `None`.
+- **MSRV is now rustc 1.94.1** (`rust-version` in `Cargo.toml`), required by
+  alloy 2.5.
+- **TLS stack:** reqwest 0.13's default TLS is rustls with the OS trust store
+  (via `rustls-platform-verifier`) instead of native-tls, using the
+  `aws-lc-rs` crypto backend. That adds a native build dependency
+  (`aws-lc-sys`): a C compiler is required, cmake on musl / cross targets,
+  and NASM may be needed on Windows. reqwest's `system-proxy` default means
+  system proxy settings are now honoured.
+- **`ApiClient` refuses cross-origin redirects.** reqwest forwards custom
+  headers such as `X-API-Key` on redirect (it strips only Authorization /
+  Cookie / Proxy-Authorization / WWW-Authenticate), so a redirect from the API
+  host to another origin now fails instead of leaking the key. Same-origin
+  redirects still follow (limit 10). Image downloads in
+  `upload_image_from_uri` (no API key sent) still follow any redirect.
+
+### Compatibility notes
+
+- The first WebSocket connect installs `aws-lc-rs` as the process-wide rustls
+  `CryptoProvider`. An application that later calls
+  `CryptoProvider::install_default(..).unwrap()` will panic — install your
+  provider before using the SDK's streams, or handle the `Err`.
+- Library consumers: your `Cargo.lock` does not inherit ours. Run
+  `cargo update -p rustls-webpki` so it resolves to ≥ 0.103.15.
+
+### Removed
+
+- The 26 items deprecated in 0.4.2: `get_creator_fee_processor_v2`,
+  `get_fee_collector_v2`, `get_fee_to_v2`, `get_gift_vault_v2`,
+  `get_lp_manager_v2`, `get_nad_swap_adapter_v2`, `get_nadfun_pair_impl_v2`,
+  `get_token_impl_v2`, `get_vault_registry_v2`, and their constants
+  `CREATOR_FEE_PROCESSOR`, `FEE_COLLECTOR`, `FEE_TO` (testnet only), `GIFT_VAULT`,
+  `LP_MANAGER`, `NAD_SWAP_ADAPTER`, `NAD_FUN_PAIR_IMPL`, `TOKEN_IMPL`,
+  `VAULT_REGISTRY` under `addresses::{mainnet,testnet}::v2`.
+
+### Fixed
+
+- **Nonce gap after a failed send.** The signing providers built by
+  `Core::new` and `TokenHelper::new` used alloy's recommended fillers, whose
+  cached nonce manager takes a nonce concurrently with gas estimation and never
+  returns it. A send that reverted at `eth_estimateGas` (or that the node
+  rejected) left a gap, and every later transaction from that provider returned
+  a hash but never mined. Now:
+  - gas estimation runs before a nonce is taken;
+  - `Core::new` and `TokenHelper::new` share one nonce state per (chain id,
+    account) per process, keyed by the chain id filled into the transaction;
+  - sends from one account are serialized (the account lock is held from nonce
+    assignment until the node answers), so concurrent calls queue; every RPC
+    under the lock is time-bounded (30 s; 120 s for `eth_sendRawTransactionSync`)
+    and a timeout counts as an ambiguous failure;
+  - after a send: accepted, or (on `eth_sendRawTransactionSync` only) an
+    error carrying the tx hash in `data` (EIP-7966 "not processed in time") ->
+    next nonce; "nonce too low" / "already known" / "already imported" /
+    "known transaction" / "replacement transaction underpriced" -> max(n + 1,
+    chain count); any other node error, including "nonce too high" -> max(n,
+    chain count); transport/decode error, timeout, or a send dropped mid-flight
+    -> reuse n (a retry is then classified by the node's answer);
+  - the mined transaction count (`latest`) is read before every automatic send
+    (one extra RPC per send) and after a refused send. It moves the state
+    forward when the account was used elsewhere, and back only when our state
+    is ahead and the count has not changed for 30 s since we last sent the
+    nonce the chain is waiting on — sends past a gap do not count (stall
+    recovery: that transaction was dropped from the mempool, so the next send
+    refills the gap);
+  - a caller-supplied nonce is sent as-is and moves the shared state past it.
+
+  No public API change.
+
+  Residual risks:
+  1. Ambiguous outcome (transport error / timeout): the tx may have landed. The
+     next send reuses its nonce, so only one of the two executes — the caller may
+     get `Err` for the one that executed, or `Ok(hash)` for one that never mines.
+  2. A live tx not included for more than 30 s is "presumed dropped": the next
+     send after stall recovery re-signs its nonce and can replace that slow but
+     alive tx (same outcome as 1).
+  3. A tx the node accepted and then dropped: later sends stall for up to 30 s,
+     then recover by reusing its nonce.
+  4. First use after a process restart while the previous process still has
+     unmined txs: those nonces are reused (Monad `pending` == `latest`).
+  5. Not covered: providers passed to `Core::with_provider`, other processes or
+     wallets on the same key, a devnet reset that keeps the chain id (repaired by
+     the 30 s stall recovery).
+  6. Cost: +1 `eth_getTransactionCount` per automatic send (+1 more after a
+     refused send); sends are serialized per account process-wide, and a sync
+     send may hold the account for up to 120 s.
+  7. Errors are classified by partial message text; unknown wordings fall back
+     to max(n, chain count).
+  8. Raw sends (`send_raw_transaction*`) through the same provider are not
+     intercepted, so the state can be stale afterwards: the next send may fail
+     once ("nonce too low") and then recover. Envelopes signed by another key and
+     requests with another `from` pass through without touching the state.
+
+### Docs
+
+- Gas limit headroom: with `gas_limit: None` the raw node estimate is sent with
+  no headroom. On Monad the fee is `gas_limit × price` and failed transactions
+  pay the full limit (Monad recommends estimate + ~7.5–10%,
+  https://docs.monad.xyz/developer-essentials/gas-pricing). A graduated token's
+  NadFunPair writes its price accumulators when `block.timestamp` advances;
+  measured on Monad testnet and mainnet nodes (eth_estimateGas + state
+  overrides, 1 MON WMON-quoted DEX buy): overwrite +1,379 gas (+0.24%) on both,
+  first write after graduation +35,911 (+6.22%) testnet / +35,917 (+6.34%)
+  mainnet; sells and other routes not measured. README and the v2 params
+  module docs recommend `gas_limit` =
+  estimate + 10% for all trades; the examples (`common::gas_with_headroom`)
+  follow it. The fork E2E keeps a larger DEX buffer because anvil uses the
+  Ethereum gas schedule, where the first post-graduation DEX trade needs +15.6%.
+
+### Changed
+
+- Dependencies bumped to the latest stable releases: alloy 1.1.2 → 2.5.0,
+  reqwest 0.12 → 0.13.5, tokio 1.0 → 1.53.3, serde 1.0 → 1.0.229, serde_json
+  1.0 → 1.0.154, anyhow 1.0 → 1.0.104, futures-util 0.3 → 0.3.34, async-stream
+  0.3 → 0.3.6, rayon 1.8 → 1.12.0, chrono 0.4 → 0.4.45, clap 4.5 → 4.6.7, hex
+  0.4 → 0.4.3; dev: tokio-test 0.4 → 0.4.6, wiremock 0.6 → 0.6.5 (minimum
+  requirements in `Cargo.toml`; `Cargo.lock` refreshed).
+- Docs and examples no longer use gas prices below Monad's 100 gwei minimum
+  base fee (`50_000_000_000` -> `100_000_000_000`; example fallbacks likewise).
+- **Behaviour changes on `Core::new` / `TokenHelper::new` providers (may
+  affect existing callers):**
+  - sends from one account are serialized process-wide; concurrent calls queue
+    instead of running in parallel (a sync send can hold the account up to
+    120 s);
+  - every automatic send makes one extra `eth_getTransactionCount` call (one
+    more after a refused send);
+  - if the mined count stays below the SDK's next nonce for 30 s since the
+    SDK last sent the nonce the chain is waiting on, the next send re-signs
+    that nonce (stall resync), which can replace a slow but alive transaction.
+- Minimum `alloy` is now `1.1.2`: the nonce handling overrides
+  `Provider::send_transaction_sync_internal` (added in 1.1.1) and reads
+  `RpcError::tx_hash_data` (added in 1.1.2).
+
 ## [0.4.2] — 2026-10-15
 
 ### Added

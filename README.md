@@ -8,8 +8,32 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.4.2"
+nadfun_sdk = "0.5.0"
 ```
+
+Requires Rust 1.94.1+ and alloy 2.x (the SDK's public types are alloy 2.x types).
+
+TLS is rustls (OS trust store) on the `aws-lc-rs` crypto backend, which builds
+native code (`aws-lc-sys`): a C compiler is required, cmake on musl / cross
+targets, and NASM may be needed on Windows. System proxy settings are honoured.
+Run `cargo update -p rustls-webpki` so your lockfile resolves to ≥ 0.103.15. If
+your application installs its own rustls `CryptoProvider`, do so before the
+SDK's first WebSocket connect (which installs `aws-lc-rs` as the process
+default).
+
+## What's new in 0.5.0
+
+- **Nonce handling on SDK-built signers.** `Core::new` and `TokenHelper::new`
+  now share one nonce state per (chain, account) in the process and send from
+  that account one transaction at a time. A send that reverts at gas estimation
+  takes no nonce; a send the node rejects (e.g. insufficient funds, "nonce too
+  high") reuses its nonce; a nonce the node reports as used (`nonce too low`,
+  `already known`, ...) is skipped. The SDK reads the mined count before each
+  send (one extra RPC); if the chain shows no progress for 30 s since the SDK
+  last sent the nonce the chain is waiting on (that tx was dropped from the
+  mempool), it restarts from that count. Requires `alloy` 1.1.2+. See
+  [Fast Transaction Submission](#fast-transaction-submission) for the residual
+  risks.
 
 ## What's new in 0.4.2
 
@@ -63,7 +87,7 @@ async fn main() -> Result<()> {
         deadline: U256::from(9999999999999999u64),
     };
     let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-    let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
+    let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 
     // 4. Execute buy
     let buy_params = BuyParams {
@@ -514,7 +538,7 @@ let gas_params = GasEstimationParams::Buy {
 
 // Get accurate gas estimation from network
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-let gas_with_buffer = estimated_gas * 120 / 100; // Add 20% buffer
+let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 
 let buy_params = BuyParams {
     token,
@@ -523,7 +547,7 @@ let buy_params = BuyParams {
     to: wallet_address,
     deadline: U256::from(deadline),
     gas_limit: Some(gas_with_buffer), // Use network-based estimation
-    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 50_000_000_000 }), // 50 gwei
+    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 100_000_000_000 }), // 100 gwei (Monad minimum base fee)
     nonce: None,                       // Auto-detect
 };
 
@@ -555,7 +579,71 @@ let receipt = core.get_receipt(tx_hash).await?;
 println!("Confirmed: {}", receipt.status);
 ```
 
+On `Core::new` / `TokenHelper::new` providers (0.5.0+), sends from one
+account go out one at a time with nonces from a shared per-account state: a
+send that fails at gas estimation or is rejected by the node returns `Err`
+without leaving a nonce gap. Concurrent calls therefore queue rather than run
+in parallel. A returned hash still only means the node accepted the
+transaction — poll `get_receipt` and check `status`.
+
+Residual risks:
+1. Ambiguous outcome (transport error / timeout): the tx may have landed. The
+   next send reuses its nonce, so only one of the two executes — the caller may
+   get `Err` for the one that executed, or `Ok(hash)` for one that never mines.
+2. A live tx not included for more than 30 s is "presumed dropped": the next
+   send after stall recovery re-signs its nonce and can replace that slow but
+   alive tx (same outcome as 1).
+3. A tx the node accepted and then dropped: later sends stall for up to 30 s,
+   then recover by reusing its nonce.
+4. First use after a process restart while the previous process still has
+   unmined txs: those nonces are reused (Monad `pending` == `latest`).
+5. Not covered: providers passed to `Core::with_provider`, other processes or
+   wallets on the same key, a devnet reset that keeps the chain id (repaired by
+   the 30 s stall recovery).
+6. Cost: +1 `eth_getTransactionCount` per automatic send (+1 more after a
+   refused send); sends are serialized per account process-wide, and a sync
+   send may hold the account for up to 120 s.
+7. Errors are classified by partial message text; unknown wordings fall back
+   to max(n, chain count).
+8. Raw sends (`send_raw_transaction*`) through the same provider are not
+   intercepted, so the state can be stale afterwards: the next send may fail
+   once ("nonce too low") and then recover. Envelopes signed by another key and
+   requests with another `from` pass through without touching the state.
+
 ### ⛽ Gas Management
+
+When `gas_limit` is `None`, the raw node estimate (`eth_estimateGas`) is sent
+as the gas limit with no headroom. On Monad the fee is `gas_limit × price`,
+failed transactions pay the full limit, and Monad recommends sending the
+estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing),
+[opcode pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing)).
+
+A graduated token's DEX pair (NadFunPair) writes its price accumulators only
+when `block.timestamp` moved since its last update, so a DEX trade estimated in
+the same second as the pair's last update can need more gas if it lands in the
+next one (Monad blocks are ~400 ms, several per second). Measured on Monad
+nodes (Monad gas schedule) via `eth_estimateGas` with state overrides, 1 MON
+WMON-quoted DEX buy (`buyWithNative` → NadSwapAdapter → `pair.swap`), same
+block — testnet (chain 10143) and mainnet (chain 143, `https://rpc.monad.xyz`,
+Monad/0.16.4, block 113804292); sells and other route paths were not measured:
+
+| Pair accumulator state | Testnet estimate | Testnet extra | Mainnet estimate | Mainnet extra |
+|---|---|---|---|---|
+| No accumulator write (same timestamp) | 577,217 | – | 566,375 | – |
+| Overwrite (steady state) | 578,596 | +1,379 (+0.24%) | 567,754 | +1,379 (+0.24%) |
+| First write after graduation (0 → nonzero) | 613,128 | +35,911 (+6.22%) | 602,292 | +35,917 (+6.34%) |
+
+On Monad the accumulator slots share a 128-slot storage page with a slot
+`_update` always writes, so overwrites are almost free; only the first
+zero → nonzero write costs extra. `estimate + 10%` covers every measured case on
+both networks. Recommended for all trades: `gas_limit = estimate + 10%`:
+
+```rust,ignore
+let mut params = V2BuyParams { /* .. */ gas_limit: None, /* .. */ };
+let estimate = core.v2().estimate_gas(V2GasEstimationParams::Buy(params.clone())).await?;
+params.gas_limit = Some(estimate + estimate / 10);
+core.v2().buy(params).await?;
+```
 
 **v0.2.0 introduces a unified gas estimation system** that replaces static constants with real-time network estimation.
 
@@ -571,7 +659,7 @@ let gas_price = Some(GasPricing::Legacy);
 
 // Option 2: Legacy with explicit gas price
 let gas_price = Some(GasPricing::LegacyWithPrice {
-    gas_price: 50_000_000_000, // 50 gwei
+    gas_price: 100_000_000_000, // 100 gwei: Monad's minimum base fee
 });
 
 // Option 3: EIP-1559 (recommended for Monad)
@@ -606,7 +694,7 @@ let gas_params = GasEstimationParams::Buy {
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
-let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
+let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 ```
 
 #### Gas Estimation Parameters
@@ -635,21 +723,11 @@ The new system automatically handles common issues:
 
 #### Buffer Strategies
 
+Send `estimate + 10%` (see [Gas Management](#-gas-management)). Monad charges the
+full gas limit, so keep the headroom no larger than needed.
+
 ```rust
-// Fixed buffer amounts
-let gas_fixed_buffer = estimated_gas + 50_000;  // +50k gas
-
-// Percentage-based buffers
-let gas_20_percent = estimated_gas * 120 / 100; // 20% buffer
-let gas_25_percent = estimated_gas * 125 / 100; // 25% buffer (for complex operations)
-
-// Choose based on operation complexity
-let final_gas = match operation_type {
-    "buy" => estimated_gas * 120 / 100,        // 20% buffer
-    "sell" => estimated_gas * 115 / 100,       // 15% buffer
-    "sell_permit" => estimated_gas * 125 / 100, // 25% buffer
-    _ => estimated_gas + 50_000,               // Fixed buffer
-};
+let final_gas = estimated_gas + estimated_gas / 10;
 ```
 
 #### Migration from v0.1.x
@@ -663,7 +741,7 @@ let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 use nadfun_sdk::GasEstimationParams;
 let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
 let estimated_gas = core.v1().estimate_gas(&router, params).await?;
-let gas_limit = estimated_gas * 120 / 100; // Apply buffer
+let gas_limit = estimated_gas + estimated_gas / 10; // +10%, see Gas Management
 ```
 
 **⚠️ Important Notes:**
@@ -950,7 +1028,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 - **Unified Gas Estimation**: Demonstrates `core.v1().estimate_gas()` for all operation types
 - **Automatic Approval**: Handles token approval for SELL operations automatically
 - **Real Permit Signatures**: Generates valid EIP-2612 signatures for SELL PERMIT operations
-- **Buffer Strategies**: Shows different buffer calculation methods (fixed +50k, percentage 20%-25%)
+- **Gas Headroom**: Gas limit to send = estimate + 10% (Monad guidance: estimate + ~7.5–10%)
 - **Cost Analysis**: Real-time transaction cost estimates at different gas prices
 - **Error Handling**: Graceful fallback when estimation fails
 
@@ -1262,8 +1340,8 @@ organized by network and version (`addresses::{mainnet,testnet}::{v1,v2}`).
 Access them via the typed helpers — `get_bonding_curve(network)`,
 `get_nadfun_router_v2(network)` (returns `&str` directly — v2 is deployed on
 every network), etc. The v2 set has more contracts (vaults, registry, bonding
-curve, lens); the most useful are listed below. Deprecated since 0.4.2 (unused
-by the SDK, removed in 0.5.0): `get_creator_fee_processor_v2`,
+curve, lens); the most useful are listed below. Removed in 0.5.0 (deprecated
+in 0.4.2, unused by the SDK): `get_creator_fee_processor_v2`,
 `get_fee_collector_v2`, `get_fee_to_v2`, `get_gift_vault_v2`,
 `get_lp_manager_v2`, `get_nad_swap_adapter_v2`, `get_nadfun_pair_impl_v2`,
 `get_token_impl_v2`, `get_vault_registry_v2` and their constants.

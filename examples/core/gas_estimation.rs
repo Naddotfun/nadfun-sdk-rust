@@ -106,15 +106,11 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Different buffer strategies
-    let buy_gas_with_buffer_fixed = buy_gas + 50_000;
-    let buy_gas_with_buffer_percent = buy_gas * 120 / 100; // 20% buffer
-
+    // Headroom: estimate + 10%
     println!(
-        "  📊 With fixed buffer (+50k): {}",
-        buy_gas_with_buffer_fixed
+        "  📊 Gas limit to send (+10%): {}",
+        common::gas_with_headroom(buy_gas)
     );
-    println!("  📊 With 20% buffer: {}", buy_gas_with_buffer_percent);
     println!();
 
     // === SELL GAS ESTIMATION ===
@@ -220,15 +216,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Different buffer strategies
-    let sell_gas_with_buffer_fixed = sell_gas + 30_000;
-    let sell_gas_with_buffer_percent = sell_gas * 115 / 100; // 15% buffer
-
     println!(
-        "  📊 With fixed buffer (+30k): {}",
-        sell_gas_with_buffer_fixed
+        "  📊 Gas limit to send (+10%): {}",
+        common::gas_with_headroom(sell_gas)
     );
-    println!("  📊 With 15% buffer: {}", sell_gas_with_buffer_percent);
     println!();
 
     // === SELL PERMIT GAS ESTIMATION ===
@@ -285,10 +276,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Different buffer strategies
-    let permit_gas_with_buffer = sell_permit_gas * 125 / 100; // 25% buffer (permits can be more complex)
-
-    println!("  📊 With 25% buffer: {}", permit_gas_with_buffer);
+    println!(
+        "  📊 Gas limit to send (+10%): {}",
+        common::gas_with_headroom(sell_permit_gas)
+    );
     println!();
 
     // === GAS COMPARISON ===
@@ -298,15 +289,15 @@ async fn main() -> Result<()> {
     println!("  🟣 SELL PERMIT: {} gas", sell_permit_gas);
     println!();
 
-    // Calculate costs (assuming 50 gwei gas price)
-    let gas_price_gwei = 50u64;
+    // Calculate costs at Monad's minimum base fee (100 gwei)
+    let gas_price_gwei = 100u64;
     let gas_price_wei = gas_price_gwei * 1_000_000_000; // Convert to wei
 
     let buy_cost_wei = buy_gas * gas_price_wei;
     let sell_cost_wei = sell_gas * gas_price_wei;
     let permit_cost_wei = sell_permit_gas * gas_price_wei;
 
-    println!("💰 === ESTIMATED COSTS (at 50 gwei) ===");
+    println!("💰 === ESTIMATED COSTS (at 100 gwei) ===");
     println!(
         "  🔵 BUY: {} wei (~{:.6} MON)",
         buy_cost_wei,
