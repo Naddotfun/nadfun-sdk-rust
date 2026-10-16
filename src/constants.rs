@@ -90,42 +90,14 @@ pub mod addresses {
             /// NadFun pair factory (CREATE2 deterministic pair deployment).
             pub const NAD_FUN_FACTORY: &str = "0xA25b13127e63ddae6d0b35570FF3D39dBD621001";
 
-            /// NadFun pair implementation (Uniswap V2 fork with pair-level fee).
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const NAD_FUN_PAIR_IMPL: &str = "0x8115c15CBa6409187bC61B293881f8681394B4cF";
-
-            /// IDexAdapter implementation wrapping NadFunPair.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const NAD_SWAP_ADAPTER: &str = "0x251886adA13Aa3Fb2b02bB101FD9a263CCa7eDE4";
-
             /// TokenRegistry — per-token metadata (pair, quoteToken, dexType).
             pub const TOKEN_REGISTRY: &str = "0x3CBF1E9F8847A4c968Bb2636696723CC82b91565";
-
-            /// Token implementation contract used by the router for new deployments.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const TOKEN_IMPL: &str = "0x4f44eAFa383FE5f97a0d6CfF97fC5d605D026Fbd";
 
             /// ProtocolManager — global config (fees, quote tokens, sniping penalty table).
             pub const PROTOCOL_MANAGER: &str = "0x71F846A560a4d68F53e5bd34ED084E7992f171C7";
 
             /// v2 BondingCurve — state machine for token creation, curve trading, graduation.
             pub const BONDING_CURVE: &str = "0x9f3832732923252A21044F21eE6bd87F09514ae4";
-
-            /// FeeCollector — central per-pair fee storage and settlement.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const FEE_COLLECTOR: &str = "0xE1C8b73343f5A83EBe165BE90470d84B00e33022";
-
-            /// CreatorFeeProcessor — distributes creator fees across vault slots.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const CREATOR_FEE_PROCESSOR: &str = "0x46Bc5ce6a84B4F5595e7E78810b9365edd60fDe9";
-
-            /// LPManager — manages liquidity during graduation.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const LP_MANAGER: &str = "0x5992485CdcD35ccc164A8D893C92ef398C78Eee3";
-
-            /// VaultRegistry — active vault registry.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const VAULT_REGISTRY: &str = "0x64643b714823F0Ce2DfE6B35EF6D63781628f288";
 
             /// BurnVault — burns received quote tokens (deflationary mechanism).
             pub const BURN_VAULT: &str = "0x94CFAA4d41AE2336E2a4D8B307c7faf906384C27";
@@ -135,10 +107,6 @@ pub mod addresses {
 
             /// CreatorFeeVault — holds creator fees; claims unwrap native when quote = WMON.
             pub const CREATOR_FEE_VAULT: &str = "0x687f9172D5F4798694811333C5C5696afCF4F6f4";
-
-            /// GiftVault — time-locked gift distribution with auto-expiry buyback.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const GIFT_VAULT: &str = "0xa46A28558D77B1bF9dd98A451f78c43bE2545605";
 
             /// `TokenInfoLens` — stateless view contract that classifies a
             /// token as v1 / v2 / none AND returns its on-chain `quoteToken`
@@ -196,42 +164,14 @@ pub mod addresses {
             /// NadFun pair factory.
             pub const NAD_FUN_FACTORY: &str = "0x59C51c66B79c68F63d5446940CD13b6968788e36";
 
-            /// NadFun pair implementation.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const NAD_FUN_PAIR_IMPL: &str = "0x3cAd42e28BC0D373F4B9419d0835b159eE4CbF1F";
-
-            /// IDexAdapter implementation wrapping NadFunPair.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const NAD_SWAP_ADAPTER: &str = "0x3D7B853D59c5ED21072bF00C9509c5324e9E43c9";
-
             /// TokenRegistry.
             pub const TOKEN_REGISTRY: &str = "0x2Bc127be900aD290E703Cd2C71eB0EDCa162C898";
-
-            /// Token implementation contract.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const TOKEN_IMPL: &str = "0xFD870fEbeeA5C1Cd5b10cd950eFF8f4d63dc81f1";
 
             /// ProtocolManager.
             pub const PROTOCOL_MANAGER: &str = "0x2F98030aBD7c59e3E5Dc6b4b66b6008821d0fB41";
 
             /// v2 BondingCurve.
             pub const BONDING_CURVE: &str = "0x27063a38eC0D3281D354090EB92e669Ed1eB956C";
-
-            /// FeeCollector.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const FEE_COLLECTOR: &str = "0x653cf4297fB3f7804173b8449950E20812DD6dC3";
-
-            /// CreatorFeeProcessor.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const CREATOR_FEE_PROCESSOR: &str = "0xad208200b138F98F6223837464662DaF3a852F02";
-
-            /// LPManager.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const LP_MANAGER: &str = "0x35B8A48f32913d50253a63614206588Cb1D9C402";
-
-            /// VaultRegistry.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const VAULT_REGISTRY: &str = "0x4f7315F8Acde8C521615BA4312d5fC61e632c99D";
 
             /// BurnVault.
             pub const BURN_VAULT: &str = "0xFA707fe7d2c2894bf0436c7B73947cBA9E888017";
@@ -241,15 +181,6 @@ pub mod addresses {
 
             /// CreatorFeeVault.
             pub const CREATOR_FEE_VAULT: &str = "0xfEB12B7698e296C57BBF9f0c9b38B3e908285A99";
-
-            /// GiftVault.
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const GIFT_VAULT: &str = "0xC112EB5C40FC9A22425300D232A31d00FF840ad0";
-
-            /// Protocol fee recipient (where protocol fees on graduate/dex
-            /// trades land; surfaced for read-only inspection / auditing).
-            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-            pub const FEE_TO: &str = "0x2248217222bBfd42Ad9edf0689c4c096dCd4FFeE";
 
             /// `TokenInfoLens` — stateless view contract that classifies a
             /// token as v1 / v2 / none AND returns its on-chain `quoteToken`
@@ -374,41 +305,11 @@ pub fn get_nadfun_factory_v2(network: Network) -> &'static str {
     }
 }
 
-/// Get NadFun v2 pair implementation address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_nadfun_pair_impl_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::NAD_FUN_PAIR_IMPL,
-        Network::Testnet => addresses::testnet::v2::NAD_FUN_PAIR_IMPL,
-    }
-}
-
-/// Get NadFun v2 swap adapter (IDexAdapter) address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_nad_swap_adapter_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::NAD_SWAP_ADAPTER,
-        Network::Testnet => addresses::testnet::v2::NAD_SWAP_ADAPTER,
-    }
-}
-
 /// Get NadFun v2 token registry address for the given network.
 pub fn get_token_registry_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::TOKEN_REGISTRY,
         Network::Testnet => addresses::testnet::v2::TOKEN_REGISTRY,
-    }
-}
-
-/// Get NadFun v2 token implementation address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_token_impl_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::TOKEN_IMPL,
-        Network::Testnet => addresses::testnet::v2::TOKEN_IMPL,
     }
 }
 
@@ -425,46 +326,6 @@ pub fn get_bonding_curve_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::BONDING_CURVE,
         Network::Testnet => addresses::testnet::v2::BONDING_CURVE,
-    }
-}
-
-/// Get NadFun v2 fee collector address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_fee_collector_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::FEE_COLLECTOR,
-        Network::Testnet => addresses::testnet::v2::FEE_COLLECTOR,
-    }
-}
-
-/// Get NadFun v2 creator fee processor address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_creator_fee_processor_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::CREATOR_FEE_PROCESSOR,
-        Network::Testnet => addresses::testnet::v2::CREATOR_FEE_PROCESSOR,
-    }
-}
-
-/// Get NadFun v2 LP manager address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_lp_manager_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::LP_MANAGER,
-        Network::Testnet => addresses::testnet::v2::LP_MANAGER,
-    }
-}
-
-/// Get NadFun v2 vault registry address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_vault_registry_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::VAULT_REGISTRY,
-        Network::Testnet => addresses::testnet::v2::VAULT_REGISTRY,
     }
 }
 
@@ -489,28 +350,6 @@ pub fn get_creator_fee_vault_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::CREATOR_FEE_VAULT,
         Network::Testnet => addresses::testnet::v2::CREATOR_FEE_VAULT,
-    }
-}
-
-/// Get NadFun v2 gift vault address for the given network.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_gift_vault_v2(network: Network) -> &'static str {
-    match network {
-        Network::Mainnet => addresses::mainnet::v2::GIFT_VAULT,
-        Network::Testnet => addresses::testnet::v2::GIFT_VAULT,
-    }
-}
-
-/// Get the v2 protocol fee recipient (`feeTo`) address for the given network.
-///
-/// Stays `Option` — `feeTo` is genuinely absent on Mainnet.
-#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
-#[allow(deprecated)] // reads the deprecated constant it wraps
-pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
-    match network {
-        Network::Mainnet => None,
-        Network::Testnet => Some(addresses::testnet::v2::FEE_TO),
     }
 }
 

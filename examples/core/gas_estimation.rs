@@ -289,15 +289,15 @@ async fn main() -> Result<()> {
     println!("  🟣 SELL PERMIT: {} gas", sell_permit_gas);
     println!();
 
-    // Calculate costs (assuming 50 gwei gas price)
-    let gas_price_gwei = 50u64;
+    // Calculate costs at Monad's minimum base fee (100 gwei)
+    let gas_price_gwei = 100u64;
     let gas_price_wei = gas_price_gwei * 1_000_000_000; // Convert to wei
 
     let buy_cost_wei = buy_gas * gas_price_wei;
     let sell_cost_wei = sell_gas * gas_price_wei;
     let permit_cost_wei = sell_permit_gas * gas_price_wei;
 
-    println!("💰 === ESTIMATED COSTS (at 50 gwei) ===");
+    println!("💰 === ESTIMATED COSTS (at 100 gwei) ===");
     println!(
         "  🔵 BUY: {} wei (~{:.6} MON)",
         buy_cost_wei,

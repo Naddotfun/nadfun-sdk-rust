@@ -14,8 +14,10 @@ sol!(
     "abi/IBondingCurveRouter.json"
 );
 
+// alloy 2.x `sol!` expansion exceeds clippy's too_many_arguments threshold.
 sol!(
     #[sol(rpc)]
+    #[allow(clippy::too_many_arguments)]
     IBondingCurve,
     "abi/IBondingCurve.json"
 );

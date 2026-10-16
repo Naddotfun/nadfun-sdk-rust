@@ -73,8 +73,8 @@ cargo run --example buy -- --private-key your_private_key_here --rpc-url https:/
 **Example Output:**
 ```
 💰 Account MON balance: 10.5 MON
-⛽ Network gas price: 25 gwei
-⛽ Recommended gas price: 75 gwei
+⛽ Network gas price: 100 gwei
+⛽ Recommended gas price: 300 gwei
 ⛽ Estimated gas for buy contract call: 245123
 ⛽ Using default gas limit: 320000
 🛡️ Slippage protection:

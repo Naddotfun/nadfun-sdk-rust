@@ -11,8 +11,10 @@ use alloy::{
 use anyhow::Result;
 
 // Bonding curve contract interface for events
+// alloy 2.x `sol!` expansion exceeds clippy's too_many_arguments threshold.
 sol! {
     #[sol(rpc)]
+    #[allow(clippy::too_many_arguments)]
     contract IBondingCurve {
         event CurveCreate(
             address indexed creator,
