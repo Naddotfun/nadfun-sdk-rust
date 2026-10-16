@@ -35,6 +35,7 @@
 
 #[allow(clippy::module_inception)]
 pub mod core;
+pub(crate) mod nonce;
 pub mod v1;
 pub mod v2;
 

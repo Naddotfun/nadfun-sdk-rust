@@ -141,9 +141,9 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Add 25% buffer to estimated gas (permit transactions can be more complex)
-    let gas_with_buffer = estimated_gas * 125 / 100;
-    println!("⛽ Gas with 25% buffer: {}", gas_with_buffer);
+    // Headroom: estimate + 10%
+    let gas_with_buffer = common::gas_with_headroom(estimated_gas);
+    println!("⛽ Gas with 10% headroom: {gas_with_buffer}");
 
     // Get current network gas price
     let network_gas_price_raw = core.provider().get_gas_price().await?;

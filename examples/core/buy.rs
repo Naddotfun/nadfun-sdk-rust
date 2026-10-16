@@ -169,9 +169,9 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Add 20% buffer to estimated gas
-    let gas_with_buffer = estimated_gas * 120 / 100;
-    println!("⛽ Gas with 20% buffer: {}", gas_with_buffer);
+    // Headroom: estimate + 10%
+    let gas_with_buffer = common::gas_with_headroom(estimated_gas);
+    println!("⛽ Gas with 10% headroom: {gas_with_buffer}");
 
     let buy_params = BuyParams {
         token,

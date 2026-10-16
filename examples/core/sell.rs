@@ -153,9 +153,9 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Add 15% buffer to estimated gas
-    let gas_with_buffer = estimated_gas * 115 / 100;
-    println!("⛽ Gas with 15% buffer: {}", gas_with_buffer);
+    // Headroom: estimate + 10%
+    let gas_with_buffer = common::gas_with_headroom(estimated_gas);
+    println!("⛽ Gas with 10% headroom: {gas_with_buffer}");
 
     // Prepare sell parameters with minimal amountOutMin for testing
     let sell_params = SellParams {

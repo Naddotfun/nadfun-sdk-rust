@@ -13,6 +13,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.5.0] — Unreleased
+
+### Fixed
+
+- **Nonce gap after a failed send.** The signing providers built by
+  `Core::new` and `TokenHelper::new` used alloy's recommended fillers, whose
+  cached nonce manager takes a nonce concurrently with gas estimation and never
+  returns it. A send that reverted at `eth_estimateGas` (or that the node
+  rejected) left a gap, and every later transaction from that provider returned
+  a hash but never mined. Now:
+  - gas estimation runs before a nonce is taken;
+  - `Core::new` and `TokenHelper::new` share one nonce state per (chain id,
+    account) per process, keyed by the chain id filled into the transaction;
+  - sends from one account are serialized (the account lock is held from nonce
+    assignment until the node answers), so concurrent calls queue; every RPC
+    under the lock is time-bounded (30 s; 120 s for `eth_sendRawTransactionSync`)
+    and a timeout counts as an ambiguous failure;
+  - after a send: accepted, or (on `eth_sendRawTransactionSync` only) an
+    error carrying the tx hash in `data` (EIP-7966 "not processed in time") ->
+    next nonce; "nonce too low" / "already known" / "already imported" /
+    "known transaction" / "replacement transaction underpriced" -> max(n + 1,
+    chain count); any other node error, including "nonce too high" -> max(n,
+    chain count); transport/decode error, timeout, or a send dropped mid-flight
+    -> reuse n (a retry is then classified by the node's answer);
+  - the mined transaction count (`latest`) is read before every automatic send
+    (one extra RPC per send) and after a refused send. It moves the state
+    forward when the account was used elsewhere, and back only when our state
+    is ahead and the count has not changed for 30 s since we last sent the
+    nonce the chain is waiting on — sends past a gap do not count (stall
+    recovery: that transaction was dropped from the mempool, so the next send
+    refills the gap);
+  - a caller-supplied nonce is sent as-is and moves the shared state past it.
+
+  No public API change.
+
+  Residual risks:
+  1. Ambiguous outcome (transport error / timeout): the tx may have landed. The
+     next send reuses its nonce, so only one of the two executes — the caller may
+     get `Err` for the one that executed, or `Ok(hash)` for one that never mines.
+  2. A live tx not included for more than 30 s is "presumed dropped": the next
+     send after stall recovery re-signs its nonce and can replace that slow but
+     alive tx (same outcome as 1).
+  3. A tx the node accepted and then dropped: later sends stall for up to 30 s,
+     then recover by reusing its nonce.
+  4. First use after a process restart while the previous process still has
+     unmined txs: those nonces are reused (Monad `pending` == `latest`).
+  5. Not covered: providers passed to `Core::with_provider`, other processes or
+     wallets on the same key, a devnet reset that keeps the chain id (repaired by
+     the 30 s stall recovery).
+  6. Cost: +1 `eth_getTransactionCount` per automatic send (+1 more after a
+     refused send); sends are serialized per account process-wide, and a sync
+     send may hold the account for up to 120 s.
+  7. Errors are classified by partial message text; unknown wordings fall back
+     to max(n, chain count).
+  8. Raw sends (`send_raw_transaction*`) through the same provider are not
+     intercepted, so the state can be stale afterwards: the next send may fail
+     once ("nonce too low") and then recover. Envelopes signed by another key and
+     requests with another `from` pass through without touching the state.
+
+### Docs
+
+- Gas limit headroom: with `gas_limit: None` the raw node estimate is sent with
+  no headroom. On Monad the fee is `gas_limit × price` and failed transactions
+  pay the full limit (Monad recommends estimate + ~7.5–10%,
+  https://docs.monad.xyz/developer-essentials/gas-pricing). A graduated token's
+  NadFunPair writes its price accumulators when `block.timestamp` advances;
+  measured on Monad testnet and mainnet nodes (eth_estimateGas + state
+  overrides, 1 MON WMON-quoted DEX buy): overwrite +1,379 gas (+0.24%) on both,
+  first write after graduation +35,911 (+6.22%) testnet / +35,917 (+6.34%)
+  mainnet; sells and other routes not measured. README,
+  llms.txt and the v2 params module docs recommend `gas_limit` =
+  estimate + 10% for all trades; the examples (`common::gas_with_headroom`)
+  follow it. The fork E2E keeps a larger DEX buffer because anvil uses the
+  Ethereum gas schedule, where the first post-graduation DEX trade needs +15.6%.
+
+### Changed
+
+- **Behaviour changes on `Core::new` / `TokenHelper::new` providers (may
+  affect existing callers):**
+  - sends from one account are serialized process-wide; concurrent calls queue
+    instead of running in parallel (a sync send can hold the account up to
+    120 s);
+  - every automatic send makes one extra `eth_getTransactionCount` call (one
+    more after a refused send);
+  - if the mined count stays below the SDK's next nonce for 30 s since the
+    SDK last sent the nonce the chain is waiting on, the next send re-signs
+    that nonce (stall resync), which can replace a slow but alive transaction.
+- Minimum `alloy` is now `1.1.2`: the nonce handling overrides
+  `Provider::send_transaction_sync_internal` (added in 1.1.1) and reads
+  `RpcError::tx_hash_data` (added in 1.1.2).
+
 ## [0.4.2] — 2026-10-15
 
 ### Added

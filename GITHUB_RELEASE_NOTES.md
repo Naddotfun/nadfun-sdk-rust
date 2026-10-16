@@ -1,5 +1,60 @@
 # Release Notes
 
+## v0.5.0 (unreleased)
+
+### 🔧 Fixes
+
+- **Nonce gap after a failed send** - a send that reverted at gas estimation or was rejected by the node used to leave a nonce gap on `Core::new` / `TokenHelper::new` providers, so later transactions returned a hash but never mined
+  - Gas estimation now runs before a nonce is taken
+  - `Core::new` and `TokenHelper::new` share one nonce state per (chain, account) in the process
+  - Sends from one account are serialized; concurrent calls queue and get consecutive nonces
+  - Node rejection (incl. "nonce too high") -> nonce reused, or the chain count if it is already past it; "nonce too low" / "already known" / "already imported" -> skipped; on sync sends only, an error carrying the tx hash -> treated as sent; transport error, timeout (30 s per RPC under the lock) or dropped send -> reused on the next send
+  - Mined count (`latest`) read before every automatic send (one extra RPC) and after a refused send; if we are ahead and it has not moved for 30 s since we last sent the nonce the chain is waiting on (sends past a gap do not count), that tx is presumed dropped and the next send refills the gap (stall recovery)
+  - Caller-supplied nonces pass through and move the shared state past them
+
+Residual risks:
+1. Ambiguous outcome (transport error / timeout): the tx may have landed. The
+   next send reuses its nonce, so only one of the two executes — the caller may
+   get `Err` for the one that executed, or `Ok(hash)` for one that never mines.
+2. A live tx not included for more than 30 s is "presumed dropped": the next
+   send after stall recovery re-signs its nonce and can replace that slow but
+   alive tx (same outcome as 1).
+3. A tx the node accepted and then dropped: later sends stall for up to 30 s,
+   then recover by reusing its nonce.
+4. First use after a process restart while the previous process still has
+   unmined txs: those nonces are reused (Monad `pending` == `latest`).
+5. Not covered: providers passed to `Core::with_provider`, other processes or
+   wallets on the same key, a devnet reset that keeps the chain id (repaired by
+   the 30 s stall recovery).
+6. Cost: +1 `eth_getTransactionCount` per automatic send (+1 more after a
+   refused send); sends are serialized per account process-wide, and a sync
+   send may hold the account for up to 120 s.
+7. Errors are classified by partial message text; unknown wordings fall back
+   to max(n, chain count).
+8. Raw sends (`send_raw_transaction*`) through the same provider are not
+   intercepted, so the state can be stale afterwards: the next send may fail
+   once ("nonce too low") and then recover. Envelopes signed by another key and
+   requests with another `from` pass through without touching the state.
+
+### ⚠️ Behaviour Changes
+
+- Sends from one account are serialized process-wide (concurrent calls queue; a sync send can hold the account up to 120 s)
+- +1 `eth_getTransactionCount` per automatic send (+1 more after a refused send)
+- 30 s stall resync: if the chain does not move for 30 s since the SDK last sent the nonce it is waiting on, the next send re-signs that nonce (can replace a slow but alive tx)
+
+### 📦 Dependencies
+
+- Minimum `alloy` raised to `1.1.2`
+
+### 📦 Installation
+
+```toml
+[dependencies]
+nadfun_sdk = "0.5.0"
+```
+
+---
+
 ## v0.4.2 (2026-10-16)
 
 ### 🚀 New Features

@@ -1,4 +1,19 @@
 //! NadFun contract v2 parameter types (trading + creation).
+//!
+//! Every trade/create parameter struct carries `gas_limit`, `gas_price` and
+//! `nonce` transaction options. When `gas_limit` is `None` the raw node
+//! estimate is sent as the gas limit with no headroom. Monad charges
+//! `gas_limit × price` (failed transactions pay the full limit) and recommends
+//! the estimate plus ~7.5–10%
+//! (<https://docs.monad.xyz/developer-essentials/gas-pricing>).
+//!
+//! A graduated token's NadFunPair writes its price accumulators only when
+//! `block.timestamp` moved since its last update. Measured on Monad testnet and
+//! mainnet nodes via `eth_estimateGas` with state overrides (1 MON WMON-quoted
+//! DEX buy, same block): an accumulator overwrite adds +1,379 gas (+0.24%) on
+//! both; the first write after graduation (0 → nonzero) +35,911 (+6.22%) on
+//! testnet and +35,917 (+6.34%) on mainnet; sells and other routes were not
+//! measured. Recommended for all trades: `gas_limit = estimate + 10%`.
 
 use alloy::primitives::{Address, Bytes, B256, U256};
 
