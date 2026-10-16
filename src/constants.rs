@@ -73,7 +73,7 @@ pub mod addresses {
             pub const LENS_ADDRESS: &str = "0x7e78A8DE94f21804F7a17F4E8BF9EC2c872187ea";
 
             /// API server URL for metadata and token creation
-            pub const API_SERVER_URL: &str = "https://api.nadapp.net";
+            pub const API_SERVER_URL: &str = "https://api.nad.fun";
 
             /// CreatorTreasury contract for creator reward claims
             pub const CREATOR_TREASURY: &str = "0x24dFf9B68fA36f8400302e2babC3e049eA19459E";
@@ -91,15 +91,18 @@ pub mod addresses {
             pub const NAD_FUN_FACTORY: &str = "0xA25b13127e63ddae6d0b35570FF3D39dBD621001";
 
             /// NadFun pair implementation (Uniswap V2 fork with pair-level fee).
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const NAD_FUN_PAIR_IMPL: &str = "0x8115c15CBa6409187bC61B293881f8681394B4cF";
 
             /// IDexAdapter implementation wrapping NadFunPair.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const NAD_SWAP_ADAPTER: &str = "0x251886adA13Aa3Fb2b02bB101FD9a263CCa7eDE4";
 
             /// TokenRegistry — per-token metadata (pair, quoteToken, dexType).
             pub const TOKEN_REGISTRY: &str = "0x3CBF1E9F8847A4c968Bb2636696723CC82b91565";
 
             /// Token implementation contract used by the router for new deployments.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const TOKEN_IMPL: &str = "0x4f44eAFa383FE5f97a0d6CfF97fC5d605D026Fbd";
 
             /// ProtocolManager — global config (fees, quote tokens, sniping penalty table).
@@ -109,15 +112,19 @@ pub mod addresses {
             pub const BONDING_CURVE: &str = "0x9f3832732923252A21044F21eE6bd87F09514ae4";
 
             /// FeeCollector — central per-pair fee storage and settlement.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const FEE_COLLECTOR: &str = "0xE1C8b73343f5A83EBe165BE90470d84B00e33022";
 
             /// CreatorFeeProcessor — distributes creator fees across vault slots.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const CREATOR_FEE_PROCESSOR: &str = "0x46Bc5ce6a84B4F5595e7E78810b9365edd60fDe9";
 
             /// LPManager — manages liquidity during graduation.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const LP_MANAGER: &str = "0x5992485CdcD35ccc164A8D893C92ef398C78Eee3";
 
             /// VaultRegistry — active vault registry.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const VAULT_REGISTRY: &str = "0x64643b714823F0Ce2DfE6B35EF6D63781628f288";
 
             /// BurnVault — burns received quote tokens (deflationary mechanism).
@@ -130,12 +137,18 @@ pub mod addresses {
             pub const CREATOR_FEE_VAULT: &str = "0x687f9172D5F4798694811333C5C5696afCF4F6f4";
 
             /// GiftVault — time-locked gift distribution with auto-expiry buyback.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const GIFT_VAULT: &str = "0xa46A28558D77B1bF9dd98A451f78c43bE2545605";
 
             /// `TokenInfoLens` — stateless view contract that classifies a
             /// token as v1 / v2 / none AND returns its on-chain `quoteToken`
             /// by simultaneously probing the v1 and v2 token registries in one
             /// call. V1 tokens report WMON as their quote.
+            ///
+            /// NOTE: this mainnet address is not a TokenInfoLens — another
+            /// contract (~18KB, DEX-router-like) lives there, so lens calls
+            /// revert on mainnet. Use
+            /// `Core::detect_token_info_with_api` / `detect_version_with_api`.
             pub const TOKEN_INFO_LENS: &str = "0x40c126f92DAD5C26D3b36aA7F2A949265FA534cB";
         }
 
@@ -184,15 +197,18 @@ pub mod addresses {
             pub const NAD_FUN_FACTORY: &str = "0x59C51c66B79c68F63d5446940CD13b6968788e36";
 
             /// NadFun pair implementation.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const NAD_FUN_PAIR_IMPL: &str = "0x3cAd42e28BC0D373F4B9419d0835b159eE4CbF1F";
 
             /// IDexAdapter implementation wrapping NadFunPair.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const NAD_SWAP_ADAPTER: &str = "0x3D7B853D59c5ED21072bF00C9509c5324e9E43c9";
 
             /// TokenRegistry.
             pub const TOKEN_REGISTRY: &str = "0x2Bc127be900aD290E703Cd2C71eB0EDCa162C898";
 
             /// Token implementation contract.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const TOKEN_IMPL: &str = "0xFD870fEbeeA5C1Cd5b10cd950eFF8f4d63dc81f1";
 
             /// ProtocolManager.
@@ -202,15 +218,19 @@ pub mod addresses {
             pub const BONDING_CURVE: &str = "0x27063a38eC0D3281D354090EB92e669Ed1eB956C";
 
             /// FeeCollector.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const FEE_COLLECTOR: &str = "0x653cf4297fB3f7804173b8449950E20812DD6dC3";
 
             /// CreatorFeeProcessor.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const CREATOR_FEE_PROCESSOR: &str = "0xad208200b138F98F6223837464662DaF3a852F02";
 
             /// LPManager.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const LP_MANAGER: &str = "0x35B8A48f32913d50253a63614206588Cb1D9C402";
 
             /// VaultRegistry.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const VAULT_REGISTRY: &str = "0x4f7315F8Acde8C521615BA4312d5fC61e632c99D";
 
             /// BurnVault.
@@ -223,10 +243,12 @@ pub mod addresses {
             pub const CREATOR_FEE_VAULT: &str = "0xfEB12B7698e296C57BBF9f0c9b38B3e908285A99";
 
             /// GiftVault.
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const GIFT_VAULT: &str = "0xC112EB5C40FC9A22425300D232A31d00FF840ad0";
 
             /// Protocol fee recipient (where protocol fees on graduate/dex
             /// trades land; surfaced for read-only inspection / auditing).
+            #[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
             pub const FEE_TO: &str = "0x2248217222bBfd42Ad9edf0689c4c096dCd4FFeE";
 
             /// `TokenInfoLens` — stateless view contract that classifies a
@@ -353,6 +375,8 @@ pub fn get_nadfun_factory_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 pair implementation address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_nadfun_pair_impl_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::NAD_FUN_PAIR_IMPL,
@@ -361,6 +385,8 @@ pub fn get_nadfun_pair_impl_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 swap adapter (IDexAdapter) address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_nad_swap_adapter_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::NAD_SWAP_ADAPTER,
@@ -377,6 +403,8 @@ pub fn get_token_registry_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 token implementation address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_token_impl_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::TOKEN_IMPL,
@@ -401,6 +429,8 @@ pub fn get_bonding_curve_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 fee collector address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_fee_collector_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::FEE_COLLECTOR,
@@ -409,6 +439,8 @@ pub fn get_fee_collector_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 creator fee processor address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_creator_fee_processor_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::CREATOR_FEE_PROCESSOR,
@@ -417,6 +449,8 @@ pub fn get_creator_fee_processor_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 LP manager address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_lp_manager_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::LP_MANAGER,
@@ -425,6 +459,8 @@ pub fn get_lp_manager_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 vault registry address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_vault_registry_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::VAULT_REGISTRY,
@@ -457,6 +493,8 @@ pub fn get_creator_fee_vault_v2(network: Network) -> &'static str {
 }
 
 /// Get NadFun v2 gift vault address for the given network.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_gift_vault_v2(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::GIFT_VAULT,
@@ -467,6 +505,8 @@ pub fn get_gift_vault_v2(network: Network) -> &'static str {
 /// Get the v2 protocol fee recipient (`feeTo`) address for the given network.
 ///
 /// Stays `Option` — `feeTo` is genuinely absent on Mainnet.
+#[deprecated(since = "0.4.2", note = "unused by the SDK; will be removed in 0.5.0")]
+#[allow(deprecated)] // reads the deprecated constant it wraps
 pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
     match network {
         Network::Mainnet => None,
@@ -478,8 +518,10 @@ pub fn get_fee_to_v2(network: Network) -> Option<&'static str> {
 ///
 /// The Lens reads both v1 and v2 token registries in a single on-chain call
 /// to classify a token as `V1` / `V2` / `None` and return its `quoteToken`.
-/// `Core::detect_version` / `Core::detect_token_info` use it on every
-/// supported network — both mainnet and testnet have it deployed.
+/// `Core::detect_version` / `Core::detect_token_info` use it. Only the
+/// testnet address is a TokenInfoLens; the mainnet address holds another
+/// contract (~18KB, DEX-router-like) and lens calls revert, so mainnet callers
+/// use `Core::detect_token_info_with_api`.
 pub fn get_token_info_lens(network: Network) -> &'static str {
     match network {
         Network::Mainnet => addresses::mainnet::v2::TOKEN_INFO_LENS,
@@ -504,8 +546,16 @@ pub fn get_token_info_lens(network: Network) -> &'static str {
 /// `is_native == true` means the token is MON-pegged and the router can wrap
 /// `msg.value` into it (its `wrappedNative`, or an LvMON-style minter token).
 /// Such an address is a valid `quote_token` for
-/// [`crate::V2CreatePayment::Native`] / `*_with_native` trades. `is_native ==
-/// false` tokens (e.g. a future USDC/USDT) must be funded as ERC-20.
+/// [`crate::V2CreatePayment::Native`] and the native-in `buy_with_native` /
+/// `exact_out_buy_with_native` / `create_with_native` methods. `is_native`
+/// covers buy/create only: the native-out `sell_to_native` /
+/// `sell_to_native_with_permit` / `exact_out_sell_to_native` unwrap WMON and
+/// work for WMON-quoted tokens only (an LVMON-quoted token sells with `sell`).
+/// `is_native == false` tokens (USDC, aStocks, ...) are traded with the ERC-20
+/// methods (`create` / `buy` / `sell` and their permit variants) in that
+/// token; the native-in methods revert with `NativeQuoteMustUseRoute` for them
+/// (both deployed routers have a swap executor set; a router without one
+/// reverts `InvalidNativeQuoteToken` instead).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QuoteToken {
     /// Quote-token contract address (EIP-55 checksummed string).
@@ -523,7 +573,9 @@ pub struct QuoteToken {
     pub is_native: bool,
 }
 
-/// Mainnet quote tokens (from the api-server DB / `GET /quote_token`).
+/// Mainnet quote tokens (from the api-server DB / `GET /quote_token`), each
+/// verified `ProtocolManager.isAllowed == true` with on-chain decimals at
+/// 2026-10-15.
 ///
 /// `MON` here is the canonical wrapped native (WMON) on mainnet — the same
 /// address as [`addresses::mainnet::v1::WMON`]; the DB labels it `MON`/`MONAD`.
@@ -542,9 +594,46 @@ const MAINNET_QUOTE_TOKENS: &[QuoteToken] = &[
         decimals: 18,
         is_native: true,
     },
+    QuoteToken {
+        address: "0x094aDB9ab02Ed230697297C219073DC8C69Df0DF",
+        symbol: "BNCB",
+        name: "Cea Industries",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        symbol: "USDC",
+        name: "USD Coin",
+        decimals: 6,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x4644Fd1eab16A21969B4c16Be8A2D5c986033F2a",
+        symbol: "aWEN",
+        name: "Wendy's aStock",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x1446501E886c7f830DB9b494A1890cBCCC072f57",
+        symbol: "aQQQ",
+        name: "Invesco QQQ aStock",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x5a4860adDCc094FcE026384caeEcb1e634DD9af4",
+        symbol: "aHOOD",
+        name: "Robinhood aStock",
+        decimals: 18,
+        is_native: false,
+    },
 ];
 
-/// Testnet quote tokens (from the api-server DB / `GET /quote_token`).
+/// Testnet quote tokens (from the api-server DB / `GET /quote_token`), each
+/// verified `ProtocolManager.isAllowed == true` with on-chain decimals at
+/// 2026-10-15 (retired aTSLA/aSPCX/aAAPL/aNVDA/aGME are `isAllowed == false`).
 ///
 /// `MON` here is the canonical wrapped native (WMON) on testnet — the same
 /// address as [`addresses::testnet::v1::WMON`]; the DB labels it `MON`/`MONAD`.
@@ -562,6 +651,55 @@ const TESTNET_QUOTE_TOKENS: &[QuoteToken] = &[
         name: "LeverUpMon",
         decimals: 18,
         is_native: true,
+    },
+    QuoteToken {
+        address: "0x2523c381F49c73e840c87c6d63A6725AaDf0C62b",
+        symbol: "AUSD",
+        name: "Agora Dollar",
+        decimals: 6,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x00675faD7Eb1cF45bbfF37c46E2483237D38Cb4B",
+        symbol: "HOODB",
+        name: "Robinhood",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x17b032Dc6B33D54328E4F6518852F3F3DB166d0E",
+        symbol: "USDC",
+        name: "USD Coin",
+        decimals: 6,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x4C0920638766D229B99aE7B75E7187cE798F567C",
+        symbol: "BNCB",
+        name: "Cea Industries",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x5e6c30e86E81160e4b2eA1c49f2045c10708b86E",
+        symbol: "aWEN",
+        name: "Wendy's aStock",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x37B46AD5BF1f130C25020e333033c29F0f37b2dD",
+        symbol: "aQQQ",
+        name: "Invesco QQQ aStock",
+        decimals: 18,
+        is_native: false,
+    },
+    QuoteToken {
+        address: "0x00d0e0939eC5Ac83b82A98c6a6dB1B12bf285A54",
+        symbol: "aHOOD",
+        name: "Robinhood aStock",
+        decimals: 18,
+        is_native: false,
     },
 ];
 
@@ -607,10 +745,126 @@ mod tests {
                         qt.symbol, network
                     )
                 });
-                assert_eq!(qt.decimals, 18, "{} expected 18 decimals", qt.symbol);
+                let expected = ONCHAIN_DECIMALS
+                    .iter()
+                    .find(|(network_, address, _)| {
+                        *network_ == network && address.eq_ignore_ascii_case(qt.address)
+                    })
+                    .map(|(_, _, decimals)| *decimals)
+                    .unwrap_or_else(|| {
+                        panic!("{} ({network:?}) has no on-chain decimals entry", qt.symbol)
+                    });
+                assert_eq!(
+                    qt.decimals, expected,
+                    "{} ({network:?}) decimals must match chain",
+                    qt.symbol
+                );
             }
         }
     }
+
+    /// Row counts match the on-chain allowed sets (2026-10-15), and only the
+    /// native-funded quotes (MON = WMON, LVMON) are `is_native`.
+    #[test]
+    fn quote_tokens_counts_and_native_flags() {
+        assert_eq!(quote_tokens(Network::Mainnet).len(), 7);
+        assert_eq!(quote_tokens(Network::Testnet).len(), 9);
+        for network in [Network::Mainnet, Network::Testnet] {
+            for qt in quote_tokens(network) {
+                assert_eq!(
+                    qt.is_native,
+                    matches!(qt.symbol, "MON" | "LVMON"),
+                    "{} ({network:?}) is_native",
+                    qt.symbol
+                );
+            }
+        }
+    }
+
+    /// `decimals()` per quote token, read on chain 2026-10-15 via `cast call
+    /// <token> 'decimals()(uint8)'` (matches `ProtocolManager.getConfig(token).decimals`).
+    const ONCHAIN_DECIMALS: &[(Network, &str, u8)] = &[
+        (
+            Network::Mainnet,
+            "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+            18,
+        ), // WMON
+        (
+            Network::Mainnet,
+            "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56",
+            18,
+        ), // LVMON
+        (
+            Network::Mainnet,
+            "0x094aDB9ab02Ed230697297C219073DC8C69Df0DF",
+            18,
+        ), // BNCB
+        (
+            Network::Mainnet,
+            "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+            6,
+        ), // USDC
+        (
+            Network::Mainnet,
+            "0x4644Fd1eab16A21969B4c16Be8A2D5c986033F2a",
+            18,
+        ), // aWEN
+        (
+            Network::Mainnet,
+            "0x1446501E886c7f830DB9b494A1890cBCCC072f57",
+            18,
+        ), // aQQQ
+        (
+            Network::Mainnet,
+            "0x5a4860adDCc094FcE026384caeEcb1e634DD9af4",
+            18,
+        ), // aHOOD
+        (
+            Network::Testnet,
+            "0x5a4E0bFDeF88C9032CB4d24338C5EB3d3870BfDd",
+            18,
+        ), // WMON
+        (
+            Network::Testnet,
+            "0xBe3fa50514D9617ce645a02B34F595541AF02b6b",
+            18,
+        ), // LVMON
+        (
+            Network::Testnet,
+            "0x2523c381F49c73e840c87c6d63A6725AaDf0C62b",
+            6,
+        ), // AUSD
+        (
+            Network::Testnet,
+            "0x00675faD7Eb1cF45bbfF37c46E2483237D38Cb4B",
+            18,
+        ), // HOODB
+        (
+            Network::Testnet,
+            "0x17b032Dc6B33D54328E4F6518852F3F3DB166d0E",
+            6,
+        ), // USDC
+        (
+            Network::Testnet,
+            "0x4C0920638766D229B99aE7B75E7187cE798F567C",
+            18,
+        ), // BNCB
+        (
+            Network::Testnet,
+            "0x5e6c30e86E81160e4b2eA1c49f2045c10708b86E",
+            18,
+        ), // aWEN
+        (
+            Network::Testnet,
+            "0x37B46AD5BF1f130C25020e333033c29F0f37b2dD",
+            18,
+        ), // aQQQ
+        (
+            Network::Testnet,
+            "0x00d0e0939eC5Ac83b82A98c6a6dB1B12bf285A54",
+            18,
+        ), // aHOOD
+    ];
 
     /// The canonical wrapped native (the `MON` row, per the api-server DB) must
     /// equal the v1 `WMON` constant for the same network — MON == WMON. This

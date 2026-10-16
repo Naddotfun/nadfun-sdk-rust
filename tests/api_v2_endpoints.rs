@@ -1,7 +1,7 @@
 //! Wiremock-driven integration tests for `ApiClient` v2 surface.
 //!
 //! These tests assert wire-level shape (paths, request bodies, response
-//! parsing) without hitting the live `api.nadapp.net` endpoint.
+//! parsing) without hitting the live `api.nad.fun` endpoint.
 
 use alloy::primitives::Address;
 use nadfun_sdk::{ApiClient, Network, SaltParams, SdkVersion, VaultType};
@@ -38,27 +38,29 @@ async fn get_token_parses_v2_response() {
     let token = parse_address(SAMPLE_TOKEN_RAW);
     Mock::given(method("GET"))
         .and(path(format!("/token/{}", token_path(token))))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "token_id": SAMPLE_TOKEN_RAW,
-            "name": "TestToken",
-            "symbol": "TT",
-            "image_uri": "ipfs://image",
-            "description": "A test token",
-            "is_graduated": false,
-            "is_nsfw": false,
-            "twitter": null,
-            "telegram": null,
-            "website": null,
-            "created_at": 1_700_000_000_u64,
-            "creator": {
-                "account_id": SAMPLE_CREATOR_RAW,
-                "nickname": "alice",
-                "bio": null,
-                "image_uri": null
-            },
-            "is_cto": false,
-            "version": "V2"
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "token_info": {
+                "token_id": SAMPLE_TOKEN_RAW,
+                "name": "TestToken",
+                "symbol": "TT",
+                "image_uri": "ipfs://image",
+                "description": "A test token",
+                "is_graduated": false,
+                "is_nsfw": false,
+                "twitter": null,
+                "telegram": null,
+                "website": null,
+                "created_at": 1_700_000_000_u64,
+                "creator": {
+                    "account_id": SAMPLE_CREATOR_RAW,
+                    "nickname": "alice",
+                    "bio": null,
+                    "image_uri": null
+                },
+                "is_cto": false,
+                "version": "V2"
+            }})),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -92,13 +94,15 @@ async fn get_token_defaults_to_v1_when_version_missing() {
     let token = parse_address(SAMPLE_TOKEN_RAW);
     Mock::given(method("GET"))
         .and(path(format!("/token/{}", token_path(token))))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "token_id": SAMPLE_TOKEN_RAW,
-            "name": "V1Token",
-            "symbol": "V1T",
-            "image_uri": "ipfs://image",
-            "is_graduated": true
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "token_info": {
+                "token_id": SAMPLE_TOKEN_RAW,
+                "name": "V1Token",
+                "symbol": "V1T",
+                "image_uri": "ipfs://image",
+                "is_graduated": true
+            }})),
+        )
         .mount(&server)
         .await;
 
@@ -328,4 +332,47 @@ async fn post_salt_sends_version_v2_and_parses_response() {
 
     assert_eq!(response.address, SAMPLE_TOKEN_RAW);
     assert!(response.salt.starts_with("0x"));
+}
+
+/// `get_quote_tokens` parses the api-server's `{"quote_tokens": [...]}` body.
+#[tokio::test]
+async fn get_quote_tokens_parses_catalog() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/quote_token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "quote_tokens": [
+                {
+                    "quote_id": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+                    "name": "MONAD",
+                    "symbol": "MON",
+                    "decimals": 18,
+                    "image_uri": "https://storage.nadapp.net/quote/mon.webp"
+                },
+                {
+                    "quote_id": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+                    "name": "USD Coin",
+                    "symbol": "USDC",
+                    "decimals": 6,
+                    "image_uri": "https://storage.nadapp.net/quote/usdc.webp"
+                }
+            ]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let tokens = client_for(&server).get_quote_tokens().await.unwrap();
+    assert_eq!(tokens.len(), 2);
+    assert_eq!(
+        tokens[1].quote_id,
+        parse_address("0x754704Bc059F8C67012fEd69BC8A327a5aafb603")
+    );
+    assert_eq!(tokens[1].symbol, "USDC");
+    assert_eq!(tokens[1].decimals, 6);
+    assert_eq!(tokens[0].name, "MONAD");
+    assert_eq!(
+        tokens[0].image_uri,
+        "https://storage.nadapp.net/quote/mon.webp"
+    );
 }
