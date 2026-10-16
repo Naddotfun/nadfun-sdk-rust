@@ -21,7 +21,7 @@ your application installs its own rustls `CryptoProvider`, do so before the
 SDK's first WebSocket connect (which installs `aws-lc-rs` as the process
 default).
 
-## What's new in 0.5.0 (unreleased)
+## What's new in 0.5.0
 
 - **Nonce handling on SDK-built signers.** `Core::new` and `TokenHelper::new`
   now share one nonce state per (chain, account) in the process and send from

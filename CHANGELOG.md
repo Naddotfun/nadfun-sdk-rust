@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-## [0.5.0] — Unreleased
+## [0.5.0] — 2026-10-16
 
 ### Breaking
 
@@ -128,8 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   measured on Monad testnet and mainnet nodes (eth_estimateGas + state
   overrides, 1 MON WMON-quoted DEX buy): overwrite +1,379 gas (+0.24%) on both,
   first write after graduation +35,911 (+6.22%) testnet / +35,917 (+6.34%)
-  mainnet; sells and other routes not measured. README,
-  llms.txt and the v2 params module docs recommend `gas_limit` =
+  mainnet; sells and other routes not measured. README and the v2 params
+  module docs recommend `gas_limit` =
   estimate + 10% for all trades; the examples (`common::gas_with_headroom`)
   follow it. The fork E2E keeps a larger DEX buffer because anvil uses the
   Ethereum gas schedule, where the first post-graduation DEX trade needs +15.6%.
