@@ -8,7 +8,7 @@ Nad.fun is a meme coin launchpad on Monad with bonding curve mechanics. Tokens g
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.4.2"
+nadfun_sdk = "0.5.0"
 ```
 
 ## Quick Start
@@ -64,6 +64,23 @@ async fn main() -> Result<()> {
 - **Auto-Routing**: SDK automatically routes trades via Lens contract
 - **MON**: Native token of Monad, used for all transactions
 - **WMON**: Wrapped MON for DEX operations
+- **Nonces** (0.5.0+): `Core::new` / `TokenHelper::new` share one nonce state per
+  (chain, account) per process and send from an account one tx at a time. Gas
+  estimation runs before a nonce is taken; a node-rejected send (incl. "nonce too
+  high") reuses its nonce; "nonce too low" / "already known" skips past it;
+  transport errors and timeouts (30 s per RPC under the lock) reuse it. The mined
+  count is read before every send (+1 RPC); if it stays below our next nonce for
+  30 s since we last sent the nonce the chain is waiting on (sends past a gap do
+  not count), that tx is presumed dropped and the next send refills the gap. Residual risks: an ambiguous failure or a tx pending >30 s
+  can have its nonce re-signed (only one executes; the caller may see `Err` for
+  the executed one or `Ok` for one that never mines); a dropped tx stalls later
+  sends up to 30 s; after a restart, unmined txs of the old process are reused
+  (Monad `pending` == `latest`); `Core::with_provider`, other processes/wallets on
+  the key and same-chain-id devnet resets are not covered; sync sends may hold
+  the account up to 120 s; unknown error wordings fall back to max(n, chain);
+  stall recovery can replace a slow-but-alive tx; raw sends
+  (`send_raw_transaction*`) are not intercepted (state may be stale: one
+  spurious Err, then recovery); other-key envelopes / other `from` pass through.
 
 ## API Client (Optional Authentication)
 
@@ -182,7 +199,7 @@ let gas_params = GasEstimationParams::Buy {
     deadline: U256::from(9999999999999999u64),
 };
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-let gas_with_buffer = estimated_gas * 120 / 100; // 20% buffer
+let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
 
 // 3. Execute
 let tx_hash = core.v1().buy(BuyParams {
@@ -231,6 +248,41 @@ let params = SellPermitParams {
 };
 
 let tx_hash = core.v1().sell_permit(params, router).await?;
+```
+
+## Gas Limit Headroom
+
+When `gas_limit` is `None`, the raw node estimate (`eth_estimateGas`) is sent
+as the gas limit with no headroom. On Monad the fee is `gas_limit × price`,
+failed transactions pay the full limit, and Monad recommends sending the
+estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing),
+[opcode pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing)).
+
+A graduated token's DEX pair (NadFunPair) writes its price accumulators only
+when `block.timestamp` moved since its last update, so a DEX trade estimated in
+the same second as the pair's last update can need more gas if it lands in the
+next one (Monad blocks are ~400 ms, several per second). Measured on Monad
+nodes (Monad gas schedule) via `eth_estimateGas` with state overrides, 1 MON
+WMON-quoted DEX buy (`buyWithNative` → NadSwapAdapter → `pair.swap`), same
+block — testnet (chain 10143) and mainnet (chain 143, `https://rpc.monad.xyz`,
+Monad/0.16.4, block 113804292); sells and other route paths were not measured:
+
+| Pair accumulator state | Testnet estimate | Testnet extra | Mainnet estimate | Mainnet extra |
+|---|---|---|---|---|
+| No accumulator write (same timestamp) | 577,217 | – | 566,375 | – |
+| Overwrite (steady state) | 578,596 | +1,379 (+0.24%) | 567,754 | +1,379 (+0.24%) |
+| First write after graduation (0 → nonzero) | 613,128 | +35,911 (+6.22%) | 602,292 | +35,917 (+6.34%) |
+
+On Monad the accumulator slots share a 128-slot storage page with a slot
+`_update` always writes, so overwrites are almost free; only the first
+zero → nonzero write costs extra. `estimate + 10%` covers every measured case on
+both networks. Recommended for all trades: `gas_limit = estimate + 10%`:
+
+```rust
+let mut params = V2BuyParams { /* .. */ gas_limit: None, /* .. */ };
+let estimate = core.v2().estimate_gas(V2GasEstimationParams::Buy(params.clone())).await?;
+params.gas_limit = Some(estimate + estimate / 10);
+core.v2().buy(params).await?;
 ```
 
 ## Gas Pricing Options

@@ -26,9 +26,8 @@ use crate::{
     version::{SdkVersion, TokenInfo},
 };
 use alloy::{
-    network::EthereumWallet,
     primitives::{Address, B256, U256},
-    providers::{DynProvider, Provider, ProviderBuilder},
+    providers::{DynProvider, Provider},
     signers::local::PrivateKeySigner,
 };
 use anyhow::{Context, Result};
@@ -83,12 +82,9 @@ impl Core {
         let signer: PrivateKeySigner = private_key.parse()?;
         let wallet_address = signer.address();
 
-        let wallet = EthereumWallet::from(signer);
-        let url = rpc_url.parse()?;
-        let provider = ProviderBuilder::new().wallet(wallet).connect_http(url);
-        let dyn_provider = Arc::new(DynProvider::new(provider));
+        let provider = Arc::new(crate::core::nonce::signing_provider(&rpc_url, signer)?);
 
-        Self::with_provider(dyn_provider, wallet_address, network)
+        Self::with_provider(provider, wallet_address, network)
     }
 
     /// Construct a `Core` from an existing provider + wallet address.
@@ -98,6 +94,12 @@ impl Core {
     /// at different networks but sharing a connection pool. Caller is
     /// responsible for ensuring the provider's signer matches
     /// `wallet_address`.
+    ///
+    /// The provider is used as-is, so the caller owns its nonce handling.
+    /// [`Core::new`] builds a provider with SDK nonce handling (one shared state
+    /// per chain + account, sends serialized per account, no nonce taken by a
+    /// gas-estimation revert or a node rejection); a provider from alloy's
+    /// `ProviderBuilder::new().wallet(..)` does not have it.
     pub fn with_provider(
         provider: Arc<DynProvider>,
         wallet_address: Address,
