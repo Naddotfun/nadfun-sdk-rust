@@ -79,4 +79,4 @@ pub use v2::token_info::{VaultEntry, VaultState, VaultType};
 
 // v2 on-chain view types (curve state + per-quote protocol config)
 pub use v2::curve::V2Curve;
-pub use v2::quote_config::V2QuoteConfig;
+pub use v2::quote_config::{ApiQuoteToken, V2QuoteConfig};

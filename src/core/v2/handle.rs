@@ -237,6 +237,9 @@ impl<'a> CoreV2<'a> {
         self.core.v2.router.sell(params).await
     }
 
+    /// Sell for native MON. WMON-quoted tokens only: the router unwraps WMON
+    /// to pay out, so other quotes (LVMON, USDC, ...) revert — use
+    /// [`Self::sell`].
     pub async fn sell_to_native(self, params: V2SellToNativeParams) -> Result<B256> {
         self.core.v2.router.sell_to_native(params).await
     }
@@ -245,6 +248,7 @@ impl<'a> CoreV2<'a> {
         self.core.v2.router.sell_with_permit(params).await
     }
 
+    /// Permit variant of [`Self::sell_to_native`]; WMON-quoted tokens only.
     pub async fn sell_to_native_with_permit(
         self,
         params: V2SellToNativeWithPermitParams,
@@ -271,6 +275,8 @@ impl<'a> CoreV2<'a> {
         self.core.v2.router.exact_out_sell(params).await
     }
 
+    /// Exact-output sell for native MON; WMON-quoted tokens only (see
+    /// [`Self::sell_to_native`]).
     pub async fn exact_out_sell_to_native(
         self,
         params: V2ExactOutSellToNativeParams,

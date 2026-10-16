@@ -13,6 +13,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.4.2] — 2026-10-15
+
+### Added
+
+- `ApiClient::get_quote_tokens()` (`GET /quote_token` -> `Vec<ApiQuoteToken>`,
+  `#[non_exhaustive]`) for the api-server's quote-token catalog. Not filtered
+  on the on-chain allow-list; use `quote_tokens()` or `ProtocolManager` for
+  anything that moves funds.
+- `Core::detect_token_info_with_api(&api, token)` /
+  `Core::detect_version_with_api(&api, token)`: chain first — a v2
+  `TokenRegistry` entry means V2 with that quote (whatever the API says); only
+  unregistered tokens ask the api-server (`GET /token/{token}`): V1 -> WMON,
+  the api-server's 404 error body -> `SdkVersion::None` + `Address::ZERO`. An
+  API "V2" without a registry entry, any other API error (including a 404
+  without the api-server error body), or an `ApiClient` on a different network
+  -> `Err`. Use these on mainnet: the shipped mainnet `TOKEN_INFO_LENS` address is
+  not a TokenInfoLens (another contract lives there), so the lens-based
+  `detect_*` methods revert there (unchanged; still work on testnet).
+- Testnet-fork E2E for multi-quote trading (`scripts/e2e-fork.sh`,
+  `tests/e2e_fork_multi_quote.rs`, report at `target/e2e-fork-report.json`).
+
+### Changed
+
+- `quote_tokens(Network)` now lists every on-chain allowed quote
+  (`ProtocolManager.isAllowed`): mainnet adds BNCB, USDC (6 decimals), aWEN,
+  aQQQ, aHOOD; testnet adds AUSD (6), HOODB, USDC (6), BNCB, aWEN, aQQQ, aHOOD.
+  `is_native` keeps its meaning (WMON/LVMON only). Tokens on a non-native quote
+  trade through the ERC-20 `create` / `buy` / `sell` (+ permit) methods;
+  `buy_with_native` / `create_with_native` revert `NativeQuoteMustUseRoute` for
+  them (`InvalidNativeQuoteToken` on a router without a swap executor), and the
+  `*sell_to_native*` methods are WMON-quote only. Callers that assumed every
+  quote has 18 decimals must read `decimals`.
+- Mainnet `API_SERVER_URL` is now `https://api.nad.fun` (was
+  `https://api.nadapp.net`); testnet unchanged.
+- `examples/unified_dispatch.rs` uses API-based detection and sends every
+  `is_native` quote (WMON and LVMON) down the native path.
+- `abi/v2/NadFunRouter.json` regenerated from nadfun-contract-v2 `86ac7ac`
+  (latest router, incl. its native-route overloads, `getNativeAmountOut`,
+  `getQuoteAmountOut`, `NativeQuote*` errors). The SDK binds its existing
+  methods to the legacy overloads; their signatures and behavior are unchanged.
+
+### Fixed
+
+- `ApiClient::get_token` now parses the api-server's actual `GET /token/{token}`
+  body (`{"token_info": {..}}`); it previously expected an unwrapped record and
+  failed with `missing field token_id` on every live response. Signature
+  unchanged; a 404 now reports `token not found (404)`.
+
+### Deprecated
+
+- Unused v2 address getters and their constants (both networks), removed in
+  0.5.0: `get_creator_fee_processor_v2` / `CREATOR_FEE_PROCESSOR`,
+  `get_fee_collector_v2` / `FEE_COLLECTOR`, `get_fee_to_v2` / `FEE_TO`,
+  `get_gift_vault_v2` / `GIFT_VAULT`, `get_lp_manager_v2` / `LP_MANAGER`,
+  `get_nad_swap_adapter_v2` / `NAD_SWAP_ADAPTER`, `get_nadfun_pair_impl_v2` /
+  `NAD_FUN_PAIR_IMPL`, `get_token_impl_v2` / `TOKEN_IMPL`,
+  `get_vault_registry_v2` / `VAULT_REGISTRY`.
+
 ## [0.4.1] — 2026-07-01
 
 ### Added

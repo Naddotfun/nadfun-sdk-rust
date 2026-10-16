@@ -13,6 +13,9 @@ use alloy::{
 use anyhow::Result;
 use std::sync::Arc;
 
+// The ABI also carries the router's native-route overloads (`bytes path`); alloy
+// suffixes overloads in ABI order, so `_0` is the route form and `_1` the legacy
+// form the SDK calls. The route forms are intentionally not exposed.
 sol!(
     #[sol(rpc)]
     INadFunRouter,
@@ -113,7 +116,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
         };
 
         let mut tx_builder = contract
-            .createWithNative(router_params)
+            .createWithNative_1(router_params)
             .value(params.native_value);
         apply_tx_options!(tx_builder, params);
         let tx = tx_builder.send().await?;
@@ -145,7 +148,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
             deadline: params.deadline,
         };
 
-        let mut tx_builder = contract.buyWithNative(router_params).value(params.value);
+        let mut tx_builder = contract.buyWithNative_1(router_params).value(params.value);
         apply_tx_options!(tx_builder, params);
         let tx = tx_builder.send().await?;
         Ok(*tx.tx_hash())
@@ -325,7 +328,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
     ) -> Result<U256> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         Ok(contract
-            .getAmountOut(token, amount_in, is_buy)
+            .getAmountOut_1(token, amount_in, is_buy)
             .call()
             .await?)
     }
@@ -462,7 +465,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
                     deadline: p.deadline,
                 };
                 contract
-                    .createWithNative(rp)
+                    .createWithNative_1(rp)
                     .from(from)
                     .value(p.native_value)
                     .estimate_gas()
@@ -486,7 +489,7 @@ impl<P: Provider + Clone> NadFunRouter<P> {
                     deadline: params.deadline,
                 };
                 contract
-                    .buyWithNative(rp)
+                    .buyWithNative_1(rp)
                     .from(from)
                     .value(params.value)
                     .estimate_gas()
