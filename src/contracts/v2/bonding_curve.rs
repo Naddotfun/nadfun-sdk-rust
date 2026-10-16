@@ -14,8 +14,10 @@ use std::sync::Arc;
 
 use crate::types::v2::V2Curve;
 
+// alloy 2.x `sol!` expansion exceeds clippy's too_many_arguments threshold.
 sol!(
     #[sol(rpc)]
+    #[allow(clippy::too_many_arguments)]
     IBondingCurveV2,
     "abi/v2/BondingCurve.json"
 );

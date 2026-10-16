@@ -11,6 +11,16 @@ Add this to your `Cargo.toml`:
 nadfun_sdk = "0.5.0"
 ```
 
+Requires Rust 1.94.1+ and alloy 2.x (the SDK's public types are alloy 2.x types).
+
+TLS is rustls (OS trust store) on the `aws-lc-rs` crypto backend, which builds
+native code (`aws-lc-sys`): a C compiler is required, cmake on musl / cross
+targets, and NASM may be needed on Windows. System proxy settings are honoured.
+Run `cargo update -p rustls-webpki` so your lockfile resolves to ≥ 0.103.15. If
+your application installs its own rustls `CryptoProvider`, do so before the
+SDK's first WebSocket connect (which installs `aws-lc-rs` as the process
+default).
+
 ## What's new in 0.5.0 (unreleased)
 
 - **Nonce handling on SDK-built signers.** `Core::new` and `TokenHelper::new`
@@ -537,7 +547,7 @@ let buy_params = BuyParams {
     to: wallet_address,
     deadline: U256::from(deadline),
     gas_limit: Some(gas_with_buffer), // Use network-based estimation
-    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 50_000_000_000 }), // 50 gwei
+    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 100_000_000_000 }), // 100 gwei (Monad minimum base fee)
     nonce: None,                       // Auto-detect
 };
 
@@ -649,7 +659,7 @@ let gas_price = Some(GasPricing::Legacy);
 
 // Option 2: Legacy with explicit gas price
 let gas_price = Some(GasPricing::LegacyWithPrice {
-    gas_price: 50_000_000_000, // 50 gwei
+    gas_price: 100_000_000_000, // 100 gwei: Monad's minimum base fee
 });
 
 // Option 3: EIP-1559 (recommended for Monad)
@@ -1330,8 +1340,8 @@ organized by network and version (`addresses::{mainnet,testnet}::{v1,v2}`).
 Access them via the typed helpers — `get_bonding_curve(network)`,
 `get_nadfun_router_v2(network)` (returns `&str` directly — v2 is deployed on
 every network), etc. The v2 set has more contracts (vaults, registry, bonding
-curve, lens); the most useful are listed below. Deprecated since 0.4.2 (unused
-by the SDK, removed in 0.5.0): `get_creator_fee_processor_v2`,
+curve, lens); the most useful are listed below. Removed in 0.5.0 (deprecated
+in 0.4.2, unused by the SDK): `get_creator_fee_processor_v2`,
 `get_fee_collector_v2`, `get_fee_to_v2`, `get_gift_vault_v2`,
 `get_lp_manager_v2`, `get_nad_swap_adapter_v2`, `get_nadfun_pair_impl_v2`,
 `get_token_impl_v2`, `get_vault_registry_v2` and their constants.
