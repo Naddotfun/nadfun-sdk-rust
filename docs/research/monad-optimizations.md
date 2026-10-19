@@ -45,6 +45,15 @@ SDK는 [공통 V2 트랜잭션 옵션](../../src/contracts/v2/router.rs#L27-L54)
 
 **0.6.0 SDK 경로 검증.** 메인넷(읽기 전용): `Core::new` 서명 provider의 `estimate_gas`(리스트 자동)와 root provider(리스트 없음)를 직전 블록 상태에서 비교했다. V2 `sell`/`exactOutBuy` 10건과 합성 `buyWithNative` 1건, 총 11건 모두 **50.8–52.4%** 감소했다. 테스트넷(실제 전송, chain 10143): curve 단계 토큰 `0xc909…7777`에 V2 `buy` 1 USDC를 리스트 없음/자동으로 3쌍 전송했다. 6건 모두 성공했고 모두 type 2였다. receipt `gasUsed`(= gas limit, Monad 과금 기준)는 리스트 없음 **546,986**(첫 건 581,525), 자동 **260,114**로 **−52.4%**였다. 자동 쪽 리스트는 주소 13개, 키 31개였다. 자동 쪽 tx: [0x01af…79a6](https://testnet.monadvision.com/tx/0x01afb541749f8523ba30839be3997e87360a6f8b3a043425ff7b80cbcf3f79a6), [0x4cf1…ef13](https://testnet.monadvision.com/tx/0x4cf121d4091c36add43b01f496ce858de577e45b5f7969882d56b7200e45ef13), [0x9794…584e](https://testnet.monadvision.com/tx/0x9794d80ebd14718748c1c7e2254de770f1fb995bb5bc2d8c6c13562826ba584e). 리스트 없음 쪽 tx: [0x9f8f…69db](https://testnet.monadvision.com/tx/0x9f8f45951abe8350434f95b79b8c67d76fb400ba59f9545db5ce99bfe19969db). MON(WMON) quote 토큰 `0x3fd7…7777`에는 native 경로 `buyWithNative` 0.01 MON을 같은 방식으로 3쌍 전송했다. 6건 모두 성공했고 모두 type 2였다. 리스트 없음 **554,292**(첫 건 571,562), 자동 **265,897**로 **−52.0%**였다(주소 14개, 키 30개). 자동 쪽 tx: [0x1ec6…ed12](https://testnet.monadvision.com/tx/0x1ec6c5bb8cfbd63b5936a506b8d8c0d7d917c74a0bbce58884c0c3b1b272ed12), [0xe445…bea4](https://testnet.monadvision.com/tx/0xe445fdc218db933c2f383ab2bee2de4b81088f0b8fc8b586bd63ae2eef4abea4), [0x74bf…f493](https://testnet.monadvision.com/tx/0x74bf684cff4077a3c4cd57ae87f5f2b0545c0c15c7fa95ffe1c95cd75e01f493).
 
+V1 경로도 같은 방식으로 측정했다. 테스트넷에서 최근 50만 블록 동안 V1 활동이 없어, 테스트 토큰 `GTEST` [`0x6425…03c7`](https://testnet.monadvision.com/token/0x6425ebf472c84efc14bae75ce2b3f355fdd903c7)을 V1 router `create`로 직접 만들었다. `create`는 리스트를 붙여 **5,889,577**로, 리스트 없는 추정 6,098,074보다 **−3.4%**였다. 비용 대부분이 컨트랙트 배포라 절감폭이 작다. 측정 결과는 아래와 같으며 12건 모두 성공했고 모두 type 2였다.
+
+| V1 경로 (0.01 MON / 보유량 10%) | 리스트 없음 | 자동 | 변화 | 리스트 |
+| --- | --- | --- | --- | --- |
+| `buy` | **309,820** (첫 건 344,360) | **171,992** | **−44.5%** | 주소 6, 키 16 |
+| `sell` | **231,106** | **130,967** | **−43.3%** | 주소 4, 키 11 |
+
+자동 쪽 tx: buy [0xc5ea…aca1](https://testnet.monadvision.com/tx/0xc5eafa2cb5b22785a847ebab225ce4fbd485a2c2ed30c3abc01187756733aca1), sell [0xe322…346d](https://testnet.monadvision.com/tx/0xe3227e0004674762a1f4fcaeb67a10471adcea395015a24a24d65d8e88ea346d). V1 DEX(졸업 토큰) 경로는 측정하지 않았다.
+
 **적용 판단 — P0 (실측 반영).** 거래별 순절감이 확인된 경우에만 목록을 붙이면 가스비를 줄일 가능성이 있다. 공개 매개변수 구조체에 필드를 추가하는 방안은 기존 구조체 리터럴에 영향을 주므로 공개 API 변경과 버전 결정이 필요하다. 내부 선택적 전송만으로 끝내는 방안은 공개 시그니처를 유지할 수 있다. [router.rs](../../src/contracts/v2/router.rs#L27-L54), [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930)
 
 ## 4. EIP-7702와 승인·거래 배치
