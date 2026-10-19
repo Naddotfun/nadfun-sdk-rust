@@ -26,10 +26,21 @@ default).
 - **Generated access lists.** SDK signing providers generate and filter access
   lists for sends and estimates. Probe errors, rejected lists, and timeouts
   after 5 seconds fall back to a request without a generated list. For a send
-  with an explicit gas limit, that fallback first checks a list-less gas
-  estimate and returns an error before taking a nonce if the estimate exceeds
-  the limit or cannot be obtained. Estimates with state or block-state overrides
-  skip probing; an explicit estimate block tag is forwarded to the probe.
+  with an explicit gas limit, the SDK trusts the RPC-reported `gasUsed` and
+  drops a generated list only when `gasUsed` exceeds the limit; equality keeps
+  the list. If the probe is unavailable or the list is dropped, the SDK runs a
+  list-less estimate with a 30-second bound. An estimate above the limit errors
+  before nonce acquisition. JSON-RPC code 3 or a message whose lowercased text
+  contains "revert" allows a list-less send with the caller's limit (useful for
+  pipelined approve→trade sends); any other error or timeout returns a
+  contextual error before nonce acquisition.
+  Estimates with state or block-state overrides skip probing. If `from` is
+  absent, the probe and estimate use the signing account. Probes default to
+  `pending`. `eth_estimateGas` omits the block parameter when none was supplied,
+  except Alloy serializes `latest` with state or block-state overrides; explicit
+  tags are preserved. Unsupported `eth_createAccessList`
+  adds one failing RPC call per send or estimate. Supply an empty `access_list`
+  to opt out.
 - With an explicit `GasPricing::LegacyWithPrice` (`gas_price`), an attached
   access list signs as EIP-2930 type 1. `GasPricing::Legacy` leaves fee fields
   unset, so the SDK signing filler supplies EIP-1559 type 2.
@@ -633,12 +644,18 @@ than 1,024 addresses plus storage keys, or whose intrinsic cost
 (`2,400 × addresses + 1,900 × storage keys`) is at least the reported
 `gasUsed`. Result-level errors, RPC failures, rejected lists, and probes taking
 longer than 5 seconds fall back to a request without a generated list. For a
-send with an explicit `gas_limit`, the fallback first runs a list-less estimate
-and returns an error before taking a nonce if that estimate exceeds the limit
-or the estimate fails. Estimates with state or block-state overrides skip probing;
-an explicit estimate block tag is forwarded to `eth_createAccessList`.
-`Core::with_provider`
-uses the estimate and send behavior of the supplied provider.
+send with an explicit `gas_limit`, the SDK drops a generated list only when its
+RPC-reported `gasUsed` exceeds the limit; equality keeps it. If the probe is
+unavailable or the generated list is dropped, the SDK runs a list-less estimate
+with a 30-second bound. A list emptied by filtering is sent as supplied without
+an extra estimate. An estimate above the limit returns an error before nonce
+acquisition. A JSON-RPC error with code 3 or a message whose lowercased
+text contains "revert" allows a list-less send with the caller's limit,
+supporting pipelined approve→trade sends; any other error or timeout returns a
+contextual error before nonce acquisition. Estimates with state or block-state
+overrides skip probing; an explicit estimate block tag is forwarded to
+`eth_createAccessList`. `Core::with_provider` uses the estimate and send
+behavior of the supplied provider.
 
 When `gas_limit` is `None`, the list-aware node estimate (`eth_estimateGas`) is
 sent as the gas limit with no headroom. An explicit `gas_limit` is preserved
@@ -649,6 +666,12 @@ and Monad recommends sending the estimate plus ~7.5–10% ([Monad gas pricing](h
 Lists reflect the probe state and may be stale by inclusion. A generated list
 adds intrinsic cost, and state can change before inclusion; the SDK preserves
 explicit limits as supplied, so a fixed limit must account for both.
+A generated list and its gasUsed are RPC-supplied and are not cross-checked;
+with an explicit limit, a wrong or stale list can run out of gas and pay the
+full limit. After a revert estimate, a genuinely reverting list-less transaction
+is still submitted and pays the full caller limit, preserving pre-0.6
+explicit-gas behavior (Monad charges the gas limit). Opt out by passing an
+empty access_list.
 The measured mainnet V2 `sell` and `exactOutBuy` cases used about 51% less gas;
 savings vary by call. With `GasPricing::LegacyWithPrice` and its explicit
 `gas_price`, an attached list makes the transaction EIP-2930 type 1.

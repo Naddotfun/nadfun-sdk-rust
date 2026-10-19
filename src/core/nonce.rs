@@ -365,21 +365,44 @@ impl<F: TxFiller<Ethereum>> NonceGuard<F> {
         let tx = match tx {
             SendableTx::Builder(mut req) => {
                 if req.access_list.is_none() {
-                    let outcome =
+                    let mut outcome =
                         try_attach_access_list(self.inner.root(), &mut req, self.signer, None)
                             .await;
+                    if let (AccessListProbeOutcome::Attached { gas_used }, Some(gas_limit)) =
+                        (outcome, req.gas)
+                    {
+                        if gas_used > U256::from(gas_limit) {
+                            req.access_list = None;
+                            outcome = AccessListProbeOutcome::Unavailable;
+                        }
+                    }
                     if outcome == AccessListProbeOutcome::Unavailable {
                         if let Some(gas_limit) = req.gas {
-                            let estimate = self
-                                .inner
-                                .root()
-                                .estimate_gas(listless_request(&req, self.signer))
-                                .pending()
-                                .await?;
-                            if estimate > gas_limit {
-                                return Err(TransportErrorKind::custom_str(&format!(
-                                    "list-less gas estimate {estimate} exceeds explicit gas limit {gas_limit}"
-                                )));
+                            match bounded(RPC_TIMEOUT, async {
+                                self.inner
+                                    .root()
+                                    .estimate_gas(listless_request(&req, self.signer))
+                                    .await
+                            })
+                            .await
+                            {
+                                Ok(estimate) if estimate > gas_limit => {
+                                    return Err(TransportErrorKind::custom_str(&format!(
+                                        "list-less gas estimate {estimate} exceeds explicit gas limit {gas_limit}"
+                                    )));
+                                }
+                                Ok(_) => {}
+                                // Expected revert: a pipelined trade may be estimated before approval lands.
+                                Err(error)
+                                    if error.as_error_resp().is_some_and(|response| {
+                                        response.code == 3
+                                            || response.message.to_lowercase().contains("revert")
+                                    }) => {}
+                                Err(error) => {
+                                    return Err(TransportErrorKind::custom_str(&format!(
+                                        "list-less gas estimate failed before nonce acquisition: {error}"
+                                    )));
+                                }
                             }
                         }
                     }
@@ -428,7 +451,6 @@ impl<F: TxFiller<Ethereum> + 'static> Provider for NonceGuard<F> {
             },
             tx,
         )
-        .pending()
         .map_resp(|gas: U64| gas.to::<u64>())
     }
 
@@ -462,7 +484,7 @@ impl<F: TxFiller<Ethereum> + 'static> Provider for NonceGuard<F> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AccessListProbeOutcome {
-    Attached,
+    Attached { gas_used: U256 },
     Empty,
     Unavailable,
 }
@@ -473,6 +495,7 @@ fn listless_request(tx: &TransactionRequest, signer: Address) -> TransactionRequ
     if probe.from.is_none() {
         probe.set_from(signer);
     }
+    probe.nonce = None;
     probe.gas = None;
     probe.access_list = None;
     probe
@@ -509,33 +532,37 @@ async fn try_attach_access_list(
         return AccessListProbeOutcome::Empty;
     }
     tx.set_access_list(access_list);
-    AccessListProbeOutcome::Attached
+    AccessListProbeOutcome::Attached {
+        gas_used: result.gas_used,
+    }
 }
 
-/// Reject unbounded or uneconomic RPC lists, then remove keyless warm sender/recipient entries.
+fn access_list_intrinsic_cost(access_list: &AccessList) -> u64 {
+    access_list.0.iter().fold(0u64, |cost, entry| {
+        let key_count = u64::try_from(entry.storage_keys.len()).unwrap_or(u64::MAX);
+        cost.saturating_add(2_400)
+            .saturating_add(1_900u64.saturating_mul(key_count))
+    })
+}
+
+/// Reject unbounded lists and those where 2,400 per address + 1,900 per key
+/// is not below gasUsed (a sanity bound, not proof of net savings). Then remove
+/// keyless warm sender/recipient entries.
 fn validated_access_list(
     access_list: AccessList,
     tx: &TransactionRequest,
     signer: Address,
     gas_used: U256,
 ) -> Option<AccessList> {
-    let (item_count, intrinsic_cost) =
-        access_list
-            .0
-            .iter()
-            .fold((0usize, 0u64), |(count, cost), entry| {
-                (
-                    count
-                        .saturating_add(1)
-                        .saturating_add(entry.storage_keys.len()),
-                    cost.saturating_add(2_400)
-                        .saturating_add(1_900u64.saturating_mul(entry.storage_keys.len() as u64)),
-                )
-            });
+    let item_count = access_list.0.iter().fold(0usize, |count, entry| {
+        count
+            .saturating_add(1)
+            .saturating_add(entry.storage_keys.len())
+    });
     if item_count > MAX_ACCESS_LIST_ITEMS {
         return None;
     }
-    if U256::from(intrinsic_cost) >= gas_used {
+    if U256::from(access_list_intrinsic_cost(&access_list)) >= gas_used {
         return None;
     }
 
@@ -582,20 +609,26 @@ impl Caller<Ethereum, U64> for AccessListCaller {
         let root = self.root.clone();
         let signer = self.signer;
         let fut: BoxedFut<U64> = Box::pin(async move {
-            let block = params.block().unwrap_or_else(BlockId::pending);
+            let caller_block = params.block();
+            let probe_block = caller_block.unwrap_or_else(BlockId::pending);
             let overrides = params.overrides().cloned();
             let block_overrides = params.block_overrides().cloned();
             let mut tx = params.into_data();
+            if tx.from.is_none() {
+                tx.set_from(signer);
+            }
 
             // eth_createAccessList cannot represent state or block overrides.
             if tx.access_list.is_none() && overrides.is_none() && block_overrides.is_none() {
-                try_attach_access_list(&root, &mut tx, signer, Some(block)).await;
+                try_attach_access_list(&root, &mut tx, signer, Some(probe_block)).await;
             }
 
-            let estimate = EthCallParams::<Ethereum>::new(tx)
-                .with_block(block)
+            let mut estimate = EthCallParams::<Ethereum>::new(tx)
                 .with_overrides_opt(overrides)
                 .with_block_overrides_opt(block_overrides);
+            if let Some(block) = caller_block {
+                estimate = estimate.with_block(block);
+            }
             root.client().request("eth_estimateGas", estimate).await
         });
         Ok(ProviderCall::from(fut))

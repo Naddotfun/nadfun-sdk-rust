@@ -25,12 +25,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   addresses plus storage keys, or intrinsic cost (`2,400 × addresses + 1,900 ×
   storage keys`) greater than or equal to the reported `gasUsed`, are discarded.
   Result-level errors, RPC failures, rejected lists, and probes taking longer
-  than 5 seconds fall back to a request without a generated list. If a send has
-  an explicit gas limit, that fallback first runs a list-less estimate and
-  returns an error before taking a nonce if the estimate exceeds the limit or
-  cannot be obtained. Caller-supplied lists are preserved. Estimates with state
-  or block-state overrides skip list generation; explicit block tags are
-  forwarded to `eth_createAccessList`.
+  than 5 seconds fall back to a request without a generated list. A successful
+  explicit-gas send trusts the RPC-reported `gasUsed` and drops a generated
+  list only when `gasUsed` exceeds the caller's limit; equality keeps the list.
+  If the probe is unavailable or the list is dropped, the SDK runs a list-less
+  estimate with a 30-second bound. An estimate above the caller's limit returns
+  an error before nonce acquisition. A JSON-RPC error with code 3 or a message
+  whose lowercased text contains "revert" allows a list-less send with the
+  caller's gas limit, supporting pipelined approve→trade sends. Any other error
+  or timeout returns a contextual error before nonce acquisition.
+  Caller-supplied lists are preserved; an explicitly empty `access_list` opts
+  out of probing. A list emptied by filtering is sent as supplied without an
+  extra estimate.
+  Estimates with state or block-state overrides skip list generation. When
+  `from` is absent, both the probe and gas estimate use the signing account. A
+  probe defaults to `pending`. `eth_estimateGas` omits its block parameter when
+  none was supplied, except Alloy serializes `latest` when state or block-state
+  overrides are present; explicit block tags are preserved for both calls. On
+  RPCs that do not support `eth_createAccessList`, this adds one failing RPC
+  call per send or estimate. A generated list and its gasUsed are RPC-supplied
+  and are not cross-checked; with an explicit limit, a wrong or stale list can
+  run out of gas and pay the full limit. After a revert estimate, a genuinely
+  reverting list-less transaction is still submitted and pays the full caller
+  limit, preserving pre-0.6 explicit-gas behavior (Monad charges the gas limit).
+  Opt out by passing an empty access_list.
 - Gas estimates from SDK signing providers now use the generated list. With
   `gas_limit: None`, the list-aware estimate is still sent without headroom;
   callers that reuse an estimate should retain about 10% headroom for Monad's

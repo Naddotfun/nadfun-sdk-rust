@@ -45,6 +45,10 @@ enum EstimateReply {
     Success,
     Gas(u64),
     RpcFailure,
+    Revert,
+    RevertMessage,
+    VmError,
+    TransportFailure,
 }
 
 #[derive(Clone, Copy)]
@@ -72,7 +76,7 @@ impl RpcFixture {
         estimate_reply: EstimateReply,
         send_reply: SendReply,
     ) -> Self {
-        let server = MockServer::start().await;
+        let server = MockServer::builder().start().await;
         let state = Arc::new(Mutex::new(RpcState {
             requests: Vec::new(),
             access_list_reply,
@@ -117,8 +121,23 @@ impl RpcFixture {
                         .set_body_json(result);
                 }
 
+                if rpc_method == "eth_estimateGas"
+                    && matches!(estimate_reply, EstimateReply::TransportFailure)
+                {
+                    return ResponseTemplate::new(500)
+                        .set_body_string("estimate transport unavailable");
+                }
+
                 let result = match rpc_method {
                     "eth_chainId" => json!({ "result": "0x8f" }),
+                    "eth_feeHistory" => json!({
+                        "result": {
+                            "oldestBlock": "0x1",
+                            "baseFeePerGas": ["0x1", "0x1"],
+                            "gasUsedRatio": [0.5],
+                            "reward": [["0x1"]]
+                        }
+                    }),
                     "eth_getTransactionCount" => json!({ "result": "0x0" }),
                     "eth_createAccessList" => match access_list_reply {
                         AccessListReply::Generated => json!({
@@ -169,6 +188,22 @@ impl RpcFixture {
                         EstimateReply::RpcFailure => json!({
                             "error": { "code": -32000, "message": "original estimate failure" }
                         }),
+                        EstimateReply::Revert => json!({
+                            "error": {
+                                "code": 3,
+                                "message": "execution reverted",
+                                "data": "0x"
+                            }
+                        }),
+                        EstimateReply::RevertMessage => json!({
+                            "error": { "code": -32000, "message": "execution reverted" }
+                        }),
+                        EstimateReply::VmError => json!({
+                            "error": { "code": 3, "message": "VM error" }
+                        }),
+                        EstimateReply::TransportFailure => {
+                            unreachable!("handled by HTTP failure response")
+                        }
                     },
                     "eth_sendRawTransaction" => {
                         if matches!(send_reply, SendReply::RejectFirst) && send_number == 1 {
@@ -606,6 +641,216 @@ async fn access_list_failure_preserves_estimate_error() {
 }
 
 #[tokio::test]
+async fn explicit_gas_estimate_revert_still_sends_listless() {
+    for estimate_reply in [
+        EstimateReply::Revert,
+        EstimateReply::RevertMessage,
+        EstimateReply::VmError,
+    ] {
+        let fixture = RpcFixture::start(
+            AccessListReply::RpcFailure,
+            estimate_reply,
+            SendReply::Accept,
+        )
+        .await;
+        let (core, _) = signed_core(&fixture).await;
+        let _ = core
+            .provider()
+            .send_transaction(simple_request(DESTINATION).with_gas_limit(60_000))
+            .await
+            .expect("a revert estimate must not block an explicit-gas send");
+
+        let requests = fixture.requests();
+        let estimate = requests
+            .iter()
+            .find(|request| request["method"] == "eth_estimateGas")
+            .expect("failed access-list probe must attempt list-less estimation");
+        assert!(estimate["params"][0]["accessList"].is_null());
+        let signed = signed_transaction(&fixture);
+        assert_eq!(signed.gas_limit(), 60_000);
+        assert!(signed.access_list().is_none());
+    }
+}
+
+#[tokio::test]
+async fn explicit_gas_non_revert_estimate_error_rejects_before_nonce() {
+    let fixture = RpcFixture::start(
+        AccessListReply::RpcFailure,
+        EstimateReply::RpcFailure,
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let result = core
+        .provider()
+        .send_transaction(simple_request(DESTINATION).with_gas_limit(60_000))
+        .await;
+    let error = result.expect_err("a non-revert estimate error must reject the send");
+
+    assert!(format!("{error:#}").contains("list-less gas estimate failed before nonce acquisition"));
+    let requests = fixture.requests();
+    let estimate = requests
+        .iter()
+        .find(|request| request["method"] == "eth_estimateGas")
+        .expect("failed access-list probe must attempt list-less estimation");
+    assert!(estimate["params"][0]["accessList"].is_null());
+    assert!(!requests.iter().any(|request| {
+        matches!(
+            request["method"].as_str(),
+            Some("eth_getTransactionCount" | "eth_sendRawTransaction")
+        )
+    }));
+}
+
+#[tokio::test]
+async fn explicit_gas_transport_estimate_failure_rejects_before_nonce() {
+    let fixture = RpcFixture::start(
+        AccessListReply::RpcFailure,
+        EstimateReply::TransportFailure,
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let result = core
+        .provider()
+        .send_transaction(simple_request(DESTINATION).with_gas_limit(60_000))
+        .await;
+
+    assert!(
+        result.is_err(),
+        "a transport failure during fallback estimation must reject the send"
+    );
+    let requests = fixture.requests();
+    assert!(requests
+        .iter()
+        .any(|request| request["method"] == "eth_estimateGas"));
+    assert!(!requests.iter().any(|request| {
+        matches!(
+            request["method"].as_str(),
+            Some("eth_getTransactionCount" | "eth_sendRawTransaction")
+        )
+    }));
+}
+
+#[tokio::test]
+async fn generated_list_over_limit_falls_back_listless() {
+    let fixture = RpcFixture::start(
+        AccessListReply::Generated,
+        EstimateReply::Gas(30_000),
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let _ = core
+        .provider()
+        .send_transaction(simple_request(DESTINATION).with_gas_limit(40_000))
+        .await
+        .unwrap();
+
+    let requests = fixture.requests();
+    let estimates: Vec<_> = requests
+        .iter()
+        .filter(|request| request["method"] == "eth_estimateGas")
+        .collect();
+    assert_eq!(
+        estimates.len(),
+        1,
+        "over-limit list needs one fallback estimate"
+    );
+    assert!(estimates[0]["params"][0]["accessList"].is_null());
+    assert_eq!(signed_transaction(&fixture).gas_limit(), 40_000);
+    assert!(signed_transaction(&fixture).access_list().is_none());
+}
+
+#[tokio::test]
+async fn generated_list_over_limit_rejects_unsafe_limit() {
+    let fixture = RpcFixture::start(
+        AccessListReply::Generated,
+        EstimateReply::Gas(70_000),
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let error = core
+        .provider()
+        .send_transaction(simple_request(DESTINATION).with_gas_limit(40_000))
+        .await
+        .expect_err("an estimate above the caller gas limit must reject the send");
+
+    assert!(format!("{error}")
+        .contains("list-less gas estimate 70000 exceeds explicit gas limit 40000"));
+    let requests = fixture.requests();
+    assert!(!requests.iter().any(|request| {
+        matches!(
+            request["method"].as_str(),
+            Some("eth_getTransactionCount" | "eth_sendRawTransaction")
+        )
+    }));
+}
+
+#[tokio::test]
+async fn listless_probe_and_fallback_omit_caller_nonce() {
+    let fixture = RpcFixture::start(
+        AccessListReply::RpcFailure,
+        EstimateReply::Gas(50_000),
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let _ = core
+        .provider()
+        .send_transaction(
+            simple_request(DESTINATION)
+                .with_nonce(7)
+                .with_gas_limit(60_000),
+        )
+        .await
+        .unwrap();
+
+    let requests = fixture.requests();
+    let probe = requests
+        .iter()
+        .find(|request| request["method"] == "eth_createAccessList")
+        .expect("missing access-list probe");
+    let estimate = requests
+        .iter()
+        .find(|request| request["method"] == "eth_estimateGas")
+        .expect("missing list-less fallback estimate");
+    assert!(probe["params"][0]["nonce"].is_null());
+    assert!(estimate["params"][0]["nonce"].is_null());
+    assert_eq!(signed_transaction(&fixture).nonce(), 7);
+}
+
+#[tokio::test]
+async fn default_estimate_omits_block_and_matches_probe_sender() {
+    let fixture = RpcFixture::start(
+        AccessListReply::Generated,
+        EstimateReply::Success,
+        SendReply::Accept,
+    )
+    .await;
+    let (core, sender) = signed_core(&fixture).await;
+    core.provider()
+        .estimate_gas(TransactionRequest::default().with_to(DESTINATION))
+        .await
+        .unwrap();
+
+    let requests = fixture.requests();
+    let probe = requests
+        .iter()
+        .find(|request| request["method"] == "eth_createAccessList")
+        .expect("estimate did not probe for an access list");
+    let estimate = requests
+        .iter()
+        .find(|request| request["method"] == "eth_estimateGas")
+        .expect("missing gas estimate");
+    assert_eq!(probe["params"][1], "pending");
+    assert_eq!(probe["params"][0]["from"], format!("{sender:#x}"));
+    assert_eq!(estimate["params"][0]["from"], format!("{sender:#x}"));
+    assert_eq!(estimate["params"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn explicit_gas_limit_is_checked_after_failed_access_list_probe() {
     for reply in [AccessListReply::RpcFailure, AccessListReply::RevertResult] {
         let fixture = RpcFixture::start(reply, EstimateReply::Gas(70_000), SendReply::Accept).await;
@@ -738,6 +983,65 @@ async fn access_list_probe_uses_a_short_timeout() {
             .any(|request| request["method"] == "eth_estimateGas"),
         "a delayed access-list response must time out and use list-less estimation"
     );
+    assert!(
+        signed_transaction(&fixture).access_list().is_none(),
+        "a timed-out access-list probe must not affect the signed transaction"
+    );
+}
+
+#[tokio::test]
+async fn default_fee_send_signs_type2_with_generated_list() {
+    let fixture = RpcFixture::start(
+        AccessListReply::Generated,
+        EstimateReply::Success,
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let request = TransactionRequest::default()
+        .with_chain_id(CHAIN_ID)
+        .with_to(DESTINATION)
+        .with_input(vec![0x01, 0x02, 0x03]);
+    assert!(request.gas_price.is_none());
+    assert!(request.max_fee_per_gas.is_none());
+    assert!(request.max_priority_fee_per_gas.is_none());
+
+    let _ = core.provider().send_transaction(request).await.unwrap();
+
+    let signed = signed_transaction(&fixture);
+    assert_eq!(signed.ty(), 2);
+    assert!(signed.access_list().is_some_and(|list| !list.0.is_empty()));
+    assert!(fixture
+        .methods()
+        .iter()
+        .any(|method| method == "eth_feeHistory"));
+}
+
+#[tokio::test]
+async fn caller_empty_list_skips_probe() {
+    let fixture = RpcFixture::start(
+        AccessListReply::Generated,
+        EstimateReply::Success,
+        SendReply::Accept,
+    )
+    .await;
+    let (core, _) = signed_core(&fixture).await;
+    let empty = AccessList::default();
+    let _ = core
+        .provider()
+        .send_transaction(
+            simple_request(DESTINATION)
+                .with_access_list(empty.clone())
+                .with_gas_limit(60_000),
+        )
+        .await
+        .unwrap();
+
+    assert!(!fixture
+        .methods()
+        .iter()
+        .any(|method| method == "eth_createAccessList"));
+    assert_eq!(signed_transaction(&fixture).access_list(), Some(&empty));
 }
 
 #[tokio::test]
@@ -767,6 +1071,13 @@ async fn estimate_access_list_probe_forwards_block_and_skips_overrides() {
         .overrides(alloy::rpc::types::state::StateOverride::default())
         .await
         .unwrap();
+    let override_estimate = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request["method"] == "eth_estimateGas")
+        .nth(1)
+        .expect("missing state-override estimate");
+    assert_eq!(override_estimate["params"][1], "latest");
     assert_eq!(
         fixture
             .requests()

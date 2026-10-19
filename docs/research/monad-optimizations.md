@@ -6,7 +6,7 @@
 
 | 순위 | 항목 | 판단과 SDK 접점 |
 | --- | --- | --- |
-| 1 | 가스 한도 | Monad는 실제 사용량이 아니라 설정한 `gas_limit` 전체에 과금한다. V2 라우터의 **15–25%** 여유 권고를 재평가한다. [Monad Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [router.rs](../../src/contracts/v2/router.rs#L421-L430) |
+| 1 | 가스 한도 | Monad는 실제 사용량이 아니라 설정한 `gas_limit` 전체에 과금한다. V2 라우터는 상태·타임스탬프 변동을 위해 약 **10%** 여유를 권고한다. [Monad Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [router.rs](../../src/contracts/v2/router.rs#L421-L430) |
 | 2 | 영수증·확정성 | `latest` 및 처음 받은 영수증은 잠정적이다. 입금·정산에는 `finalized` 높이와 영수증 블록을 비교한다. [Monad JSON-RPC](https://docs.monad.xyz/reference/json-rpc/overview), [core.rs](../../src/core/core.rs#L251-L266) |
 | 3 | 논스·전송 | 전송 성공 응답은 실행 성공 증거가 아니며, 논스 간격이 있어도 RPC가 처음에는 수락할 수 있다. [Monad JSON-RPC](https://docs.monad.xyz/reference/json-rpc/overview), [nonce.rs](../../src/core/nonce.rs#L208-L278) |
 | 4 | 접근 목록·콜드 접근 | 메인넷 V2 거래 2건 실측에서 추정 가스 **약 51% 감소**(§3). 냉계정 **10,100 gas**, 냉스토리지 페이지 **8,100 gas**가 원인이다. 목록 자체 비용과 이미 warm인 대상을 함께 계산한다. [Opcode Pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing), [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930) |
@@ -21,7 +21,7 @@
 
 Monad 공식 문서는 `gas_paid = gas_limit × price_per_gas`이며 실행 중 사용한 가스가 적어도 제출한 한도 전체에 과금한다고 명시한다. 실행 소스의 `charges_gas_limit()`은 `MONAD_ONE` 이상에서 참이며 미사용 가스 환급은 0을 반환한다. 따라서 추정치에 무조건 여유를 곱하면 한도 증가분을 실제로 지불한다. [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [VM traits](https://github.com/category-labs/monad/blob/main/category/vm/evm/traits.hpp), [transaction gas](https://github.com/category-labs/monad/blob/main/category/execution/monad/monad_transaction_gas.cpp)
 
-SDK의 [V1 가스 추정](../../src/core/v1/gas.rs#L58-L141), [V1 전송 옵션](../../src/contracts/v1/bonding_curve.rs#L61-L103)과 [V2 라우터 추정](../../src/contracts/v2/router.rs#L421-L617)을 먼저 대조할 지점으로 본다. 특히 V2 rustdoc의 **15–25%** 추가 한도 권고는 Monad에서는 가격과 직접 연결된다. 이 비율을 임의로 줄이는 것도 OOG 위험을 높이므로, 호출별 추정치·실제 사용량·실패율을 모아 상한 정책을 정하는 것이 타당하다. 가스 사용량이 고정인 동작은 명시적 한도를 권장한다는 공식 문서의 범위만 확정적으로 말할 수 있다. [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [router.rs](../../src/contracts/v2/router.rs#L421-L430)
+SDK의 [V1 가스 추정](../../src/core/v1/gas.rs#L58-L141), [V1 전송 옵션](../../src/contracts/v1/bonding_curve.rs#L61-L103)과 [V2 라우터 추정](../../src/contracts/v2/router.rs#L421-L617)을 먼저 대조할 지점으로 본다. V2 라우터 rustdoc은 상태·타임스탬프 변동을 위해 약 **10%** 여유를 권고한다. Monad에서는 설정 한도 전체가 비용과 직접 연결되므로, 이 가이드도 호출별 추정치·실제 사용량·실패율로 검증하는 것이 타당하다. 가스 사용량이 고정인 동작은 명시적 한도를 권장한다는 공식 문서의 범위만 확정적으로 말할 수 있다. [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [router.rs](../../src/contracts/v2/router.rs#L421-L430)
 
 **적용 판단 — P0.** 기존 버퍼 안내를 바로잡고 거래 경로별 한도 정책을 측정하면 과금 낭비를 줄일 수 있다. 문서 수정만으로는 공개 API 변경이 없지만, 기본 한도 산정 동작을 바꾸면 버전 결정과 changelog가 필요하다. [router.rs](../../src/contracts/v2/router.rs#L421-L430), [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing)
 
