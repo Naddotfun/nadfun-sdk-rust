@@ -75,6 +75,9 @@ pub(crate) struct V2Contracts {
 impl Core {
     /// Create a new `Core` from RPC URL + private key + network.
     ///
+    /// Its signing provider adds a generated access list to unsigned sends and
+    /// estimates when the RPC supports `eth_createAccessList`.
+    ///
     /// Wires both v1 and v2 contract bindings for `network`. Errors if the
     /// network does not have v2 configured (currently impossible — both
     /// `Network::Mainnet` and `Network::Testnet` ship with v2).
@@ -99,7 +102,9 @@ impl Core {
     /// [`Core::new`] builds a provider with SDK nonce handling (one shared state
     /// per chain + account, sends serialized per account, no nonce taken by a
     /// gas-estimation revert or a node rejection); a provider from alloy's
-    /// `ProviderBuilder::new().wallet(..)` does not have it.
+    /// `ProviderBuilder::new().wallet(..)` does not have it. For this
+    /// constructor, access-list generation and gas estimation are controlled
+    /// by the supplied provider.
     pub fn with_provider(
         provider: Arc<DynProvider>,
         wallet_address: Address,

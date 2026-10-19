@@ -13,6 +13,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.6.0] — 2026-10-19
+
+### Changed
+
+- **Generated EIP-2930 access lists.** SDK signing providers created by
+  `Core::new` and `TokenHelper::new` now call `eth_createAccessList` for
+  unsigned sends and gas estimates. Successful lists are filtered to remove
+  empty-key sender and destination entries, then used for filling and
+  estimation. Empty filtered lists are not attached; lists with more than 1,024
+  addresses plus storage keys, or intrinsic cost (`2,400 × addresses + 1,900 ×
+  storage keys`) greater than or equal to the reported `gasUsed`, are discarded.
+  Result-level errors, RPC failures, rejected lists, and probes taking longer
+  than 5 seconds fall back to a request without a generated list. If a send has
+  an explicit gas limit, that fallback first runs a list-less estimate and
+  returns an error before taking a nonce if the estimate exceeds the limit or
+  cannot be obtained. Caller-supplied lists are preserved. Estimates with state
+  or block-state overrides skip list generation; explicit block tags are
+  forwarded to `eth_createAccessList`.
+- Gas estimates from SDK signing providers now use the generated list. With
+  `gas_limit: None`, the list-aware estimate is still sent without headroom;
+  callers that reuse an estimate should retain about 10% headroom for Monad's
+  state and timestamp variance. The measured mainnet V2 `sell` and
+  `exactOutBuy` cases used about 51% less gas; savings vary by call.
+- A transaction with an attached access list and explicit
+  `GasPricing::LegacyWithPrice` (`gas_price`) is signed as EIP-2930 type 1.
+  `GasPricing::Legacy` leaves fee fields unset, so the SDK signing filler
+  produces EIP-1559 type 2; dynamic-fee transactions remain EIP-1559.
+
 ## [0.5.0] — 2026-10-16
 
 ### Breaking

@@ -422,8 +422,9 @@ impl<P: Provider + Clone> NadFunRouter<P> {
     ///
     /// Builds the same calldata the equivalent send method would produce, but
     /// runs `eth_estimateGas` (with the caller's `from` address so balance /
-    /// allowance checks succeed) instead of broadcasting. Caller should apply
-    /// their own buffer (15-25% is typical) on top of the returned value.
+    /// allowance checks succeed) instead of broadcasting. With an SDK signing
+    /// provider the estimate includes its generated access list. On Monad,
+    /// callers should add about 10% headroom for state and timestamp variance.
     pub async fn estimate_gas(&self, params: V2GasEstimationParams, from: Address) -> Result<u64> {
         let contract = INadFunRouter::new(self.address, self.provider.as_ref());
         let map_vaults = |vs: Vec<V2VaultAllocation>| {

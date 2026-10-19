@@ -95,7 +95,7 @@ cargo run --example gas_estimation -- --private-key your_private_key_here --rpc-
 **Features:**
 - ⛽ **Unified Gas Estimation**: Uses `core.v1().estimate_gas()` for BUY, SELL, and SELL PERMIT operations
 - 🔧 **Automatic Problem Solving**: Handles token approval and EIP-2612 permit signatures automatically
-- 📊 **Gas Headroom**: Gas limit to send = estimate + headroom: estimate + 10% (`common::gas_with_headroom`, Monad guidance: estimate + ~7.5–10%)
+- 📊 **Gas Headroom**: Gas limit to send = list-aware estimate + 10% (`common::gas_with_headroom`, Monad guidance: estimate + ~7.5–10%)
 - 💰 **Cost Analysis**: Shows estimated transaction costs at different gas prices
 - ⚠️ **Real Network Conditions**: Uses actual network estimation with proper error handling
 
@@ -321,7 +321,7 @@ cargo run --example v2_buy -- --private-key your_private_key_here --rpc-url http
 - 🪙 **Native Funding**: Sends 0.01 MON (hardcoded `value`); router wraps to the native quote
 - 📊 **Quote First**: `core.v2().get_amount_out(token, amount, true)` with a zero-quote guard
 - 🛡️ **Slippage**: `SlippageUtils::calculate_amount_out_min(expected, 5.0)` (5%)
-- ⛽ **v2 Gas Estimation**: `core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(..))` + headroom (estimate + 10% (`common::gas_with_headroom`, Monad guidance: estimate + ~7.5–10%)), falls back to 400k
+- ⛽ **v2 Gas Estimation**: `core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(..))` uses a generated access list with `Core::new`, then applies 10% headroom (`common::gas_with_headroom`, Monad guidance: estimate + ~7.5–10%); falls back to 400k
 - 📝 **Receipt Check**: `core.get_receipt(tx_hash)` status/block reporting
 
 ### v2 Buy with ERC-20 Quote (`v2/buy_erc20_quote.rs`)
@@ -517,7 +517,7 @@ let gas_params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
 // Headroom: estimate + 10%
-let gas_limit = estimated_gas + estimated_gas / 10;
+let gas_limit = estimated_gas.saturating_add(estimated_gas / 10);
 ```
 
 ## 🚀 Configuration

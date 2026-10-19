@@ -4,12 +4,12 @@ use anyhow::Result;
 use nadfun_sdk::Network;
 use std::env;
 
-/// Gas limit to send for a trade from its `estimate_gas` result: estimate + 10%,
-/// in line with Monad's guidance (estimate + ~7.5–10%; Monad charges the full
-/// gas limit). See README "Gas Management".
+/// Gas limit to send for a trade from its list-aware `estimate_gas` result:
+/// estimate + 10%, in line with Monad's guidance (estimate + ~7.5–10%; Monad
+/// charges the full gas limit). See README "Gas Management".
 #[allow(dead_code)] // Only the trading examples send trades.
 pub fn gas_with_headroom(estimate: u64) -> u64 {
-    estimate + estimate / 10
+    estimate.saturating_add(estimate / 10)
 }
 
 /// Get configuration from environment variables or defaults

@@ -18,8 +18,8 @@ impl Router {
 /// Gas pricing strategy for transactions
 #[derive(Debug, Clone, Default)]
 pub enum GasPricing {
-    /// Legacy gas pricing (Type 0 transaction)
-    /// Use this for compatibility with older systems
+    /// Legacy strategy that leaves fee fields unset; the SDK signing filler supplies EIP-1559 (Type 2).
+    /// Use this when the provider should select its default fee fields.
     #[default]
     Legacy,
     /// Legacy with explicit gas price

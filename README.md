@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.5.0"
+nadfun_sdk = "0.6.0"
 ```
 
 Requires Rust 1.94.1+ and alloy 2.x (the SDK's public types are alloy 2.x types).
@@ -20,6 +20,19 @@ Run `cargo update -p rustls-webpki` so your lockfile resolves to ≥ 0.103.15. I
 your application installs its own rustls `CryptoProvider`, do so before the
 SDK's first WebSocket connect (which installs `aws-lc-rs` as the process
 default).
+
+## What's new in 0.6.0
+
+- **Generated access lists.** SDK signing providers generate and filter access
+  lists for sends and estimates. Probe errors, rejected lists, and timeouts
+  after 5 seconds fall back to a request without a generated list. For a send
+  with an explicit gas limit, that fallback first checks a list-less gas
+  estimate and returns an error before taking a nonce if the estimate exceeds
+  the limit or cannot be obtained. Estimates with state or block-state overrides
+  skip probing; an explicit estimate block tag is forwarded to the probe.
+- With an explicit `GasPricing::LegacyWithPrice` (`gas_price`), an attached
+  access list signs as EIP-2930 type 1. `GasPricing::Legacy` leaves fee fields
+  unset, so the SDK signing filler supplies EIP-1559 type 2.
 
 ## What's new in 0.5.0
 
@@ -87,7 +100,7 @@ async fn main() -> Result<()> {
         deadline: U256::from(9999999999999999u64),
     };
     let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-    let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
+    let gas_with_buffer = estimated_gas.saturating_add(estimated_gas / 10); // +10% headroom
 
     // 4. Execute buy
     let buy_params = BuyParams {
@@ -538,7 +551,7 @@ let gas_params = GasEstimationParams::Buy {
 
 // Get accurate gas estimation from network
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
-let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
+let gas_with_buffer = estimated_gas.saturating_add(estimated_gas / 10); // +10% headroom
 
 let buy_params = BuyParams {
     token,
@@ -612,11 +625,35 @@ Residual risks:
 
 ### ⛽ Gas Management
 
-When `gas_limit` is `None`, the raw node estimate (`eth_estimateGas`) is sent
-as the gas limit with no headroom. On Monad the fee is `gas_limit × price`,
-failed transactions pay the full limit, and Monad recommends sending the
-estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing),
+The signing providers created by `Core::new` and `TokenHelper::new` call
+`eth_createAccessList` before unsigned sends and estimates. A successful
+response is attached after keyless sender and destination entries are removed,
+unless the filtered list is empty. The SDK discards generated lists with more
+than 1,024 addresses plus storage keys, or whose intrinsic cost
+(`2,400 × addresses + 1,900 × storage keys`) is at least the reported
+`gasUsed`. Result-level errors, RPC failures, rejected lists, and probes taking
+longer than 5 seconds fall back to a request without a generated list. For a
+send with an explicit `gas_limit`, the fallback first runs a list-less estimate
+and returns an error before taking a nonce if that estimate exceeds the limit
+or the estimate fails. Estimates with state or block-state overrides skip probing;
+an explicit estimate block tag is forwarded to `eth_createAccessList`.
+`Core::with_provider`
+uses the estimate and send behavior of the supplied provider.
+
+When `gas_limit` is `None`, the list-aware node estimate (`eth_estimateGas`) is
+sent as the gas limit with no headroom. An explicit `gas_limit` is preserved
+when a list is attached, so add headroom when reusing an estimate. On
+Monad the fee is `gas_limit × price`, failed transactions pay the full limit,
+and Monad recommends sending the estimate plus ~7.5–10% ([Monad gas pricing](https://docs.monad.xyz/developer-essentials/gas-pricing),
 [opcode pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing)).
+Lists reflect the probe state and may be stale by inclusion. A generated list
+adds intrinsic cost, and state can change before inclusion; the SDK preserves
+explicit limits as supplied, so a fixed limit must account for both.
+The measured mainnet V2 `sell` and `exactOutBuy` cases used about 51% less gas;
+savings vary by call. With `GasPricing::LegacyWithPrice` and its explicit
+`gas_price`, an attached list makes the transaction EIP-2930 type 1.
+`GasPricing::Legacy` leaves fee fields unset, so the signing filler produces
+EIP-1559 type 2; dynamic-fee transactions remain EIP-1559.
 
 A graduated token's DEX pair (NadFunPair) writes its price accumulators only
 when `block.timestamp` moved since its last update, so a DEX trade estimated in
@@ -641,7 +678,7 @@ both networks. Recommended for all trades: `gas_limit = estimate + 10%`:
 ```rust,ignore
 let mut params = V2BuyParams { /* .. */ gas_limit: None, /* .. */ };
 let estimate = core.v2().estimate_gas(V2GasEstimationParams::Buy(params.clone())).await?;
-params.gas_limit = Some(estimate + estimate / 10);
+params.gas_limit = Some(estimate.saturating_add(estimate / 10));
 core.v2().buy(params).await?;
 ```
 
@@ -694,7 +731,7 @@ let gas_params = GasEstimationParams::Buy {
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 
 // Apply buffer strategy
-let gas_with_buffer = estimated_gas + estimated_gas / 10; // +10% headroom
+let gas_with_buffer = estimated_gas.saturating_add(estimated_gas / 10); // +10% headroom
 ```
 
 #### Gas Estimation Parameters
@@ -727,7 +764,7 @@ Send `estimate + 10%` (see [Gas Management](#-gas-management)). Monad charges th
 full gas limit, so keep the headroom no larger than needed.
 
 ```rust
-let final_gas = estimated_gas + estimated_gas / 10;
+let final_gas = estimated_gas.saturating_add(estimated_gas / 10);
 ```
 
 #### Migration from v0.1.x
@@ -741,7 +778,7 @@ let gas_limit = get_default_gas_limit(&router, Operation::Buy);
 use nadfun_sdk::GasEstimationParams;
 let params = GasEstimationParams::Buy { token, amount_in, amount_out_min, to, deadline };
 let estimated_gas = core.v1().estimate_gas(&router, params).await?;
-let gas_limit = estimated_gas + estimated_gas / 10; // +10%, see Gas Management
+let gas_limit = estimated_gas.saturating_add(estimated_gas / 10); // +10%, see Gas Management
 ```
 
 **⚠️ Important Notes:**

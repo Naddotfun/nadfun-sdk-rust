@@ -1,10 +1,12 @@
 //! NadFun contract v2 parameter types (trading + creation).
 //!
 //! Every trade/create parameter struct carries `gas_limit`, `gas_price` and
-//! `nonce` transaction options. When `gas_limit` is `None` the raw node
-//! estimate is sent as the gas limit with no headroom. Monad charges
-//! `gas_limit × price` (failed transactions pay the full limit) and recommends
-//! the estimate plus ~7.5–10%
+//! `nonce` transaction options. With `Core::new`'s signing provider,
+//! `gas_limit: None` uses a list-aware node estimate as the gas limit, with no
+//! headroom; a caller-supplied gas limit is preserved. Monad charges
+//! `gas_limit × price`
+//! (failed transactions pay the full limit) and recommends the estimate plus
+//! ~7.5–10%
 //! (<https://docs.monad.xyz/developer-essentials/gas-pricing>).
 //!
 //! A graduated token's NadFunPair writes its price accumulators only when
