@@ -102,7 +102,10 @@ pub use constants::{
     QuoteToken,
 };
 pub use contracts::{get_pool_addresses_for_tokens, CreatorClient, PairReserves, PoolDiscovery};
-pub use core::{estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils};
+pub use core::{
+    estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, ReceiptWaitOptions, Router,
+    SlippageUtils,
+};
 pub use stream::{
     BondingCurveEvent, CurveIndexer, CurveStream, DexIndexer, DexStream, EventType, PoolMetadata,
     SwapEvent,
@@ -129,7 +132,8 @@ pub mod prelude {
 
     // Core trading functionality
     pub use crate::core::{
-        estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, Router, SlippageUtils,
+        estimate_gas, Core, CoreV1, CoreV2, GasEstimationParams, ReceiptWaitOptions, Router,
+        SlippageUtils,
     };
 
     // Token operations

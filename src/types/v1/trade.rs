@@ -15,7 +15,14 @@ impl Router {
     }
 }
 
-/// Gas pricing strategy for transactions
+/// Gas pricing strategy for transactions.
+///
+/// [`GasPricing::Legacy`] leaves fee fields unset, so the SDK signing filler
+/// signs an EIP-1559 (type 2) transaction. [`GasPricing::LegacyWithPrice`]
+/// sets `gas_price`; when an access list is attached, the transaction is
+/// signed as EIP-2930 (type 1). [`GasPricing::Eip1559`] sets both the maximum
+/// fee and priority-fee caps and signs an EIP-1559 (type 2) transaction.
+/// `Legacy` remains the default.
 #[derive(Debug, Clone, Default)]
 pub enum GasPricing {
     /// Legacy strategy that leaves fee fields unset; the SDK signing filler supplies EIP-1559 (Type 2).

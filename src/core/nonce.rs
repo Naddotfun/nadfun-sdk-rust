@@ -23,8 +23,10 @@
 //!   gap is refilled from the chain count.
 //!   Monad's `pending` tag equals `latest`, so the count never includes our
 //!   accepted-but-unmined transactions;
-//! - after a send: accepted (or, on `eth_sendRawTransactionSync` only, an error
-//!   carrying the tx hash) -> n + 1; "nonce too low" / "already known" /
+//! - after a send: accepted (or, on `eth_sendRawTransactionSync` only, a
+//!   JSON-RPC code 4 error carrying the tx hash as a string or `{ "hash" }`)
+//!   -> n + 1;
+//!   "nonce too low" / "already known" /
 //!   "already imported" / "known transaction" / "replacement transaction
 //!   underpriced" -> max(n + 1, chain); any other node error, including "nonce
 //!   too high" -> max(n, chain); transport error, timeout or dropped send -> n.
@@ -57,7 +59,7 @@ use alloy::{
     consensus::{transaction::SignerRecoverable as _, Transaction as _},
     eips::BlockId,
     network::{Ethereum, EthereumWallet, TransactionBuilder},
-    primitives::{Address, Bytes, TxKind, U256, U64},
+    primitives::{Address, Bytes, TxKind, B256, U256, U64},
     providers::{
         fillers::{FillProvider, TxFiller},
         BoxedFut, Caller, DynProvider, EthCall, EthCallManyParams, EthCallParams,
@@ -158,6 +160,26 @@ enum Outcome {
     Ambiguous,
 }
 
+/// Extract the tx hash from a qualifying sync-send acceptance response.
+///
+/// Only a JSON-RPC error response with code 4 proves that this sync send reached
+/// the txpool. Monad returns `data: { "hash": "0x…" }`; EIP-7966 providers may
+/// return the hash directly as a string.
+pub(crate) fn accepted_sync_hash(err: &RpcError<TransportErrorKind>) -> Option<B256> {
+    let payload = err.as_error_resp()?;
+    if payload.code != 4 {
+        return None;
+    }
+
+    let data = payload.data.as_ref()?;
+    if let Ok(hash) = data.get().trim_matches('"').parse() {
+        return Some(hash);
+    }
+
+    let data: serde_json::Value = serde_json::from_str(data.get()).ok()?;
+    data.get("hash")?.as_str()?.parse().ok()
+}
+
 /// `sync`: the error came from `eth_sendRawTransactionSync`.
 fn classify(err: &RpcError<TransportErrorKind>, sync: bool) -> Outcome {
     const TAKEN: [&str; 8] = [
@@ -170,10 +192,7 @@ fn classify(err: &RpcError<TransportErrorKind>, sync: bool) -> Outcome {
         "known transaction",
         "replacement transaction underpriced",
     ];
-    // EIP-7966 sync sends report "added but not processed in time" with the
-    // transaction hash in `data`: the transaction is in. On a normal send a
-    // hash in `data` proves nothing.
-    if sync && err.tx_hash_data().is_some() {
+    if sync && accepted_sync_hash(err).is_some() {
         return Outcome::Sent;
     }
     match err.as_error_resp() {
@@ -283,11 +302,12 @@ where
 }
 
 /// Send a transaction whose nonce the caller chose, holding the account lock;
-/// on success move the shared state past it (never backwards).
+/// on acceptance move the shared state past it (never backwards).
 async fn send_fixed<T, C, CF, S, SF>(
     slot: &Mutex<AccountState>,
     chain_count: C,
     send_timeout: Duration,
+    sync: bool,
     nonce: u64,
     send: S,
 ) -> TransportResult<T>
@@ -299,7 +319,11 @@ where
 {
     let mut state = slot.lock().await;
     let sent = bounded(send_timeout, send()).await;
-    if sent.is_ok() {
+    let outcome = match &sent {
+        Ok(_) => Outcome::Sent,
+        Err(err) => classify(err, sync),
+    };
+    if outcome == Outcome::Sent {
         let seen = match state.chain {
             Some((c, _)) => Some(c),
             None => bounded(RPC_TIMEOUT.min(send_timeout), chain_count())
@@ -427,7 +451,7 @@ impl<F: TxFiller<Ethereum>> NonceGuard<F> {
                 .await
             }
             (Route::Fixed(nonce), tx) => {
-                send_fixed(&slot, chain_count, send_timeout, nonce, || send(tx)).await
+                send_fixed(&slot, chain_count, send_timeout, sync, nonce, || send(tx)).await
             }
             (_, tx) => send(tx).await,
         }
@@ -656,12 +680,24 @@ mod tests {
     const T: Duration = Duration::from_secs(5);
     const STALL: Duration = Duration::from_secs(30);
 
-    fn resp_with(message: &str, data: Option<&str>) -> RpcError<TransportErrorKind> {
-        let mut payload = serde_json::json!({ "code": -32000, "message": message });
+    fn resp_with_json(
+        code: i64,
+        message: &str,
+        data: Option<serde_json::Value>,
+    ) -> RpcError<TransportErrorKind> {
+        let mut payload = serde_json::json!({ "code": code, "message": message });
         if let Some(data) = data {
-            payload["data"] = serde_json::json!(data);
+            payload["data"] = data;
         }
         RpcError::ErrorResp(serde_json::from_value(payload).unwrap())
+    }
+
+    fn resp_with(message: &str, data: Option<&str>) -> RpcError<TransportErrorKind> {
+        resp_with_json(
+            -32000,
+            message,
+            data.map(|data| serde_json::Value::String(data.to_owned())),
+        )
     }
 
     fn resp(message: &str) -> RpcError<TransportErrorKind> {
@@ -728,12 +764,43 @@ mod tests {
     #[test]
     fn tx_hash_in_error_data_means_sent_on_sync_only() {
         let hash = format!("0x{}", "ab".repeat(32));
+        let monad_timeout = resp_with_json(
+            4,
+            "Transaction receipt not available within 2000ms timeout",
+            Some(serde_json::json!({ "hash": hash.clone() })),
+        );
+        assert_eq!(classify(&monad_timeout, true), Outcome::Sent);
+        assert_eq!(
+            accepted_sync_hash(&monad_timeout),
+            Some(hash.parse().unwrap())
+        );
+        let bare_string_timeout = resp_with_json(
+            4,
+            "Transaction added but not processed in time",
+            Some(serde_json::json!(hash.clone())),
+        );
+        assert_eq!(classify(&bare_string_timeout, true), Outcome::Sent);
         assert_eq!(
             classify(
-                &resp_with("transaction added but not processed in time", Some(&hash)),
-                true
+                &resp_with_json(
+                    4,
+                    "Transaction receipt not available within 2000ms timeout",
+                    Some(serde_json::json!({})),
+                ),
+                true,
             ),
-            Outcome::Sent
+            Outcome::Rejected
+        );
+        assert_eq!(
+            classify(
+                &resp_with_json(
+                    -32000,
+                    "Transaction added but not processed in time",
+                    Some(serde_json::json!(hash.clone())),
+                ),
+                true,
+            ),
+            Outcome::Rejected
         );
         // On a normal send a hash in `data` proves nothing (alloy's own
         // example is "insufficient funds" + hash).
@@ -874,7 +941,11 @@ mod tests {
         .await;
         assert_eq!(slot.lock().await.next, Some(5), "normal send: reuse");
         let _ = send_auto(&slot, seq(&[5]), T, true, Instant::now, |_| async move {
-            Err::<(), _>(resp_with("not processed in time", Some(&hash)))
+            Err::<(), _>(resp_with_json(
+                4,
+                "Transaction receipt not available within 2000ms timeout",
+                Some(serde_json::json!({ "hash": hash })),
+            ))
         })
         .await;
         assert_eq!(slot.lock().await.next, Some(6), "sync send: it is in");
@@ -913,7 +984,7 @@ mod tests {
             next: Some(c + 1),
             chain: Some((c, Instant::now() - Duration::from_secs(60))),
         });
-        let _ = send_fixed(&slot, seq(&[c]), T, c + 1, || async { Ok(()) }).await;
+        let _ = send_fixed(&slot, seq(&[c]), T, false, c + 1, || async { Ok(()) }).await;
         let next: TransportResult<u64> =
             send_auto(&slot, seq(&[c]), T, false, Instant::now, |n| async move {
                 Ok(n)
@@ -930,7 +1001,7 @@ mod tests {
             next: Some(c),
             chain: Some((c, Instant::now() - Duration::from_secs(60))),
         });
-        let _ = send_fixed(&slot, seq(&[c]), T, c, || async { Ok(()) }).await;
+        let _ = send_fixed(&slot, seq(&[c]), T, false, c, || async { Ok(()) }).await;
         let b: TransportResult<u64> =
             send_auto(&slot, seq(&[c]), T, false, Instant::now, |n| async move {
                 Ok(n)
@@ -1087,15 +1158,16 @@ mod tests {
     #[tokio::test]
     async fn caller_nonce_advances_shared_state() {
         let slot = st(Some(3));
-        let _ = send_fixed(&slot, || chain(0), T, 8, || async { Ok(()) }).await;
+        let _ = send_fixed(&slot, || chain(0), T, false, 8, || async { Ok(()) }).await;
         assert_eq!(slot.lock().await.next, Some(9));
         // A lower caller nonce never moves the state back; failures leave it.
-        let _ = send_fixed(&slot, || chain(0), T, 2, || async { Ok(()) }).await;
+        let _ = send_fixed(&slot, || chain(0), T, false, 2, || async { Ok(()) }).await;
         assert_eq!(slot.lock().await.next, Some(9));
         let _ = send_fixed(
             &slot,
             || chain(0),
             T,
+            false,
             20,
             || async { Err::<(), _>(resp("insufficient funds")) },
         )
@@ -1106,6 +1178,7 @@ mod tests {
             &slot,
             || chain(0),
             Duration::from_millis(20),
+            false,
             30,
             never::<()>,
         )
@@ -1114,7 +1187,7 @@ mod tests {
         assert_eq!(slot.lock().await.next, Some(9));
         // Uninitialised state starts from the chain count.
         let fresh = st(None);
-        let _ = send_fixed(&fresh, || chain(12), T, 4, || async { Ok(()) }).await;
+        let _ = send_fixed(&fresh, || chain(12), T, false, 4, || async { Ok(()) }).await;
         assert_eq!(fresh.lock().await.next, Some(12));
     }
 

@@ -40,7 +40,7 @@ pub mod v1;
 pub mod v2;
 
 pub use crate::types::Router;
-pub use core::Core;
+pub use core::{Core, ReceiptWaitOptions};
 pub use v1::{
     estimate_buy_gas, estimate_gas, estimate_sell_gas, estimate_sell_permit_gas, CoreV1,
     GasEstimationParams, SlippageUtils,

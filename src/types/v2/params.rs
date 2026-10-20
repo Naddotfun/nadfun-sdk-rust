@@ -9,6 +9,13 @@
 //! ~7.5–10%
 //! (<https://docs.monad.xyz/developer-essentials/gas-pricing>).
 //!
+//! Native-value sends may call [`crate::core::Core::check_native_send_balance`]
+//! before submission. Pass the same native value, explicit gas limit, and fee
+//! cap used in the send (`max_fee_per_gas` for EIP-1559 or `gas_price` for
+//! `LegacyWithPrice`). The check reads the latest balance, does not reserve
+//! funds, and applies no extra 10 MON reserve; concurrent sends or automatic
+//! gas/fee filling can make the result stale.
+//!
 //! A graduated token's NadFunPair writes its price accumulators only when
 //! `block.timestamp` moved since its last update. Measured on Monad testnet and
 //! mainnet nodes via `eth_estimateGas` with state overrides (1 MON WMON-quoted
