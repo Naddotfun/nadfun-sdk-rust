@@ -5,6 +5,7 @@
 //! ## Core Features
 //!
 //! - **Trading**: Buy/sell tokens with automatic routing (bonding curve ↔ DEX)
+//! - **Gas estimation**: SDK signing providers use generated EIP-2930 access lists
 //! - **Event Streaming**: Real-time streaming and historical indexing
 //! - **API Client**: Authenticated API access with session management
 //! - **Simple API**: Two main modules - `Core` for trading, `stream` for events

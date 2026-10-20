@@ -46,6 +46,9 @@ pub struct TokenHelper {
 }
 
 impl TokenHelper {
+    /// Create a token helper with the SDK signing provider. It attaches a
+    /// generated access list to unsigned sends and estimates when supported by
+    /// the RPC endpoint.
     pub async fn new(rpc_url: String, private_key: String) -> Result<Self> {
         let signer: PrivateKeySigner = private_key.parse()?;
         let provider = crate::core::nonce::signing_provider(&rpc_url, signer.clone())?;

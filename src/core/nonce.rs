@@ -55,14 +55,16 @@
 
 use alloy::{
     consensus::{transaction::SignerRecoverable as _, Transaction as _},
+    eips::BlockId,
     network::{Ethereum, EthereumWallet, TransactionBuilder},
-    primitives::{Address, Bytes, U64},
+    primitives::{Address, Bytes, TxKind, U256, U64},
     providers::{
         fillers::{FillProvider, TxFiller},
-        DynProvider, EthCall, PendingTransactionBuilder, Provider, ProviderBuilder, RootProvider,
+        BoxedFut, Caller, DynProvider, EthCall, EthCallManyParams, EthCallParams,
+        PendingTransactionBuilder, Provider, ProviderBuilder, ProviderCall, RootProvider,
         SendableTx,
     },
-    rpc::types::{TransactionReceipt, TransactionRequest},
+    rpc::types::{AccessList, TransactionReceipt, TransactionRequest},
     signers::local::PrivateKeySigner,
     transports::{RpcError, TransportErrorKind, TransportResult},
 };
@@ -78,6 +80,8 @@ use tokio::sync::Mutex;
 
 /// Bound on each RPC made while holding an account lock.
 const RPC_TIMEOUT: Duration = Duration::from_secs(30);
+const ACCESS_LIST_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_ACCESS_LIST_ITEMS: usize = 1024;
 /// Bound on `eth_sendRawTransactionSync`, which waits for inclusion.
 const SYNC_SEND_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -357,9 +361,54 @@ impl<F: TxFiller<Ethereum>> NonceGuard<F> {
         S: FnOnce(SendableTx<Ethereum>) -> SF,
         SF: Future<Output = TransportResult<T>>,
     {
-        // Gas estimation and chain id happen here, before any nonce is taken.
+        // Access-list generation and gas estimation happen before any nonce is taken.
         let tx = match tx {
-            SendableTx::Builder(req) => self.inner.fill(req).await?,
+            SendableTx::Builder(mut req) => {
+                if req.access_list.is_none() {
+                    let mut outcome =
+                        try_attach_access_list(self.inner.root(), &mut req, self.signer, None)
+                            .await;
+                    if let (AccessListProbeOutcome::Attached { gas_used }, Some(gas_limit)) =
+                        (outcome, req.gas)
+                    {
+                        if gas_used > U256::from(gas_limit) {
+                            req.access_list = None;
+                            outcome = AccessListProbeOutcome::Unavailable;
+                        }
+                    }
+                    if outcome == AccessListProbeOutcome::Unavailable {
+                        if let Some(gas_limit) = req.gas {
+                            match bounded(RPC_TIMEOUT, async {
+                                self.inner
+                                    .root()
+                                    .estimate_gas(listless_request(&req, self.signer))
+                                    .await
+                            })
+                            .await
+                            {
+                                Ok(estimate) if estimate > gas_limit => {
+                                    return Err(TransportErrorKind::custom_str(&format!(
+                                        "list-less gas estimate {estimate} exceeds explicit gas limit {gas_limit}"
+                                    )));
+                                }
+                                Ok(_) => {}
+                                // Expected revert: a pipelined trade may be estimated before approval lands.
+                                Err(error)
+                                    if error.as_error_resp().is_some_and(|response| {
+                                        response.code == 3
+                                            || response.message.to_lowercase().contains("revert")
+                                    }) => {}
+                                Err(error) => {
+                                    return Err(TransportErrorKind::custom_str(&format!(
+                                        "list-less gas estimate failed before nonce acquisition: {error}"
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+                self.inner.fill(req).await?
+            }
             envelope => envelope,
         };
         let chain_id = match filled_chain_id(&tx) {
@@ -395,7 +444,14 @@ impl<F: TxFiller<Ethereum> + 'static> Provider for NonceGuard<F> {
     }
 
     fn estimate_gas(&self, tx: TransactionRequest) -> EthCall<Ethereum, U64, u64> {
-        self.inner.estimate_gas(tx)
+        EthCall::gas_estimate(
+            AccessListCaller {
+                root: self.inner.root().clone(),
+                signer: self.signer,
+            },
+            tx,
+        )
+        .map_resp(|gas: U64| gas.to::<u64>())
     }
 
     // `Provider` is an `#[async_trait]`; these are its desugared signatures.
@@ -423,6 +479,166 @@ impl<F: TxFiller<Ethereum> + 'static> Provider for NonceGuard<F> {
         Box::pin(self.send(tx, SYNC_SEND_TIMEOUT, true, |tx| {
             self.inner.send_transaction_sync_internal(tx)
         }))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AccessListProbeOutcome {
+    Attached { gas_used: U256 },
+    Empty,
+    Unavailable,
+}
+
+/// Prepare a request matching the send's default sender, without caller gas or access-list data.
+fn listless_request(tx: &TransactionRequest, signer: Address) -> TransactionRequest {
+    let mut probe = tx.clone();
+    if probe.from.is_none() {
+        probe.set_from(signer);
+    }
+    probe.nonce = None;
+    probe.gas = None;
+    probe.access_list = None;
+    probe
+}
+
+/// Probe, validate, filter, and attach a generated access list for either provider path.
+async fn try_attach_access_list(
+    root: &RootProvider,
+    tx: &mut TransactionRequest,
+    signer: Address,
+    block: Option<BlockId>,
+) -> AccessListProbeOutcome {
+    let probe = listless_request(tx, signer);
+    let response = tokio::time::timeout(ACCESS_LIST_TIMEOUT, async {
+        match block {
+            Some(block) => root.create_access_list(&probe).block_id(block).await,
+            None => root.create_access_list(&probe).pending().await,
+        }
+    })
+    .await;
+    let Ok(Ok(result)) = response else {
+        return AccessListProbeOutcome::Unavailable;
+    };
+    if result.error.is_some() {
+        return AccessListProbeOutcome::Unavailable;
+    }
+
+    let Some(access_list) =
+        validated_access_list(result.access_list, &probe, signer, result.gas_used)
+    else {
+        return AccessListProbeOutcome::Unavailable;
+    };
+    if access_list.0.is_empty() {
+        return AccessListProbeOutcome::Empty;
+    }
+    tx.set_access_list(access_list);
+    AccessListProbeOutcome::Attached {
+        gas_used: result.gas_used,
+    }
+}
+
+fn access_list_intrinsic_cost(access_list: &AccessList) -> u64 {
+    access_list.0.iter().fold(0u64, |cost, entry| {
+        let key_count = u64::try_from(entry.storage_keys.len()).unwrap_or(u64::MAX);
+        cost.saturating_add(2_400)
+            .saturating_add(1_900u64.saturating_mul(key_count))
+    })
+}
+
+/// Reject unbounded lists and those where 2,400 per address + 1,900 per key
+/// is not below gasUsed (a sanity bound, not proof of net savings). Then remove
+/// keyless warm sender/recipient entries.
+fn validated_access_list(
+    access_list: AccessList,
+    tx: &TransactionRequest,
+    signer: Address,
+    gas_used: U256,
+) -> Option<AccessList> {
+    let item_count = access_list.0.iter().fold(0usize, |count, entry| {
+        count
+            .saturating_add(1)
+            .saturating_add(entry.storage_keys.len())
+    });
+    if item_count > MAX_ACCESS_LIST_ITEMS {
+        return None;
+    }
+    if U256::from(access_list_intrinsic_cost(&access_list)) >= gas_used {
+        return None;
+    }
+
+    let access_list = filter_warm_entries(access_list, tx, signer);
+    Some(access_list)
+}
+
+/// Remove keyless sender and recipient entries: both accounts are already warm.
+fn filter_warm_entries(
+    mut access_list: AccessList,
+    tx: &TransactionRequest,
+    signer: Address,
+) -> AccessList {
+    let sender = tx.from.unwrap_or(signer);
+    let recipient = match tx.to {
+        Some(TxKind::Call(address)) => Some(address),
+        Some(TxKind::Create) | None => None,
+    };
+    access_list.0.retain(|entry| {
+        !entry.storage_keys.is_empty()
+            || (entry.address != sender && Some(entry.address) != recipient)
+    });
+    access_list
+}
+
+/// `EthCall` caller that generates an access list when an estimate is awaited.
+struct AccessListCaller {
+    root: RootProvider,
+    signer: Address,
+}
+
+impl Caller<Ethereum, U64> for AccessListCaller {
+    fn call(
+        &self,
+        params: EthCallParams<Ethereum>,
+    ) -> TransportResult<ProviderCall<EthCallParams<Ethereum>, U64>> {
+        Caller::<Ethereum, U64>::call(&self.root.weak_client(), params)
+    }
+
+    fn estimate_gas(
+        &self,
+        params: EthCallParams<Ethereum>,
+    ) -> TransportResult<ProviderCall<EthCallParams<Ethereum>, U64>> {
+        let root = self.root.clone();
+        let signer = self.signer;
+        let fut: BoxedFut<U64> = Box::pin(async move {
+            let caller_block = params.block();
+            let probe_block = caller_block.unwrap_or_else(BlockId::pending);
+            let overrides = params.overrides().cloned();
+            let block_overrides = params.block_overrides().cloned();
+            let mut tx = params.into_data();
+            if tx.from.is_none() {
+                tx.set_from(signer);
+            }
+
+            // eth_createAccessList cannot represent state or block overrides.
+            if tx.access_list.is_none() && overrides.is_none() && block_overrides.is_none() {
+                try_attach_access_list(&root, &mut tx, signer, Some(probe_block)).await;
+            }
+
+            let mut estimate = EthCallParams::<Ethereum>::new(tx)
+                .with_overrides_opt(overrides)
+                .with_block_overrides_opt(block_overrides);
+            if let Some(block) = caller_block {
+                estimate = estimate.with_block(block);
+            }
+            root.client().request("eth_estimateGas", estimate).await
+        });
+        Ok(ProviderCall::from(fut))
+    }
+
+    fn call_many(
+        &self,
+        params: EthCallManyParams<'_>,
+    ) -> TransportResult<ProviderCall<EthCallManyParams<'static>, U64>> {
+        Caller::<Ethereum, U64>::call_many(&self.root.weak_client(), params)
     }
 }
 
@@ -904,7 +1120,43 @@ mod tests {
 
     // ---- routing through a real `NonceGuard` over a mocked transport ----
 
-    use alloy::transports::mock::Asserter;
+    use alloy::{
+        primitives::B256,
+        rpc::types::{AccessListItem, AccessListResult},
+        transports::mock::Asserter,
+    };
+
+    fn push_empty_access_list(asserter: &Asserter) {
+        asserter.push_success(&AccessListResult {
+            access_list: AccessList::default(),
+            gas_used: U256::from(21_000),
+            error: None,
+        });
+    }
+
+    #[test]
+    fn generated_access_list_rejects_more_than_1024_addresses_and_keys() {
+        let signer = Address::repeat_byte(1);
+        let tx = TransactionRequest::default().with_to(Address::repeat_byte(2));
+        let list = AccessList(vec![AccessListItem {
+            address: Address::repeat_byte(3),
+            storage_keys: vec![B256::repeat_byte(4); 1024],
+        }]);
+
+        assert!(validated_access_list(list, &tx, signer, U256::MAX).is_none());
+    }
+
+    #[test]
+    fn generated_access_list_rejects_intrinsic_cost_equal_to_reported_gas() {
+        let signer = Address::repeat_byte(1);
+        let tx = TransactionRequest::default().with_to(Address::repeat_byte(2));
+        let list = AccessList(vec![AccessListItem {
+            address: Address::repeat_byte(3),
+            storage_keys: vec![B256::repeat_byte(4)],
+        }]);
+
+        assert!(validated_access_list(list, &tx, signer, U256::from(4_300)).is_none());
+    }
 
     /// `signing_provider`'s filler stack over a mocked transport.
     fn mocked(asserter: Asserter, signer: PrivateKeySigner) -> DynProvider {
@@ -988,6 +1240,7 @@ mod tests {
         let signer = PrivateKeySigner::random();
         let me = signer.address();
         let asserter = Asserter::new();
+        push_empty_access_list(&asserter);
         asserter.push_success(&hash());
         asserter.push_success(&U64::from(3));
         let _ = mocked(asserter, signer)
@@ -1022,6 +1275,7 @@ mod tests {
         let signer = PrivateKeySigner::random();
         let me = signer.address();
         let asserter = Asserter::new();
+        push_empty_access_list(&asserter);
         asserter.push_success(&U64::from(3));
         let req = full_request(None).with_from(Address::repeat_byte(9));
         // Our wallet cannot sign for another `from`: the send fails locally.
@@ -1053,6 +1307,7 @@ mod tests {
             "contractAddress": null
         });
         let asserter = Asserter::new();
+        push_empty_access_list(&asserter);
         asserter.push_success(&receipt); // eth_sendRawTransactionSync
         asserter.push_success(&U64::from(3));
         mocked(asserter, signer)
