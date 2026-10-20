@@ -1,5 +1,45 @@
 # Release Notes
 
+## v0.6.0 (2026-10-19)
+
+```toml
+nadfun_sdk = "0.6.0"
+```
+
+### ⚡ Gas savings: EIP-2930 access lists by default
+
+Signing providers created by `Core::new` and `TokenHelper::new` now call `eth_createAccessList` before every unsigned send and gas estimate, and attach the generated list. On Monad, cold account access costs 10,100 gas and a cold storage slot 8,100, and the full gas limit is charged, so pre-warming saves real MON.
+
+- Measured on mainnet (read-only re-estimate): V2 `sell` 552,896 → 263,088 (**−52.4%**), `exactOutBuy` 560,209 → 274,963 (**−50.9%**). Savings vary by call.
+- Measured on testnet (V1 buy, live sends): the list is attached for both default and explicit gas limits.
+- Lists are filtered (empty-key sender/destination entries removed) and validated (≤ 1,024 addresses + keys; intrinsic cost `2,400 × addresses + 1,900 × keys` < `gasUsed`). An empty list is never attached.
+- Probe failure, rejection, or a probe taking over 5 s falls back to a request without a generated list.
+- Caller-supplied lists are preserved. **Opt out:** pass an empty `access_list`.
+
+### Explicit gas limits
+
+- The generated list is kept when the RPC-reported `gasUsed` ≤ your limit, and dropped when it is higher.
+- When the list is dropped or unavailable, the SDK runs a list-less estimate (30 s bound):
+  - estimate above your limit → `Err` before a nonce is taken
+  - revert-shaped error (JSON-RPC code 3 or a message containing "revert") → sent list-less with your limit, so pipelined approve → trade still works
+  - any other error or timeout → contextual `Err` before a nonce is taken
+
+### ⚠️ Behaviour Changes
+
+- `gas_limit: None` estimates are now list-aware and sent without headroom. If you reuse an estimate, keep about **10%** headroom (previously 15–25% was suggested).
+- A transaction with an access list and `GasPricing::LegacyWithPrice` is signed as EIP-2930 type 1. `GasPricing::Legacy` still yields EIP-1559 type 2.
+- Estimates with state or block-state overrides skip list generation. When `from` is absent, the probe and the estimate use the signing account.
+
+### Cost and residual risks
+
+1. One extra RPC call (`eth_createAccessList`) per send or estimate; on RPCs that do not support it, one failing call.
+2. The generated list and its `gasUsed` come from the RPC and are not cross-checked. With an explicit limit, a wrong or stale list can run out of gas and pay the full limit.
+3. After a revert-shaped estimate, a genuinely reverting transaction is still sent and pays the full limit (same as before 0.6).
+
+No public API changes. Full details: [CHANGELOG.md](https://github.com/Naddotfun/nadfun-sdk-rust/blob/main/CHANGELOG.md).
+
+---
+
 ## v0.5.0 (2026-10-16)
 
 ### 🔧 Fixes
