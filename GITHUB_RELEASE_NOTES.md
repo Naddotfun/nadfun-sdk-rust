@@ -1,5 +1,39 @@
 # Release Notes
 
+## v0.7.0 (2026-10-20)
+
+```toml
+nadfun_sdk = "0.7.0"
+```
+
+### ✨ New
+
+- **Receipt waiting:** `Core::wait_for_receipt` with `ReceiptWaitOptions` defaults to 350 ms polling, a 120 s deadline, and no finality. It checks receipt hash and status, and fails fast on RPC errors. `finalized: true` waits for the receipt block to finalize, re-fetches the receipt, and rejects a changed or missing receipt; `get_receipt` remains a single lookup.
+- **Synchronous sends:** `Core::send_transaction_sync` returns a mined receipt with status checked, but not necessarily finalized. It falls back to one ordinary send only on `-32601`; code 4 plus a 32-byte hash in `data` (string or `{ "hash": "0x…" }`) is treated as accepted, and receipt polling continues through transient RPC errors.
+- **Native balance pre-check:** `Core::check_native_send_balance` checks value + gas limit × fee cap; callers must use those same values for the send.
+- Measured on testnet (2026-10-20): sync send ~0.53 s to receipt; finalized adds ~0.59 s. Priority fees 1/2/5 gwei showed no latency difference at the 100 gwei base-fee floor (median 626/588/611 ms; 30 tx each).
+
+### 🔧 Fixes
+
+- Earlier releases treated Monad sync timeouts with a hash in a `data` object as rejected. The nonce guard now recognizes only code 4 with a hash as accepted; hash-bearing errors with another code leave the nonce reusable.
+
+### ⚠️ Behaviour Changes
+
+- Sync errors other than `-32601` and pre-submission validation errors report `outcome unknown; do not resend blindly`; fallback transport failures without a JSON-RPC response do too. Timeouts after known submission start with `transaction submitted; outcome unknown`.
+
+### 📝 Documentation
+
+- `GasPricing` docs clarify: `Legacy` leaves fee fields unset and the signing filler signs type 2; `LegacyWithPrice` sets `gas_price` and signs type 1 when an access list is attached; `Eip1559` sets both fee caps. The default remains `Legacy`.
+
+Residual risks:
+1. A synchronous-send receipt confirms inclusion and execution status, not finality; use `wait_for_receipt` with `finalized: true` when needed.
+2. A gateway that returns `-32601` after executing the sync request is not detected, so the ordinary-send fallback may resubmit it.
+3. The native balance check applies no 10 MON reserve and reserves no funds; balance, gas, or fee values can change before the send.
+
+Full details: [CHANGELOG.md](https://github.com/Naddotfun/nadfun-sdk-rust/blob/main/CHANGELOG.md).
+
+---
+
 ## v0.6.0 (2026-10-19)
 
 ```toml

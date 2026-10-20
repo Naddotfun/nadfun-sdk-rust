@@ -167,9 +167,14 @@ impl<'a> CoreV2<'a> {
         // `provider.get_transaction_receipt` returns `None` until the tx
         // is mined; polling here turned the previous immediate call into
         // a "receipt not found" error on healthy RPCs.
-        let receipt = wait_for_receipt(&self.core.provider, tx_hash, Duration::from_secs(120))
-            .await
-            .with_context(|| format!("create_token: waiting for receipt of {tx_hash}"))?;
+        let receipt = wait_for_receipt(
+            &self.core.provider,
+            tx_hash,
+            Duration::from_millis(500),
+            Duration::from_secs(120),
+        )
+        .await
+        .with_context(|| format!("create_token: waiting for receipt of {tx_hash}"))?;
         if !receipt.status() {
             return Err(anyhow::anyhow!(
                 "create_token: transaction reverted ({tx_hash})"

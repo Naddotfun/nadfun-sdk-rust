@@ -1,6 +1,6 @@
 [package]
 name = "nadfun_sdk"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 # alloy 2.x requires rustc 1.94.1.
 rust-version = "1.94.1"

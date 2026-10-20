@@ -11,7 +11,7 @@
 | 3 | 논스·전송 | 전송 성공 응답은 실행 성공 증거가 아니며, 논스 간격이 있어도 RPC가 처음에는 수락할 수 있다. [Monad JSON-RPC](https://docs.monad.xyz/reference/json-rpc/overview), [nonce.rs](../../src/core/nonce.rs#L208-L278) |
 | 4 | 접근 목록·콜드 접근 | 메인넷 V2 거래 2건 실측에서 추정 가스 **약 51% 감소**(§3). 냉계정 **10,100 gas**, 냉스토리지 페이지 **8,100 gas**가 원인이다. 목록 자체 비용과 이미 warm인 대상을 함께 계산한다. [Opcode Pricing](https://docs.monad.xyz/developer-essentials/opcode-pricing), [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930) |
 | 5 | MON 잔액·수수료 | 네이티브 매수의 `value`와 최대 가스비를 함께 예산화한다. **10 MON** 예비 잔액 규칙에는 조건부 예외가 있다. [Reserve Balance](https://docs.monad.xyz/developer-essentials/reserve-balance), [dex.rs](../../src/contracts/v1/dex.rs#L40-L68) |
-| 6 | 수수료 선택 | 기본 수수료 하한은 **100 MON-gwei**이며 우선순위 수수료는 혼잡도에 따라 조정해야 한다. [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [trade.rs](../../src/types/v1/trade.rs#L18-L35) |
+| 6 | 수수료 선택 | 기본 수수료 하한은 **100 MON-gwei**다. 테스트넷의 혼잡하지 않은 조건에서는 1·2·5 gwei tip 간 지연 차이가 측정되지 않아 기본값을 유지한다(§0.7.0 실측). 혼잡·메인넷에서 다시 측정한다. [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing), [trade.rs](../../src/types/v1/trade.rs#L18-L35) |
 | 7 | 스트림·RPC | `monadNewHeads`/`monadLogs`는 확정 상태를 전달한다. 현재 SDK의 표준 `logs` 구독과 의미가 다르다. [Monad JSON-RPC](https://docs.monad.xyz/reference/json-rpc/overview), [stream.rs](../../src/stream/v2/curve/stream.rs#L58-L70) |
 | 8 | EIP-7702 | 위임 계정의 배치 실행은 가능하지만 SDK가 자동으로 승인과 거래를 묶지는 않는다. 위임 계정의 예비 잔액 제한도 적용된다. [Monad EIP-7702](https://docs.monad.xyz/developer-essentials/eip-7702) |
 | 9 | 블록 시간·파이프라인 | 짧은 블록 간격은 폴링·재시도 정책의 입력이지 즉시 확정 보증이 아니다. [MIP-12](https://github.com/monad-crypto/MIPs/blob/main/MIPs/MIP-12.md), [Monad JSON-RPC](https://docs.monad.xyz/reference/json-rpc/overview) |
@@ -92,6 +92,8 @@ SDK의 [GasPricing 기본값](../../src/types/v1/trade.rs#L18-L35)은 `Legacy`�
 
 **적용 판단 — P1.** 현재 기본값을 무조건 고정 tip으로 대체하기보다, 수수료 상한과 포함 지연의 관계를 측정한 뒤 선택 정책을 정하면 과금·대기 시간의 균형을 조정할 수 있다. `GasPricing::default()` 또는 자동 fee filler 동작 변경은 공개 동작 변경으로 버전 결정이 필요하다. [trade.rs](../../src/types/v1/trade.rs#L18-L35), [Gas Pricing](https://docs.monad.xyz/developer-essentials/gas-pricing)
 
+2026-10-20 테스트넷의 0-value self transfer 30건씩 비교에서는 base fee가 100 gwei로 유지됐고 1·2·5 gwei tip의 포함 지연 차이가 측정되지 않았다. 따라서 혼잡하지 않은 테스트넷 결과만으로 기본 수수료 정책을 바꾸지 않는다. 혼잡 시와 메인넷에서 재검증한다. 자세한 수치와 실험 범위는 [0.7.0 실측](#070-실측-2026-10-20-testnet-0-value-self-transfer)을 참고한다.
+
 ## 7. 논스·로컬 멤풀·파이프라인
 
 Monad에는 전역 멤풀이 없고 RPC 노드는 예정된 리더들의 로컬 멤풀에 거래를 전달한다. `eth_sendRawTransaction`은 논스 간격이나 가스 잔액 부족을 즉시 거절하지 않을 수 있으며, 보류 거래는 `eth_getTransactionByHash`에 나오지 않는다. 그러므로 해시 반환을 포함·실행 증거로 사용하거나, 보류 조회의 `null`을 거래 유실 증거로 단정할 수 없다. [Local Mempool](https://docs.monad.xyz/monad-arch/consensus/local-mempool), [JSON-RPC](https://docs.monad.xyz/reference/json-rpc/overview)
@@ -125,6 +127,27 @@ EIP-7981 제안 본문은 접근 목록 데이터에 주소당 **1,280 gas**, �
 MIP-12는 블록 시간·한도 변경이며 접근 목록 재가격 책정의 근거 문서가 아니다. 소스에서 `MONAD_NEXT`→Amsterdam 매핑은 확인되지만, 메인넷 `MONAD_NEXT` 활성 시간은 확인되지 않았다. 따라서 SDK의 가스·접근 목록 정책은 현재 활성 규칙을 기준으로 하고 하드포크 시점에 다시 검증해야 한다. [MIP-12](https://github.com/monad-crypto/MIPs/blob/main/MIPs/MIP-12.md), [VM traits](https://github.com/category-labs/monad/blob/main/category/vm/evm/traits.hpp), [mainnet config](https://github.com/category-labs/monad/blob/main/category/execution/monad/chain/monad_mainnet.cpp)
 
 **적용 판단 — P2.** 현재 SDK에 선반영할 과금 변경은 확인되지 않았다. 포크 활성화 전후에 접근 목록의 순절감과 가스 한도를 다시 측정하는 운영 항목이며, 조사 자체는 공개 API 변경이 없다. 향후 자동 정책을 변경하면 별도 버전 결정을 거친다. [VM traits](https://github.com/category-labs/monad/blob/main/category/vm/evm/traits.hpp), [router.rs](../../src/contracts/v2/router.rs#L27-L54)
+
+## 0.7.0 실측 (2026-10-20, testnet, 0-value self transfer)
+
+SDK 0.7.0 전송 경로를 Monad 테스트넷에서 값이 0인 self transfer로 확인했다. 잔액 사전 검사의 통과 케이스와 잔액 부족 거절 케이스 모두 전송 전에 끝났고, 논스는 **2240 → 2240**으로 변하지 않았다.
+
+| 경로 | 결과 |
+| --- | --- |
+| `send_transaction_sync` | 영수증까지 **529 ms**; 확정 대기 **+586 ms**, 영수증과 finalized 높이가 같은 블록 **72598498** |
+| 일반 전송 + 대기 | 해시 반환까지 **166 ms**, 전송 시작부터 영수증까지 총 **737 ms**(350 ms 폴링) |
+
+수수료 비교는 각 tip 값마다 **30건**, 모두 성공했다. 구간은 블록 **72598504–72598754**이며 base fee는 전체 구간에서 **100 gwei**로 일정했다. 유효 gas price는 `base fee + tip`이었다.
+
+| 우선순위 수수료 | 동기 전송 지연 중앙값 / p95 / 최대 |
+| --- | --- |
+| 1 gwei | **626 / 735 / 1075 ms** |
+| 2 gwei | **588 / 761 / 916 ms** |
+| 5 gwei | **611 / 682 / 930 ms** |
+
+이 조건에서는 tip에 따른 측정 가능한 지연 이득이 없었다. 기본값을 유지하고, 혼잡 구간과 메인넷에서 다시 비교한다. 표본은 테스트넷의 30건씩이므로 다른 부하나 네트워크의 포함 지연을 설명하지 않는다.
+
+Monad sync-send timeout 응답 형상도 확인했다: JSON-RPC **code 4**와 `data: {"hash":"0x…"}`를 반환한다. 해당 동작은 Category Labs `monad-bft`의 [`monad-rpc/src/handlers/eth/txn.rs`](https://github.com/category-labs/monad-bft/blob/main/monad-rpc/src/handlers/eth/txn.rs)와 [`monad-rpc/src/types/jsonrpc.rs`](https://github.com/category-labs/monad-bft/blob/main/monad-rpc/src/types/jsonrpc.rs)에 있다.
 
 ## 미확인 사항과 검증 질문
 

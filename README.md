@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nadfun_sdk = "0.6.0"
+nadfun_sdk = "0.7.0"
 ```
 
 Requires Rust 1.94.1+ and alloy 2.x (the SDK's public types are alloy 2.x types).
@@ -20,6 +20,55 @@ Run `cargo update -p rustls-webpki` so your lockfile resolves to ≥ 0.103.15. I
 your application installs its own rustls `CryptoProvider`, do so before the
 SDK's first WebSocket connect (which installs `aws-lc-rs` as the process
 default).
+
+## What's new in 0.7.0
+
+- **Wait for mined receipts.** `Core::wait_for_receipt(hash, options)` polls
+  for inclusion, verifies execution status, and can optionally wait for the
+  finalized block and re-check the receipt. Defaults are 350 ms polling and a
+  120 s timeout. `Core::get_receipt` remains a single lookup.
+- **Synchronous sends.** `Core::send_transaction_sync(TransactionRequest)`
+  returns an included receipt with status checked, but the receipt is not
+  necessarily final. It falls back to one ordinary send plus receipt polling
+  only for JSON-RPC `-32601`. A sync error counts as accepted only for JSON-RPC
+  code 4 with a 32-byte hash in `data`, either a bare hex string or an object
+  field `{ "hash": "0x…" }`. Receipt polling after a fallback or accepted
+  response continues through transient receipt RPC errors. Other sync errors
+  except `-32601` and pre-submission validation say `outcome unknown; do not
+  resend blindly`; a fallback ordinary-send transport failure without a
+  JSON-RPC error response says the same. A receipt timeout after known
+  submission starts with `transaction submitted; outcome unknown` and includes
+  the hash and last RPC error. The sync RPC can take up to 120 s, with receipt polling adding up to
+  another 120 s after a fallback or accepted-hash response.
+- **Optional native balance check.** Before a native-value send, call
+  `check_native_send_balance(value, gas_limit, fee_cap_per_gas)` with the same
+  value, gas limit, and explicit fee cap used by the send (`max_fee_per_gas`
+  for EIP-1559 or `gas_price` for `LegacyWithPrice`). It checks the latest
+  balance, does not reserve funds, and adds no 10 MON reserve. Another send or
+  automatic gas/fee filling can make the check stale.
+- **Fee policy docs.** `GasPricing::Legacy` leaves fee fields unset, so the SDK
+  filler signs type 2; `LegacyWithPrice` sets `gas_price` and signs type 1 when
+  an access list is attached; `Eip1559` sets both fee caps. The default remains
+  `Legacy`.
+
+For a native send, the Quick Start below shows the optional budget check with
+an explicit fee cap, a hash-returning send, and `wait_for_receipt`. Use
+`send_transaction_sync` with an Alloy `TransactionRequest` when synchronous
+inclusion is useful. Its receipt is not final; pass its hash to
+`wait_for_receipt` with `finalized: true` when finality is required:
+
+```rust
+let included = core.send_transaction_sync(tx_request).await?;
+let finalized = core
+    .wait_for_receipt(
+        included.transaction_hash,
+        ReceiptWaitOptions {
+            finalized: true,
+            ..Default::default()
+        },
+    )
+    .await?;
+```
 
 ## What's new in 0.6.0
 
@@ -112,6 +161,11 @@ async fn main() -> Result<()> {
     };
     let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
     let gas_with_buffer = estimated_gas.saturating_add(estimated_gas / 10); // +10% headroom
+    let max_fee_per_gas = 120_000_000_000u128; // Example cap: 120 gwei; adjust for the network
+    let max_priority_fee_per_gas = 2_000_000_000u128; // Example tip: 2 gwei
+
+    // Optional pre-check. Use these same values in the native send below.
+    core.check_native_send_balance(mon_amount, gas_with_buffer, max_fee_per_gas).await?;
 
     // 4. Execute buy
     let buy_params = BuyParams {
@@ -121,7 +175,10 @@ async fn main() -> Result<()> {
         to: core.wallet_address(),
         deadline: U256::from(9999999999999999u64),
         gas_limit: Some(gas_with_buffer),
-        gas_price: None, // Or use Some(GasPricing::Eip1559 { ... })
+        gas_price: Some(GasPricing::Eip1559 {
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+        }),
         nonce: None,     // Auto-increment
     };
 
@@ -129,9 +186,9 @@ async fn main() -> Result<()> {
     let tx_hash = core.v1().buy(buy_params, router).await?;
     println!("Transaction submitted: {}", tx_hash);
 
-    // Optionally wait for receipt to check status
-    let receipt = core.get_receipt(tx_hash).await?;
-    println!("Transaction confirmed in block: {:?}", receipt.block_number);
+    // Wait until mined and verify successful execution.
+    let receipt = core.wait_for_receipt(tx_hash, ReceiptWaitOptions::default()).await?;
+    println!("Transaction succeeded in block: {:?}", receipt.block_number);
     println!("Gas used: {:?}", receipt.gas_used);
     println!("Status: {}", if receipt.status { "Success" } else { "Failed" });
 
@@ -563,6 +620,9 @@ let gas_params = GasEstimationParams::Buy {
 // Get accurate gas estimation from network
 let estimated_gas = core.v1().estimate_gas(&router, gas_params).await?;
 let gas_with_buffer = estimated_gas.saturating_add(estimated_gas / 10); // +10% headroom
+let max_fee_per_gas = 120_000_000_000u128; // Example cap: adjust for the network
+let max_priority_fee_per_gas = 2_000_000_000u128; // Example tip
+core.check_native_send_balance(mon_amount, gas_with_buffer, max_fee_per_gas).await?;
 
 let buy_params = BuyParams {
     token,
@@ -571,7 +631,10 @@ let buy_params = BuyParams {
     to: wallet_address,
     deadline: U256::from(deadline),
     gas_limit: Some(gas_with_buffer), // Use network-based estimation
-    gas_price: Some(GasPricing::LegacyWithPrice { gas_price: 100_000_000_000 }), // 100 gwei (Monad minimum base fee)
+    gas_price: Some(GasPricing::Eip1559 {
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+    }),
     nonce: None,                       // Auto-detect
 };
 
@@ -579,11 +642,9 @@ let buy_params = BuyParams {
 let tx_hash = core.v1().buy(buy_params, router).await?;
 println!("Transaction submitted: {}", tx_hash);
 
-// Later, check the transaction status if needed
-let receipt = core.get_receipt(tx_hash).await?;
-if receipt.status {
-    println!("Trade successful! Gas used: {:?}", receipt.gas_used);
-}
+// Wait for inclusion and successful execution if needed.
+let receipt = core.wait_for_receipt(tx_hash, ReceiptWaitOptions::default()).await?;
+println!("Trade successful! Gas used: {:?}", receipt.gas_used);
 ```
 
 #### Fast Transaction Submission
@@ -598,17 +659,19 @@ let result = core.v1().buy(params, router).await?;  // Waits ~2-15 seconds
 let tx_hash = core.v1().buy(params, router).await?;  // Returns in milliseconds
 println!("Submitted: {}", tx_hash);
 
-// Check status later when you need it
-let receipt = core.get_receipt(tx_hash).await?;
-println!("Confirmed: {}", receipt.status);
+// Check inclusion and execution status later when needed
+let receipt = core.wait_for_receipt(tx_hash, ReceiptWaitOptions::default()).await?;
+println!("Mined successfully in block: {:?}", receipt.block_number);
 ```
 
 On `Core::new` / `TokenHelper::new` providers (0.5.0+), sends from one
 account go out one at a time with nonces from a shared per-account state: a
 send that fails at gas estimation or is rejected by the node returns `Err`
 without leaving a nonce gap. Concurrent calls therefore queue rather than run
-in parallel. A returned hash still only means the node accepted the
-transaction — poll `get_receipt` and check `status`.
+in parallel. A returned hash only means the node accepted the transaction.
+`get_receipt` performs one lookup; use `wait_for_receipt` to poll until it is
+mined and verify its status. For optional finality, set `finalized: true` in
+`ReceiptWaitOptions`.
 
 Residual risks:
 1. Ambiguous outcome (transport error / timeout): the tx may have landed. The
@@ -714,18 +777,19 @@ core.v2().buy(params).await?;
 ```rust
 use nadfun_sdk::types::GasPricing;
 
-// Option 1: Legacy (default) - uses network gas price
+// Option 1: Legacy (default) - leaves fee fields unset for the signing filler
 let gas_price = Some(GasPricing::Legacy);
 
-// Option 2: Legacy with explicit gas price
-let gas_price = Some(GasPricing::LegacyWithPrice {
-    gas_price: 100_000_000_000, // 100 gwei: Monad's minimum base fee
-});
+// Option 2: Legacy with explicit gas price (illustrative; adjust for the network)
+let gas_price_per_gas = 120_000_000_000u128; // Example cap: 120 gwei
+let gas_price = Some(GasPricing::LegacyWithPrice { gas_price: gas_price_per_gas });
 
-// Option 3: EIP-1559 (recommended for Monad)
+// Option 3: EIP-1559 (recommended for Monad; illustrative caps)
+let max_fee_per_gas = 120_000_000_000u128; // Example cap: adjust for the network
+let max_priority_fee_per_gas = 2_000_000_000u128; // Example tip
 let gas_price = Some(GasPricing::Eip1559 {
-    max_fee_per_gas: 100_000_000_000,        // 100 gwei max
-    max_priority_fee_per_gas: 2_000_000_000, // 2 gwei tip
+    max_fee_per_gas,
+    max_priority_fee_per_gas,
 });
 
 // Use in BuyParams/SellParams
@@ -735,6 +799,10 @@ let buy_params = BuyParams {
     nonce: None,
 };
 ```
+
+For a native-value send, pass the same `max_fee_per_gas` as the fee cap to
+`check_native_send_balance`. These values are examples, not a universal fee
+recommendation.
 
 #### Unified Gas Estimation (New in v0.2.0)
 

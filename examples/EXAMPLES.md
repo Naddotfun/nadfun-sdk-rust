@@ -4,6 +4,54 @@ This directory contains comprehensive examples demonstrating how to use the Nad.
 
 > 🔀 **v1 vs v2 — you choose the method.** As of `0.4.0` a single `Core` instance serves both bonding-curve generations. The SDK does **not** auto-route trades: call `core.v1().buy(...)` / `core.v1().sell(...)` for v1 and the v2 handle (`core.v2().buy(...)`, `core.v2().buy_with_native(...)`, `core.v2().sell_to_native(...)`, ...) for v2. To pick at runtime, ask the chain which generation a token belongs to with `core.detect_version(token)` (version only) or `core.detect_token_info(token)` (version **and** the v2 quote token). The [`unified_dispatch`](#mixed-version-dispatch) example shows the full pattern. Sections are grouped **v1 first, then v2**.
 
+## Transaction Submission and Receipt Waiting
+
+For native-value sends, you may check the wallet balance before submission.
+Pass the same native value, explicit gas limit, and fee cap used by the send
+(`max_fee_per_gas` for EIP-1559 or `gas_price` for `LegacyWithPrice`):
+
+```rust
+// Optional; this reads the latest balance and does not reserve funds.
+core.check_native_send_balance(value, gas_limit, fee_cap_per_gas).await?;
+
+// Hash-returning trade methods return before mining. Poll for inclusion and
+// successful execution; get_receipt is only a single lookup.
+let tx_hash = core.v1().buy(params, router).await?;
+let result = core
+    .wait_for_receipt(tx_hash, ReceiptWaitOptions::default())
+    .await?;
+```
+
+The balance check can become stale if another send spends funds or automatic
+gas/fee filling changes the cost. It applies no extra 10 MON reserve. For an
+Alloy `TransactionRequest`, `send_transaction_sync` returns an included,
+status-checked receipt, but it is not necessarily final. Use the result's hash
+to wait for finality when needed:
+
+```rust
+let result = core.send_transaction_sync(tx_request).await?;
+let finalized = core
+    .wait_for_receipt(
+        result.transaction_hash,
+        ReceiptWaitOptions {
+            finalized: true,
+            ..Default::default()
+        },
+    )
+    .await?;
+```
+
+The sync path falls back to one ordinary send plus receipt polling only for
+JSON-RPC `-32601`. A sync error counts as accepted only for JSON-RPC code 4
+with a 32-byte hash in `data`, either as a bare hex string or the object field
+`{ "hash": "0x…" }`. Fallback and accepted-hash receipt polling continue
+through transient receipt RPC errors. Other sync errors except `-32601` and
+pre-submission validation say `outcome unknown; do not resend blindly`. A
+fallback ordinary-send transport failure without a JSON-RPC error response
+says the same. A receipt timeout after known submission starts with
+`transaction submitted; outcome unknown` and includes the hash and last RPC
+error.
+
 ## 🎨 Token Creation Examples
 
 ### Token Creation (`create/create_token.rs`)
@@ -322,7 +370,7 @@ cargo run --example v2_buy -- --private-key your_private_key_here --rpc-url http
 - 📊 **Quote First**: `core.v2().get_amount_out(token, amount, true)` with a zero-quote guard
 - 🛡️ **Slippage**: `SlippageUtils::calculate_amount_out_min(expected, 5.0)` (5%)
 - ⛽ **v2 Gas Estimation**: `core.v2().estimate_gas(V2GasEstimationParams::BuyWithNative(..))` uses a generated access list with `Core::new`, then applies 10% headroom (`common::gas_with_headroom`, Monad guidance: estimate + ~7.5–10%); falls back to 400k
-- 📝 **Receipt Check**: `core.get_receipt(tx_hash)` status/block reporting
+- 📝 **Receipt Wait**: `core.wait_for_receipt(tx_hash, ReceiptWaitOptions::default())` polls for inclusion and checks execution status
 
 ### v2 Buy with ERC-20 Quote (`v2/buy_erc20_quote.rs`)
 Buy a v2 token paying with an **ERC-20 quote token** (e.g. USDC) instead of native MON — a v2-only capability (`core.v2().buy`).

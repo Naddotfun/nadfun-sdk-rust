@@ -13,6 +13,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.7.0] — 2026-10-20
+
+### Added
+
+- **Receipt polling and optional finality.** `Core::wait_for_receipt` polls
+  until a transaction is mined, verifies execution status, and can wait for
+  the finalized block before re-checking the receipt. `Core::get_receipt`
+  remains a single lookup.
+- **Synchronous transaction sends.** `Core::send_transaction_sync` returns an
+  included receipt with execution status checked; this receipt is not
+  necessarily final. Only JSON-RPC `-32601` falls back to one ordinary send
+  followed by receipt polling. A sync error is treated as accepted only when it
+  is JSON-RPC code 4 with a 32-byte hash in `data`, either as a bare string or
+  an object field `{ "hash": "0x…" }`. Fallback and accepted-hash receipt
+  polling continue through transient receipt RPC errors. Other sync errors
+  except `-32601` and pre-submission validation errors report `outcome unknown;
+  do not resend blindly`; a timeout after known submission starts with
+  `transaction submitted; outcome unknown` and includes the hash and last RPC
+  error. A fallback ordinary-send transport failure without a JSON-RPC error
+  response also reports an unknown outcome.
+- **Optional native balance pre-check.** `Core::check_native_send_balance`
+  checks latest balance against native value plus gas limit × fee cap. It does
+  not reserve funds or apply a 10 MON reserve; callers must use the same value,
+  gas limit, and explicit fee cap in the send that follows.
+
+### Changed
+
+- Expanded `GasPricing` documentation: `Legacy` leaves fee fields unset and
+  the SDK signing filler signs type 2; `LegacyWithPrice` sets `gas_price` and
+  signs type 1 when an access list is attached; `Eip1559` sets both fee caps.
+  The default remains `Legacy`.
+- The nonce guard now treats a sync-send error as accepted only when it has
+  JSON-RPC code 4 and a transaction hash. A hash-bearing error with another
+  code leaves the nonce reusable; this also affects direct
+  `provider().send_transaction_sync` callers.
+
+### Fixed
+
+- Earlier releases did not recognize Monad sync timeouts because the hash is
+  returned in a `data` object; the nonce guard treated those accepted
+  transactions as rejected.
+
 ## [0.6.0] — 2026-10-19
 
 ### Changed
