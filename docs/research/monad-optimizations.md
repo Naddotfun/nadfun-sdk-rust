@@ -54,6 +54,18 @@ V1 경로도 같은 방식으로 측정했다. 테스트넷에서 최근 50만 �
 
 자동 쪽 tx: buy [0xc5ea…aca1](https://testnet.monadvision.com/tx/0xc5eafa2cb5b22785a847ebab225ce4fbd485a2c2ed30c3abc01187756733aca1), sell [0xe322…346d](https://testnet.monadvision.com/tx/0xe3227e0004674762a1f4fcaeb67a10471adcea395015a24a24d65d8e88ea346d). V1 DEX(졸업 토큰) 경로는 측정하지 않았다.
 
+**명시적 gas 경로 실전송 (2026-10-20, `de77652`, 테스트넷 V1 `buy` 0.01 MON).** 리뷰 반영 후 SDK 전송 경로를 그대로 사용했다. "추정"은 SDK `estimate_gas`(리스트 반영) 값이다.
+
+| 시나리오 | 결과 | gas limit | 리스트 | nonce |
+| --- | --- | --- | --- | --- |
+| gas 미지정 | 성공 [0x44bc…df09](https://testnet.monadvision.com/tx/0x44bcc5c4b2837e4e1ab505ea3c33e88e12074d88850ff1bff437049cc9f0df09) | 171,992 | 주소 6, 키 16 | +1 |
+| 추정 × 1.1 | 성공 [0xccc3…036f](https://testnet.monadvision.com/tx/0xccc311722491872f113bcb5bf764c1d594a63b0bfa0c414ac2ad296e1504036f) | 189,191 | 주소 6, 키 16 | +1 |
+| 추정 × 1.0 | 성공 [0x0daf…e575](https://testnet.monadvision.com/tx/0x0daff33473569aad7a270c020dd2cd53a73391321b1da23c4378853b6aede575) | 171,992 | 주소 6, 키 16 | +1 |
+| 추정 × 0.5 | 전송 전 오류 `list-less gas estimate 309820 exceeds explicit gas limit 85996` | – | – | 변화 없음 |
+| 확정 revert(`sell` 잔액 초과), gas 200,000 | 리스트 없이 전송, 실행 실패 [0x14f8…74ba](https://testnet.monadvision.com/tx/0x14f82f202729fb87588ce264ac344dbf13f1e16e23e55e904d39344978e774ba) | 200,000 전액 과금 | 없음 | +1 |
+
+테스트넷·메인넷 RPC 모두 `eth_estimateGas` revert를 `{"code":3,"message":"execution reverted"}`로 반환했다. 같은 커밋으로 메인넷 추정을 다시 비교한 결과 `sell` 552,896 → 263,088 (−52.4%), `exactOutBuy` 560,209 → 274,963 (−50.9%)로 수정 전과 같았다. approve 미채굴 상태의 파이프라인 거래와 30초 타임아웃 경로는 실네트워크에서 재현하지 않았다.
+
 **적용 판단 — P0 (실측 반영).** 거래별 순절감이 확인된 경우에만 목록을 붙이면 가스비를 줄일 가능성이 있다. 공개 매개변수 구조체에 필드를 추가하는 방안은 기존 구조체 리터럴에 영향을 주므로 공개 API 변경과 버전 결정이 필요하다. 내부 선택적 전송만으로 끝내는 방안은 공개 시그니처를 유지할 수 있다. [router.rs](../../src/contracts/v2/router.rs#L27-L54), [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930)
 
 ## 4. EIP-7702와 승인·거래 배치
